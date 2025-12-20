@@ -1,16 +1,23 @@
 import discord
 import google.generativeai as genai
+import os
+from dotenv import load_dotenv
 
 # --- CONFIG ---
-DISCORD_TOKEN = 'YOUR_DISCORD_BOT_TOKEN'
-GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY'
+load_dotenv()  # This loads the variables from the .env file
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash') # Termux-friendly version
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.Client(intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user}')
 
 @bot.event
 async def on_message(message):
@@ -18,19 +25,27 @@ async def on_message(message):
 
     is_dm = isinstance(message.channel, discord.DMChannel)
     
-    # Server context
+    # Context building
     context = ""
     if message.guild:
-        context = f"Server: {message.guild.name}. Channels: {[c.name for c in message.guild.text_channels]}"
+        context = f"Server: {message.guild.name}."
 
-    prompt = f"{context}\nNSFW Allowed: {is_dm}\nUser: {message.content}"
+    prompt = f"{context}\nUser: {message.content}"
     
-    # Simple Safety Settings
+    # Safety Settings
     safety = [
-        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE" if is_dm else "BLOCK_MEDIUM_AND_ABOVE"}
+        {
+            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", 
+            "threshold": "BLOCK_NONE" if is_dm else "BLOCK_MEDIUM_AND_ABOVE"
+        }
     ]
 
-    response = model.generate_content(prompt, safety_settings=safety)
-    await message.channel.send(response.text)
+    try:
+        response = model.generate_content(prompt, safety_settings=safety)
+        if response.text:
+            await message.channel.send(response.text)
+    except Exception as e:
+        print(f"Error: {e}")
+        await message.channel.send("I encountered an error processing that.")
 
 bot.run(DISCORD_TOKEN)
