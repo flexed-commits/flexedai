@@ -2,28 +2,20 @@ import discord
 import os
 import asyncio
 from dotenv import load_dotenv
-from perplexity import Perplexity  # New Import
+from openai import OpenAI # Perplexity uses the OpenAI-compatible SDK
 from collections import deque
 
 # --- CONFIG ---
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY') # Updated key name
+PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
 
-# Validate environment variables
 if not DISCORD_TOKEN or not PERPLEXITY_API_KEY:
-    print("❌ Missing DISCORD_TOKEN or PERPLEXITY_API_KEY in .env file")
+    print("❌ Missing Tokens")
     exit(1)
 
-# Initialize Perplexity Client
-try:
-    # Ensure PERPLEXITY_API_KEY is set in your environment
-    client = Perplexity(api_key=PERPLEXITY_API_KEY)
-except Exception as e:
-    print(f"❌ Failed to initialize Perplexity client: {e}")
-    exit(1)
-
-# Recommended Perplexity model for chat/search
+# Perplexity uses the OpenAI client structure
+client = OpenAI(api_key=PERPLEXITY_API_KEY, base_url="https://api.perplexity.ai")
 MODEL_ID = "sonar-pro" 
 
 intents = discord.Intents.default()
@@ -32,9 +24,9 @@ bot = discord.Client(intents=intents)
 
 active_channels = {}
 message_history = {}
+current_topic = {} # Tracks {channel_id: {"topic": str, "user_id": int}}
 
 def smart_split_message(text, max_length=2000):
-    """Splits text into Discord-friendly chunks."""
     if len(text) <= max_length: return [text]
     chunks = []
     remaining = text
@@ -53,63 +45,80 @@ def smart_split_message(text, max_length=2000):
 
 @bot.event
 async def on_ready():
-    print(f'✅ Connected: {bot.user}')
-    print(f'🌐 Using Perplexity Model: {MODEL_ID}')
+    print(f'✅ Bot Online as {bot.user}')
 
 @bot.event
 async def on_message(message):
     if message.author == bot.user or message.author.bot:
         return
 
-    is_dm = isinstance(message.channel, discord.DMChannel)
-    bot_mentioned = bot.user.mentioned_in(message)
     channel_id = message.channel.id
-    clean_text = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
+    clean_text = message.content.strip()
+    is_admin = message.author.guild_permissions.administrator
 
-    # Toggle Commands
-    if not is_dm and bot_mentioned and clean_text.lower() in ["start", "stop"]:
-        if message.author.guild_permissions.administrator:
-            active_channels[channel_id] = (clean_text.lower() == "start")
-            await message.reply(f"System: Auto-reply is now **{'ENABLED' if active_channels[channel_id] else 'DISABLED'}**.")
+    # --- 1. ADMIN TASK HANDLER ---
+    if is_admin and "create" in clean_text.lower() and "channel" in clean_text.lower():
+        try:
+            name = clean_text.lower().replace("create", "").replace("channel", "").strip().replace(" ", "-")
+            new_channel = await message.guild.create_text_channel(name)
+            await message.reply(f"✅ Created channel: {new_channel.mention}")
+            return
+        except Exception as e:
+            await message.reply(f"❌ Failed to create channel: {e}")
             return
 
-    if not (is_dm or bot_mentioned or active_channels.get(channel_id, False)):
+    # Toggle Auto-reply
+    if is_admin and clean_text.lower() in ["!start", "!stop"]:
+        active_channels[channel_id] = (clean_text.lower() == "!start")
+        await message.reply(f"Auto-reply: **{'ON' if active_channels[channel_id] else 'OFF'}**")
         return
 
+    if not (isinstance(message.channel, discord.DMChannel) or bot.user.mentioned_in(message) or active_channels.get(channel_id, False)):
+        return
+
+    # --- 2. TOPIC LOCK LOGIC ---
+    # If someone else jumps in while a topic is active
+    if channel_id in current_topic:
+        topic_data = current_topic[channel_id]
+        if message.author.id != topic_data["user_id"]:
+            await message.reply(f"I'm currently helping someone else with '{topic_data['topic']}'. Do you want to discuss that, or should we wait?")
+            return
+
+    # Update current topic (simplified to the last thing asked)
+    current_topic[channel_id] = {"topic": clean_text[:30], "user_id": message.author.id}
+
     if channel_id not in message_history:
-        message_history[channel_id] = deque(maxlen=10)
+        message_history[channel_id] = deque(maxlen=6)
 
     async with message.channel.typing():
         try:
-            # Prepare messages for Chat Completion
-            api_messages = [{"role": "system", "content": f"You are a helpful AI assistant. Model: {MODEL_ID}"}]
+            # --- 3. SYSTEM PROMPT (No citations, short responses) ---
+            api_messages = [{
+                "role": "system", 
+                "content": "You are a concise assistant. STRIKE RULES: 1. NEVER use citations like [1] or [2]. 2. Do not provide sources. 3. Keep responses very short and conversational. 4. Do not use bolding for every other word."
+            }]
+            
             for hist in message_history[channel_id]:
                 api_messages.append(hist)
             api_messages.append({"role": "user", "content": clean_text})
 
-            # --- PERPLEXITY API CALL ---
             response = client.chat.completions.create(
                 model=MODEL_ID,
                 messages=api_messages
             )
-            
+
             answer = response.choices[0].message.content
 
             # History Management
             message_history[channel_id].append({"role": "user", "content": clean_text})
             message_history[channel_id].append({"role": "assistant", "content": answer})
 
-            # Send split reply
-            chunks = smart_split_message(answer)
-            for i, chunk in enumerate(chunks):
-                if i == 0:
-                    await message.reply(chunk, mention_author=False)
-                else:
-                    await message.channel.send(chunk)
+            for chunk in smart_split_message(answer):
+                await message.channel.send(chunk)
                 await asyncio.sleep(0.5)
 
         except Exception as e:
-            print(f"Perplexity Error: {e}")
-            await message.reply(f"⚠️ Error: {str(e)[:100]}")
+            print(f"Error: {e}")
+            await message.reply("⚠️ Service temporarily unavailable.")
 
 bot.run(DISCORD_TOKEN)
