@@ -9,99 +9,93 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-# Initialize client for google-genai SDK
+# Initialize the new SDK Client
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Using Gemini 2.0 Flash Version
+# UPDATED: Using the Gemini 2.0 Flash Model ID
 MODEL_ID = "gemini-2.0-flash" 
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.Client(intents=intents)
 
-# Global status: Bot starts as "stopped"
+# Global toggle: Bot starts "OFF" by default
 is_active = False
 
 @bot.event
 async def on_ready():
     print(f'✅ Logged in as {bot.user}')
-    print(f'✨ Model: {MODEL_ID}')
+    print(f'🚀 Model active: {MODEL_ID}')
 
 @bot.event
 async def on_message(message):
     global is_active
 
-    # 1. Ignore bots and own messages
+    # 1. Standard safety checks
     if message.author == bot.user or message.author.bot:
         return
 
-    # 2. Identify if the bot was mentioned
+    # Check if the bot was pinged
     bot_mentioned = bot.user.mentioned_in(message)
     
-    # Clean the input text for logic checks
-    # Removes the <@ID> pings from the string
+    # Clean the input
     clean_content = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
     command_check = clean_content.lower()
 
-    # 3. Handle Admin Activation/Deactivation
+    # 2. ADMIN COMMANDS
     if bot_mentioned and command_check in ["start", "stop"]:
         if message.author.guild_permissions.administrator:
             if command_check == "start":
                 is_active = True
-                await message.channel.send("⚡ **Gemini 2.0 Flash is now ONLINE.** I will respond to mentions.")
+                await message.channel.send(f"🟢 **{MODEL_ID} is now ONLINE.**")
             else:
                 is_active = False
-                await message.channel.send("💤 **Gemini 2.0 Flash is now OFFLINE.**")
+                await message.channel.send(f"🔴 **{MODEL_ID} is now OFFLINE.**")
             return
         else:
-            # If a non-admin pings start/stop, send one warning then stop
-            await message.channel.send("❌ Only an **Administrator** can start/stop this bot.")
+            await message.channel.send("❌ Administrator permissions required.")
             return
 
-    # 4. Filter: Only proceed if active AND pinged
-    # (Allowing DMs to work regardless for testing/private use)
+    # 3. GLOBAL SILENCE LOGIC
     is_dm = isinstance(message.channel, discord.DMChannel)
-    
     if not is_dm:
-        if not is_active: 
-            return # Bot is globally "stopped"
-        if not bot_mentioned:
-            return # Bot is "started" but this specific message didn't ping it
+        if not is_active or not bot_mentioned:
+            return
 
-    # 5. Process AI Response
+    # 4. AI GENERATION
     if not clean_content:
         return
 
     async with message.channel.typing():
-        # Safety configuration
+        # Updated Safety Categories for Gemini 2.0
         safety_config = [
             types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
             types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
             types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
-            types.SafetySetting(
-                category="HARM_CATEGORY_SEXUALLY_EXPLICIT", 
-                threshold="BLOCK_NONE" if is_dm else "BLOCK_ONLY_HIGH"
-            ),
+            types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
         ]
 
         try:
+            # Generate content using the SDK
             response = client.models.generate_content(
                 model=MODEL_ID,
-                contents=f"User {message.author.display_name}: {clean_content}",
+                contents=clean_content,
                 config=types.GenerateContentConfig(safety_settings=safety_config)
             )
             
             if response.text:
                 text = response.text
-                # Discord 2000 character limit split
+                # Discord character limit handler
                 if len(text) > 2000:
                     for i in range(0, len(text), 2000):
                         await message.channel.send(text[i:i+2000])
                 else:
                     await message.channel.send(text)
+            else:
+                await message.channel.send("⚠️ No text generated.")
         
         except Exception as e:
             print(f"Error: {e}")
-            await message.channel.send("⚠️ Failed to reach Gemini 2.0.")
+            await message.channel.send(f"⚠️ Error: {str(e)}")
 
 bot.run(DISCORD_TOKEN)
