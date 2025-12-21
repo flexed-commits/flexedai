@@ -2,7 +2,6 @@ import discord
 import os
 import asyncio
 import re
-from discord.ext import commands
 from dotenv import load_dotenv
 from perplexity import Perplexity
 from collections import deque
@@ -16,20 +15,49 @@ MODEL_ID = "sonar-pro"
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.guilds = True
+intents.members = True 
 bot = discord.Client(intents=intents)
 
-# Using a dictionary to track the "active" topic per channel
+# Context Trackers
 channel_topics = {} 
-# (channel_id, user_id) history
 message_history = {}
 
 def clean_citations(text):
-    """Removes [1], [2], etc. from the response."""
-    return re.sub(r'\[\d+\]', '', text).strip()
+    """Aggressively removes [1], [2], [n] and markdown links to sources."""
+    text = re.sub(r'\[\d+\]', '', text)
+    text = re.sub(r'\(http[s]?://\S+\)', '', text)
+    return text.strip()
+
+async def handle_admin_tasks(message, clean_text):
+    """
+    Checks if an admin is asking for a guild action.
+    Returns True if a task was handled, False otherwise.
+    """
+    if not message.author.guild_permissions.administrator:
+        return False
+
+    cmd = clean_text.lower()
+    
+    # Logic for: "Create a channel named X"
+    if "create" in cmd and "channel" in cmd:
+        name = cmd.split("channel")[-1].strip().replace(" ", "-") or "new-chat"
+        new_chan = await message.guild.create_text_channel(name=name)
+        await message.reply(f"✅ Created channel: {new_chan.mention}")
+        return True
+
+    # Logic for: "Delete this channel"
+    if "delete" in cmd and "this channel" in cmd:
+        await message.reply("🗑️ Deleting channel in 3 seconds...")
+        await asyncio.sleep(3)
+        await message.channel.delete()
+        return True
+
+    return False
 
 @bot.event
 async def on_ready():
-    print(f'✅ Connected as {bot.user}')
+    print(f'✅ Admin-Ready Bot: {bot.user}')
 
 @bot.event
 async def on_message(message):
@@ -40,43 +68,25 @@ async def on_message(message):
     user_id = message.author.id
     clean_text = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
 
-    # --- 1. ADMIN TASK: CREATE CHANNEL ---
-    if clean_text.lower().startswith("create channel"):
-        if message.author.guild_permissions.manage_channels:
-            try:
-                name = clean_text.replace("create channel", "").strip() or "new-channel"
-                new_chan = await message.guild.create_text_channel(name=name)
-                response_text = f"✅ Created channel: {new_chan.mention}"
-                await message.reply(response_text)
-                
-                # Update history to prevent 400 error (User -> Assistant flow)
-                hist_key = (channel_id, user_id)
-                if hist_key not in message_history: message_history[hist_key] = deque(maxlen=6)
-                message_history[hist_key].append({"role": "user", "content": clean_text})
-                message_history[hist_key].append({"role": "assistant", "content": response_text})
-                return
-            except Exception as e:
-                await message.reply(f"❌ Failed: {e}")
-                return
-        else:
-            await message.reply("❌ Admin perms required.")
-            return
-
-    # --- 2. TOPIC ISOLATION LOGIC ---
-    # Check if someone else is already talking about something in this channel
-    current_topic = channel_topics.get(channel_id)
-    
-    # If there's an active topic and a NEW user hops in
-    if current_topic and current_topic['user_id'] != user_id:
-        await message.reply(f"I'm currently helping {current_topic['user_name']} with '{current_topic['topic']}'. Do you want to join that or start something new?")
-        # Logic ends here to prevent mixing histories unless they confirm
+    # --- 1. TRY ADMIN TASKS FIRST ---
+    was_admin_task = await handle_admin_tasks(message, clean_text)
+    if was_admin_task:
         return
 
-    # Update the "Global" channel topic focus
+    # --- 2. TOPIC ISOLATION ---
+    if channel_id in channel_topics:
+        active = channel_topics[channel_id]
+        if active['user_id'] != user_id:
+            # If a new user joins, prompt them about the current topic
+            await message.reply(f"I'm currently mid-topic with **{active['user_name']}** about *'{active['topic']}'*. Did you want to ask about that, or should we switch gears?")
+            # We don't return here so they can still get a response, 
+            # but we update the topic to the new person now.
+
+    # Update global topic for this channel
     channel_topics[channel_id] = {
         'user_id': user_id,
         'user_name': message.author.display_name,
-        'topic': clean_text[:30] # Simple snippet of the text as the topic
+        'topic': clean_text[:40]
     }
 
     # --- 3. PERPLEXITY API CALL ---
@@ -86,8 +96,12 @@ async def on_message(message):
             if hist_key not in message_history:
                 message_history[hist_key] = deque(maxlen=6)
 
-            # System prompt to force brevity and no citations
-            sys_msg = "You are a concise assistant. No citations [n]. No sources. Short answers only."
+            # Strict System Prompt
+            sys_msg = (
+                "You are a short, conversational assistant. "
+                "CRITICAL: Never use citations like [1] or [2]. "
+                "Keep responses under 2-3 sentences. No fluff."
+            )
             
             api_messages = [{"role": "system", "content": sys_msg}]
             for h in message_history[hist_key]:
@@ -101,15 +115,16 @@ async def on_message(message):
 
             answer = clean_citations(response.choices[0].message.content)
 
-            # Store history
+            # Save history (User -> Assistant)
             message_history[hist_key].append({"role": "user", "content": clean_text})
             message_history[hist_key].append({"role": "assistant", "content": answer})
 
             await message.reply(answer, mention_author=False)
 
         except Exception as e:
-            print(f"Error: {e}")
-            await message.reply("⚠️ Conversation error. History cleared.")
+            print(f"API Error: {e}")
+            # If history gets messy, clear it to prevent 400 errors
             message_history[hist_key] = deque(maxlen=6)
+            await message.reply("⚠️ Just a hiccup. Ask me again?")
 
 bot.run(DISCORD_TOKEN)
