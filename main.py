@@ -15,7 +15,7 @@ client = SambaNova(
     base_url="https://api.sambanova.ai/v1",
 )
 
-MODEL_ID = "DeepSeek-V3" # Ensure this matches SambaNova's exact model string
+MODEL_ID = "DeepSeek-V3.1" # Ensure this matches SambaNova's exact model string
 
 intents = discord.Intents.default()
 intents.message_content = True
