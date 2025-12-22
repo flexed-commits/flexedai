@@ -1,19 +1,16 @@
 import discord
 import os
-import asyncio
+import requests
+import json
 from datetime import datetime
 from dotenv import load_dotenv
-from openai import OpenAI
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 BYTEZ_KEY = os.getenv('BYTEZ_KEY')
 
-# Initialize Bytez Client
-client = OpenAI(
-    api_key=BYTEZ_KEY,
-    base_url="https://api.bytez.com/models/v2/openai/v1"
-)
+# API Configuration
+API_URL = "https://api.bytez.com/models/v2/openai/v1/chat/completions"
 MODEL_ID = "Qwen/Qwen3-4B"
 START_TIME = datetime.utcnow()
 
@@ -28,7 +25,7 @@ OWNER_INFO = {
 class ThoughtPartner:
     def __init__(self, user_name):
         self.user_name = user_name
-        self.history = [] # Stores last 10 messages
+        self.history = [] 
 
     def get_system_instruction(self):
         return (
@@ -52,7 +49,7 @@ bot = discord.Client(intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f'✨ {bot.user} is online | Serving {OWNER_INFO["name"]}')
+    print(f'✨ Bot is up! Serving {OWNER_INFO["name"]}')
 
 @bot.event
 async def on_message(message):
@@ -67,44 +64,52 @@ async def on_message(message):
 
     # 1. System Stats Command
     if clean_msg in ["/status", "who is your owner?", "ping"]:
-        embed = discord.Embed(title="System Status", color=0x2b2d31)
+        embed = discord.Embed(title="System Status", color=0x5865F2)
         embed.set_author(name=OWNER_INFO["name"], icon_url=OWNER_INFO["pfp"])
         embed.add_field(name="🚀 Model", value=MODEL_ID, inline=True)
         embed.add_field(name="📡 Latency", value=f"{round(bot.latency * 1000)}ms", inline=True)
         embed.add_field(name="⏳ Uptime", value=get_uptime(), inline=True)
-        embed.add_field(name="♟️ Chess IQ", value="2800 (GM)", inline=True)
+        embed.add_field(name="♟️ IQ", value="2800 (GM)", inline=True)
         await message.reply(embed=embed)
         return
 
     # 2. Main Chat Loop
     async with message.channel.typing():
         try:
-            # Build payload with history
+            # Build the payload
             messages = [{"role": "system", "content": state.get_system_instruction()}]
-            
-            # Add recent history (last 10 turns)
-            messages.extend(state.history[-10:])
-            
-            # Add current message
+            messages.extend(state.history[-6:]) # Keep last 6 messages for context
             messages.append({"role": "user", "content": message.content})
 
-            response = client.chat.completions.create(
-                model=MODEL_ID,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=250
-            )
-
-            ai_text = response.choices[0].message.content
+            headers = {
+                "Authorization": f"Bearer {BYTEZ_KEY}",
+                "Content-Type": "application/json"
+            }
             
-            # Update history
-            state.history.append({"role": "user", "content": message.content})
-            state.history.append({"role": "assistant", "content": ai_text})
+            payload = {
+                "model": MODEL_ID,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 300
+            }
 
-            await message.reply(ai_text, mention_author=False)
+            # Direct HTTP Request (Bypasses the broken OpenAI library)
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                ai_text = data['choices'][0]['message']['content']
+                
+                # Update local history
+                state.history.append({"role": "user", "content": message.content})
+                state.history.append({"role": "assistant", "content": ai_text})
+                
+                await message.reply(ai_text, mention_author=False)
+            else:
+                await message.reply(f"❌ API Error: `{response.status_code}`\nCheck your Bytez Key.")
 
         except Exception as e:
             print(f"Error: {e}")
-            await message.reply("`Error: API Connection Failed. Check console.`")
+            await message.reply("`Logic Error: Check Termux console.`")
 
 bot.run(DISCORD_TOKEN)
