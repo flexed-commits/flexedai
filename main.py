@@ -1,8 +1,8 @@
 import discord
 from bytez import Bytez
-
+import os
 # --- CONFIGURATION ---
-DISCORD_TOKEN = 'YOUR_DISCORD_BOT_TOKEN_HERE'
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 BYTEZ_KEY = '61139c556078e162dbada319d9a5b925'
 
 # Owner Data
