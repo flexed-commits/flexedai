@@ -12,6 +12,7 @@ BYTEZ_KEY = os.getenv('BYTEZ_KEY')
 # API Configuration
 API_URL = "https://api.bytez.com/models/v2/openai/v1/chat/completions"
 # Using a more generic model path that Bytez usually supports
+sdk = Bytez(BYTEZ_KEY)
 MODEL_ID =sdk.model("anthropic/claude-sonnet-4-5")
 START_TIME = datetime.utcnow()
 
