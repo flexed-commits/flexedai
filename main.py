@@ -14,15 +14,7 @@ OWNER = {
     "link": "https://discord.com/users/1081876265683927080"
 }
 
-SYSTEM_PROMPT = f"""
-You are a helpful AI assistant. Your creator/owner is {OWNER['name']}.
-If a user asks about your owner, follow these rules:
-1. General/Everything: Provide name, username, and ID.
-2. PFP/Profile Picture: Provide this link: {OWNER['pfp']}
-3. ID: Provide: {OWNER['id']}
-4. Link/Profile: Provide: {OWNER['link']}
-Always be respectful to {OWNER['name']}.
-"""
+SYSTEM_PROMPT = f"You are a helpful assistant. Owner: {OWNER['name']}. If asked for PFP, show {OWNER['pfp']}."
 
 sdk = Bytez(BYTEZ_KEY)
 model = sdk.model("anthropic/claude-sonnet-4-5")
@@ -33,7 +25,7 @@ client = discord.Client(intents=intents)
 
 @client.event
 async def on_ready():
-    print(f'✅ Bot Online: {client.user}')
+    print(f'✅ Bot is online as {client.user}')
 
 @client.event
 async def on_message(message):
@@ -41,34 +33,46 @@ async def on_message(message):
         return
 
     async with message.channel.typing():
-        # --- ROBUST UNPACKING FIX ---
-        result = model.run([
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": message.content}
-        ])
+        try:
+            # Get raw result from Bytez
+            result = model.run([
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": message.content}
+            ])
 
-        # If the SDK returns (output, error), result will be a tuple
-        if isinstance(result, tuple) and len(result) == 2:
-            output, error = result
-        else:
-            # If it returns just one thing, we treat it as output and no error
-            output = result
-            error = None
+            # DEBUG: This will show you the exact format in Termux
+            print(f"RAW DATA FROM BYTEZ: {result}")
 
-        if error:
-            await message.channel.send(f"❌ **API Error:** {error}")
-        else:
-            # Standard Bytez list extraction
-            if isinstance(output, list) and len(output) > 0:
-                response = output[0].get('content', "No content")
-            elif isinstance(output, dict):
-                response = output.get('output', str(output))
+            final_text = ""
+
+            # 1. Handle (output, error) tuple
+            if isinstance(result, tuple):
+                output, error = result
+                if error:
+                    final_text = f"❌ API Error: {error}"
+                else:
+                    result_to_parse = output
             else:
-                response = str(output)
+                result_to_parse = result
 
-            await message.channel.send(response)
+            # 2. Extract text from list/dict/string
+            if not final_text:
+                if isinstance(result_to_parse, list) and len(result_to_parse) > 0:
+                    item = result_to_parse[0]
+                    final_text = item.get('content', str(item)) if isinstance(item, dict) else str(item)
+                elif isinstance(result_to_parse, dict):
+                    final_text = result_to_parse.get('output', result_to_parse.get('content', str(result_to_parse)))
+                else:
+                    final_text = str(result_to_parse)
 
-if DISCORD_TOKEN:
-    client.run(DISCORD_TOKEN)
-else:
-    print("❌ ERROR: Set DISCORD_TOKEN environment variable.")
+            # 3. Send the message
+            if final_text:
+                await message.channel.send(final_text)
+            else:
+                await message.channel.send("⚠️ Received empty response from AI.")
+
+        except Exception as e:
+            print(f"CRASH ERROR: {e}")
+            await message.channel.send(f"⚠️ Bot encountered a code error: {e}")
+
+client.run(DISCORD_TOKEN)
