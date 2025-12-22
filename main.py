@@ -11,7 +11,8 @@ BYTEZ_KEY = os.getenv('BYTEZ_KEY')
 
 # API Configuration
 API_URL = "https://api.bytez.com/models/v2/openai/v1/chat/completions"
-MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct" 
+# Using a more generic model path that Bytez usually supports
+MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2" 
 START_TIME = datetime.utcnow()
 
 OWNER_INFO = {
@@ -52,7 +53,6 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    # !!! FIX: Move global declaration to the very top of the function !!!
     global MODEL_ID
     
     if message.author.bot: return
@@ -63,6 +63,13 @@ async def on_message(message):
 
     state = user_states[uid]
     clean_msg = message.content.lower().strip()
+
+    # Help Command to change models if needed
+    if clean_msg.startswith("!setmodel "):
+        new_model = message.content.split(" ")[1]
+        MODEL_ID = new_model
+        await message.reply(f"✅ Model changed to: `{MODEL_ID}`")
+        return
 
     if clean_msg in ["/status", "ping"]:
         embed = discord.Embed(title="System Status", color=0x5865F2)
@@ -104,12 +111,12 @@ async def on_message(message):
                 
                 await message.reply(ai_text, mention_author=False)
             
-            elif response.status_code == 500:
-                await message.reply("⚠️ **Server Error (500):** Switching to backup model...")
-                MODEL_ID = "google/gemma-2-9b-it" 
-            
             else:
-                await message.reply(f"❌ Error `{response.status_code}`: {response.text[:50]}")
+                # Provide a helpful message if the model name is wrong
+                await message.reply(
+                    f"❌ **API Error {response.status_code}:** Model `{MODEL_ID}` not found.\n"
+                    "Use `!setmodel [model_name]` to try a different one (e.g., `openai/gpt-4o-mini`)."
+                )
 
         except Exception as e:
             print(f"Error: {e}")
