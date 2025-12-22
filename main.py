@@ -1,8 +1,8 @@
 import discord
 import os
 import asyncio
+import time
 import re
-import json
 from datetime import datetime
 from dotenv import load_dotenv
 from perplexity import Perplexity
@@ -13,71 +13,30 @@ DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
 
 client = Perplexity(api_key=PERPLEXITY_API_KEY)
-MODEL_ID = "sonar-pro"
+START_TIME = datetime.utcnow()
 
-# --- STATE MANAGEMENT ---
-# Tracks user expertise, session goals, and previous errors
-user_states = {} 
-
-class UserState:
-    def __init__(self, user_id, name):
-        self.user_id = user_id
-        self.name = name
-        self.history = deque(maxlen=6) # Contextual awareness
-        self.expertise_level = "unknown" # Adaptive complexity
-        self.last_error = None
-        self.goal = None
-
-    def update_expertise(self, text):
-        technical_terms = ['async', 'latency', 'api', 'endpoint', 'json', 'sql']
-        if any(term in text.lower() for term in technical_terms):
-            self.expertise_level = "technical"
-
-# --- UTILITIES ---
-def clean_output(text):
-    """Removes citations and ensures high Info-to-Word ratio."""
-    text = re.sub(r'\[\d+\]', '', text)
-    text = re.sub(r'\(http[s]?://\S+\)', '', text)
-    return text.strip()
-
-# --- CORE LOGIC ---
-async def process_ai_response(state, user_input):
-    """Handles reasoning, adaptive complexity, and error masking."""
-    
-    # Implicit Intent & Goal Tracking
-    if "not working" in user_input.lower() or "error" in user_input.lower():
-        goal_prompt = f"The user is reporting a failure. Analyze the last interaction: {state.history[-1] if state.history else 'None'}."
-    else:
-        goal_prompt = f"Identify the user's core intent and provide a structured solution."
-
-    # Construct System Prompt with Traits
-    sys_msg = (
-        f"User: {state.name}. Expertise: {state.expertise_level}. "
-        "Traits: High Info-to-Word ratio. No fluff ('I'd be happy to'). Use Markdown/Tables. "
-        "If the query is complex, perform 'Step-by-Step Reasoning' internally before answering."
-    )
-
-    messages = [{"role": "system", "content": sys_msg}]
-    messages.extend(list(state.history))
-    messages.append({"role": "user", "content": user_input})
-
-    try:
-        # Latency Masking: Handled by Discord's typing indicator in the event loop
-        response = client.chat.completions.create(model=MODEL_ID, messages=messages)
-        content = clean_output(response.choices[0].message.content)
+class GeminiPartner:
+    def __init__(self, user_name, owner_name):
+        self.user_name = user_name
+        self.owner_name = owner_name
+        self.history = deque(maxlen=6)
         
-        # Self-Correction Check
-        if "```" in content and "error" in content.lower():
-            content += "\n\n**Verification:** Logic checked for syntax and common failure points."
-
-        return content
-    except Exception as e:
-        # Graceful Failure
+    def get_system_prompt(self):
         return (
-            "### ⚠️ Service Interruption\n"
-            "I cannot reach the Perplexity API right now.\n"
-            "**Fallback:** If you need code help, check the official documentation or retry in 60s."
+            f"Identity: You are Gemini, a helpful AI thought partner. Your owner is {self.owner_name}. "
+            "Traits: Empathetic, insightful, and a Grandmaster-level Chess Expert. "
+            "Safety: STRICT NO SLURS/SWEARING POLICY. Never use offensive language. "
+            "Tone: Concise, peer-like, and balanced. Avoid being overly technical unless asked. "
+            "Boundaries: Stay on topic. If the user drifts, gently pivot back to the session goal. "
+            "Capabilities: You can generate images. If a user asks to 'draw' or 'generate an image', "
+            "provide a detailed visual description in your text output for the image generator tool."
         )
+
+user_states = {}
+
+def get_uptime():
+    delta = datetime.utcnow() - START_TIME
+    return f"{delta.days}d {delta.seconds//3600}h {(delta.seconds//60)%60}m"
 
 # --- DISCORD CLIENT ---
 intents = discord.Intents.default()
@@ -85,26 +44,56 @@ intents.message_content = True
 bot = discord.Client(intents=intents)
 
 @bot.event
+async def on_ready():
+    # Fetching the owner name automatically from the Discord Application
+    app_info = await bot.application_info()
+    bot.owner_name = app_info.owner.name
+    print(f'✨ Gemini Bot is active. Owner: {bot.owner_name}')
+
+@bot.event
 async def on_message(message):
     if message.author.bot: return
 
     uid = message.author.id
     if uid not in user_states:
-        user_states[uid] = UserState(uid, message.author.display_name)
+        user_states[uid] = GeminiPartner(message.author.display_name, bot.owner_name)
     
     state = user_states[uid]
-    state.update_expertise(message.content)
+    clean_msg = message.content.lower().strip()
 
-    # 1. Immediate Latency Masking
+    # 1. System Health & Owner Info
+    if clean_msg in ["/status", "who is your owner?", "bot info"]:
+        latency = round(bot.latency * 1000)
+        await message.reply(
+            f"### 🚀 System Diagnostics\n"
+            f"* **Owner:** {bot.owner_name}\n"
+            f"* **Latency:** {latency}ms\n"
+            f"* **Uptime:** {get_uptime()}\n"
+            f"* **Chess IQ:** 2800+ (Grandmaster)"
+        )
+        return
+
+    # 2. Main Chat Loop
     async with message.channel.typing():
-        # 2. Reasoning & Response Generation
-        answer = await process_ai_response(state, message.content)
+        try:
+            # Check for Image Generation Intent
+            is_image_request = any(word in clean_msg for word in ["generate image", "draw", "create a picture"])
+            
+            messages = [{"role": "system", "content": state.get_system_prompt()}]
+            messages.extend(list(state.history))
+            messages.append({"role": "user", "content": message.content})
 
-        # 3. Update State for Contextual Awareness
-        state.history.append({"role": "user", "content": message.content})
-        state.history.append({"role": "assistant", "content": answer})
+            # AI Call (Using Sonar-Pro for reasoning and image descriptions)
+            response = client.chat.completions.create(model="sonar-pro", messages=messages)
+            answer = response.choices[0].message.content
 
-        # 4. Structured Output Delivery
-        await message.reply(answer, mention_author=False)
+            # Update State
+            state.history.append({"role": "user", "content": message.content})
+            state.history.append({"role": "assistant", "content": answer})
+
+            await message.reply(answer, mention_author=False)
+
+        except Exception as e:
+            await message.reply("I hit a temporary snag. Let's reset our focus.")
 
 bot.run(DISCORD_TOKEN)
