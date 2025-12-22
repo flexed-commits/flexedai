@@ -14,7 +14,7 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') # Use the key you provided
 
 # Initialize Gemini 2.0 Client
 client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL_ID = "gemini-2.0-flash-lite"
+MODEL_ID = "gemini-2.5-flash"
 START_TIME = datetime.utcnow()
 
 class ThoughtPartner:
@@ -47,7 +47,7 @@ bot = discord.Client(intents=intents)
 async def on_ready():
     app_info = await bot.application_info()
     bot.owner_name = app_info.owner.name
-    print(f'✨ Gemini 2.0 Online. Owner: {bot.owner_name}')
+    print(f'✨ Gemini 2.5 Online. Owner: {bot.owner_name}')
 
 @bot.event
 async def on_message(message):
@@ -64,7 +64,7 @@ async def on_message(message):
     if clean_msg in ["/status", "who is your owner?", "ping"]:
         latency = round(bot.latency * 1000)
         await message.reply(
-            f"### 🚀 Gemini 2.0 Flash Lite\n"
+            f"### 🚀 Gemini 2.5 Flash\n"
             f"* **Owner:** {bot.owner_name}\n"
             f"* **Latency:** {latency}ms\n"
             f"* **Uptime:** {get_uptime()}\n"
