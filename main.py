@@ -11,7 +11,6 @@ BYTEZ_KEY = os.getenv('BYTEZ_KEY')
 
 # API Configuration
 API_URL = "https://api.bytez.com/models/v2/openai/v1/chat/completions"
-# Using a more stable model to fix the 500 error
 MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct" 
 START_TIME = datetime.utcnow()
 
@@ -53,6 +52,9 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
+    # !!! FIX: Move global declaration to the very top of the function !!!
+    global MODEL_ID
+    
     if message.author.bot: return
 
     uid = message.author.id
@@ -73,7 +75,6 @@ async def on_message(message):
 
     async with message.channel.typing():
         try:
-            # Prepare messages (System + last 4 messages for context)
             msgs = [{"role": "system", "content": state.get_system_instruction()}]
             msgs.extend(state.history[-4:])
             msgs.append({"role": "user", "content": message.content})
@@ -99,19 +100,16 @@ async def on_message(message):
                 state.history.append({"role": "user", "content": message.content})
                 state.history.append({"role": "assistant", "content": ai_text})
                 
-                # Truncate history if it gets too long
                 if len(state.history) > 10: state.history = state.history[-10:]
                 
                 await message.reply(ai_text, mention_author=False)
             
             elif response.status_code == 500:
-                await message.reply("⚠️ **Server Error (500):** The current model is overloaded. I'm switching to a backup model for the next request.")
-                # Auto-fallback logic
-                global MODEL_ID
+                await message.reply("⚠️ **Server Error (500):** Switching to backup model...")
                 MODEL_ID = "google/gemma-2-9b-it" 
             
             else:
-                await message.reply(f"❌ Error `{response.status_code}`: Server is struggling. Try again in a moment.")
+                await message.reply(f"❌ Error `{response.status_code}`: {response.text[:50]}")
 
         except Exception as e:
             print(f"Error: {e}")
