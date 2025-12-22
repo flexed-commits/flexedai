@@ -27,7 +27,7 @@ If a user asks about your owner, follow these rules:
 
 # Initialize Bytez
 sdk = Bytez(BYTEZ_KEY)
-model = sdk.model("anthropic/claude-3-5-sonnet")
+model = sdk.model("anthropic/claude-sonnet-3-5")
 
 # Setup Bot
 intents = discord.Intents.default()
