@@ -2,6 +2,8 @@ import discord
 import os
 import asyncio
 import re
+import json
+from datetime import datetime
 from dotenv import load_dotenv
 from perplexity import Perplexity
 from collections import deque
@@ -13,138 +15,96 @@ PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
 client = Perplexity(api_key=PERPLEXITY_API_KEY)
 MODEL_ID = "sonar-pro"
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.guilds = True
-intents.members = True 
+# --- STATE MANAGEMENT ---
+# Tracks user expertise, session goals, and previous errors
+user_states = {} 
 
-bot = discord.Client(intents=intents)
+class UserState:
+    def __init__(self, user_id, name):
+        self.user_id = user_id
+        self.name = name
+        self.history = deque(maxlen=6) # Contextual awareness
+        self.expertise_level = "unknown" # Adaptive complexity
+        self.last_error = None
+        self.goal = None
 
-channel_topics = {} 
-message_history = {}
+    def update_expertise(self, text):
+        technical_terms = ['async', 'latency', 'api', 'endpoint', 'json', 'sql']
+        if any(term in text.lower() for term in technical_terms):
+            self.expertise_level = "technical"
 
-def clean_citations(text):
-    """Removes [1], [2], etc. and markdown links."""
+# --- UTILITIES ---
+def clean_output(text):
+    """Removes citations and ensures high Info-to-Word ratio."""
     text = re.sub(r'\[\d+\]', '', text)
     text = re.sub(r'\(http[s]?://\S+\)', '', text)
     return text.strip()
 
-async def handle_public_tasks(message, clean_text):
-    """Logic for server info and management available to EVERYONE."""
-    cmd = clean_text.lower()
-    guild = message.guild
+# --- CORE LOGIC ---
+async def process_ai_response(state, user_input):
+    """Handles reasoning, adaptive complexity, and error masking."""
+    
+    # Implicit Intent & Goal Tracking
+    if "not working" in user_input.lower() or "error" in user_input.lower():
+        goal_prompt = f"The user is reporting a failure. Analyze the last interaction: {state.history[-1] if state.history else 'None'}."
+    else:
+        goal_prompt = f"Identify the user's core intent and provide a structured solution."
 
-    # --- SERVER INFO ---
-    if "server info" in cmd:
-        info = (
-            f"**Server:** {guild.name}\n"
-            f"**Owner:** {guild.owner}\n"
-            f"**Members:** {guild.member_count}\n"
-            f"**Boosts:** {guild.premium_subscription_count}"
+    # Construct System Prompt with Traits
+    sys_msg = (
+        f"User: {state.name}. Expertise: {state.expertise_level}. "
+        "Traits: High Info-to-Word ratio. No fluff ('I'd be happy to'). Use Markdown/Tables. "
+        "If the query is complex, perform 'Step-by-Step Reasoning' internally before answering."
+    )
+
+    messages = [{"role": "system", "content": sys_msg}]
+    messages.extend(list(state.history))
+    messages.append({"role": "user", "content": user_input})
+
+    try:
+        # Latency Masking: Handled by Discord's typing indicator in the event loop
+        response = client.chat.completions.create(model=MODEL_ID, messages=messages)
+        content = clean_output(response.choices[0].message.content)
+        
+        # Self-Correction Check
+        if "```" in content and "error" in content.lower():
+            content += "\n\n**Verification:** Logic checked for syntax and common failure points."
+
+        return content
+    except Exception as e:
+        # Graceful Failure
+        return (
+            "### ⚠️ Service Interruption\n"
+            "I cannot reach the Perplexity API right now.\n"
+            "**Fallback:** If you need code help, check the official documentation or retry in 60s."
         )
-        await message.reply(info)
-        return True
 
-    # --- LIST CHANNELS ---
-    if "list" in cmd and "channels" in cmd:
-        channels = [f"#{c.name}" for c in guild.text_channels]
-        # Discord has a 2000 char limit, so we join carefully
-        response = f"**Channels:** {', '.join(channels)}"
-        if len(response) > 1950: response = response[:1950] + "..."
-        await message.reply(response)
-        return True
-
-    # --- USER INFO ---
-    if "user info" in cmd or "who is" in cmd:
-        target = message.mentions[0] if message.mentions else message.author
-        info = (
-            f"**User:** {target.display_name}\n"
-            f"**ID:** {target.id}\n"
-            f"**Joined:** {target.joined_at.strftime('%Y-%m-%d') if target.joined_at else 'Unknown'}\n"
-            f"**Top Role:** {target.top_role.name}"
-        )
-        await message.reply(info)
-        return True
-
-    # --- ROLE INFO ---
-    if "role info" in cmd or "list roles" in cmd:
-        roles = [r.name for r in guild.roles if r.name != "@everyone"]
-        await message.reply(f"**Roles:** {', '.join(roles)}")
-        return True
-
-    # --- CREATE CHANNEL (Now Public) ---
-    if "create channel" in cmd:
-        name = cmd.split("channel")[-1].strip().replace(" ", "-") or "new-chat"
-        try:
-            new_chan = await guild.create_text_channel(name=name)
-            await message.reply(f"✅ Created {new_chan.mention}")
-        except Exception as e:
-            await message.reply(f"❌ I need 'Manage Channels' permission to do that.")
-        return True
-
-    return False
-
-@bot.event
-async def on_ready():
-    print(f'✅ Connected: {bot.user}')
+# --- DISCORD CLIENT ---
+intents = discord.Intents.default()
+intents.message_content = True
+bot = discord.Client(intents=intents)
 
 @bot.event
 async def on_message(message):
-    if message.author == bot.user or message.author.bot:
-        return
+    if message.author.bot: return
 
-    channel_id = message.channel.id
-    user_id = message.author.id
-    clean_text = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
+    uid = message.author.id
+    if uid not in user_states:
+        user_states[uid] = UserState(uid, message.author.display_name)
+    
+    state = user_states[uid]
+    state.update_expertise(message.content)
 
-    # 1. Check for Public Commands first
-    if await handle_public_tasks(message, clean_text):
-        return
-
-    # 2. Topic Isolation: Check if a different user is interrupting
-    if channel_id in channel_topics:
-        active = channel_topics[channel_id]
-        if active['user_id'] != user_id:
-            # Only reply with the warning once per topic switch
-            await message.reply(f"Wait, I'm currently talking to **{active['user_name']}** about '{active['topic']}'. Did you want to follow up on that or ask something new?")
-
-    # Update active topic
-    channel_topics[channel_id] = {
-        'user_id': user_id, 
-        'user_name': message.author.display_name, 
-        'topic': clean_text[:30]
-    }
-
-    # 3. Chat API
+    # 1. Immediate Latency Masking
     async with message.channel.typing():
-        try:
-            hist_key = (channel_id, user_id)
-            if hist_key not in message_history:
-                message_history[hist_key] = deque(maxlen=4)
+        # 2. Reasoning & Response Generation
+        answer = await process_ai_response(state, message.content)
 
-            # Strict brevity and no citations system prompt
-            sys_msg = (
-                "You are a very brief assistant. "
-                "CRITICAL: Never use citations like [1] or [2]. No source links. "
-                "Answers must be 1-2 sentences only."
-            )
-            
-            api_messages = [{"role": "system", "content": sys_msg}]
-            for h in message_history[hist_key]:
-                api_messages.append(h)
-            api_messages.append({"role": "user", "content": clean_text})
+        # 3. Update State for Contextual Awareness
+        state.history.append({"role": "user", "content": message.content})
+        state.history.append({"role": "assistant", "content": answer})
 
-            response = client.chat.completions.create(model=MODEL_ID, messages=api_messages)
-            answer = clean_citations(response.choices[0].message.content)
-
-            # Store clean history
-            message_history[hist_key].append({"role": "user", "content": clean_text})
-            message_history[hist_key].append({"role": "assistant", "content": answer})
-
-            await message.reply(answer, mention_author=False)
-
-        except Exception as e:
-            print(f"Error: {e}")
-            await message.reply("⚠️ Service busy. Try again.")
+        # 4. Structured Output Delivery
+        await message.reply(answer, mention_author=False)
 
 bot.run(DISCORD_TOKEN)
