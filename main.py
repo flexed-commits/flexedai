@@ -1,127 +1,64 @@
 import discord
-import os
-import requests
-import json
-from datetime import datetime
-from dotenv import load_dotenv
 from bytez import Bytez
 
-load_dotenv()
-DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-BYTEZ_KEY = os.getenv('BYTEZ_KEY')
+# --- CONFIGURATION ---
+DISCORD_TOKEN = 'YOUR_DISCORD_BOT_TOKEN_HERE'
+BYTEZ_KEY = '61139c556078e162dbada319d9a5b925'
 
-# API Configuration
-API_URL = "https://api.bytez.com/models/v2/openai/v1/chat/completions"
-# Using a more generic model path that Bytez usually supports
-sdk = Bytez(BYTEZ_KEY)
-MODEL_ID =sdk.model("anthropic/claude-sonnet-4-5")
-START_TIME = datetime.utcnow()
-
-OWNER_INFO = {
+# Owner Data
+OWNER = {
     "name": "Ψ.1nOnly.Ψ",
-    "id": 1081876265683927080,
-    "handle": ".flexed.",
-    "pfp": "https://cdn.discordapp.com/avatars/1081876265683927080/a2671291fa7a3f13e03022eeeac15ef2.webp?size=2048"
+    "username": ".flexed.",
+    "id": "1081876265683927080",
+    "pfp": "https://cdn.discordapp.com/avatars/1081876265683927080/a2671291fa7a3f13e03022eeeac15ef2.webp?size=2048",
+    "link": "https://discord.com/users/1081876265683927080"
 }
 
-class ThoughtPartner:
-    def __init__(self, user_name):
-        self.user_name = user_name
-        self.history = [] 
+# System Instructions for the AI
+SYSTEM_PROMPT = f"""
+You are a helpful AI assistant. Your creator/owner is {OWNER['name']}.
+If a user asks about your owner, follow these rules:
+1. If they ask for "everything" or general info, tell them his name ({OWNER['name']}), username ({OWNER['username']}), and ID.
+2. If they specifically ask for his "PFP" or "profile picture", provide this link: {OWNER['pfp']}
+3. If they ask for his "ID", provide: {OWNER['id']}
+4. If they ask for his "link" or "profile", provide: {OWNER['link']}
+5. Always be respectful to {OWNER['name']}.
+"""
 
-    def get_system_instruction(self):
-        return (
-            f"You are Gemini, a helpful AI thought partner for {self.user_name}. "
-            f"Your Owner is {OWNER_INFO['name']}. "
-            "Traits: Empathetic, concise, Grandmaster Chess Expert (2800 IQ). "
-            "Safety: STRICT NO SLURS. Polite always. "
-            "Style: Maximum Info-to-Word ratio. No fluff."
-        )
+# Initialize Bytez
+sdk = Bytez(BYTEZ_KEY)
+model = sdk.model("anthropic/claude-3-5-sonnet")
 
-user_states = {}
-
-def get_uptime():
-    delta = datetime.utcnow() - START_TIME
-    return f"{delta.days}d {delta.seconds//3600}h {(delta.seconds//60)%60}m"
-
-# --- DISCORD CLIENT ---
+# Setup Bot
 intents = discord.Intents.default()
 intents.message_content = True
-bot = discord.Client(intents=intents)
+client = discord.Client(intents=intents)
 
-@bot.event
+@client.event
 async def on_ready():
-    print(f'✨ Bot Online | Serving {OWNER_INFO["name"]}')
+    print(f'Bot is live as {client.user}')
 
-@bot.event
+@client.event
 async def on_message(message):
-    global MODEL_ID
-    
-    if message.author.bot: return
-
-    uid = message.author.id
-    if uid not in user_states:
-        user_states[uid] = ThoughtPartner(message.author.display_name)
-
-    state = user_states[uid]
-    clean_msg = message.content.lower().strip()
-
-    # Help Command to change models if needed
-    if clean_msg.startswith("!setmodel "):
-        new_model = message.content.split(" ")[1]
-        MODEL_ID = new_model
-        await message.reply(f"✅ Model changed to: `{MODEL_ID}`")
+    # Don't let the bot reply to itself
+    if message.author == client.user:
         return
 
-    if clean_msg in ["/status", "ping"]:
-        embed = discord.Embed(title="System Status", color=0x5865F2)
-        embed.set_author(name=OWNER_INFO["name"], icon_url=OWNER_INFO["pfp"])
-        embed.add_field(name="🚀 Model", value=MODEL_ID, inline=True)
-        embed.add_field(name="📡 Latency", value=f"{round(bot.latency * 1000)}ms", inline=True)
-        embed.add_field(name="⏳ Uptime", value=get_uptime(), inline=True)
-        await message.reply(embed=embed)
-        return
-
-    async with message.channel.typing():
-        try:
-            msgs = [{"role": "system", "content": state.get_system_instruction()}]
-            msgs.extend(state.history[-4:])
-            msgs.append({"role": "user", "content": message.content})
-
-            headers = {
-                "Authorization": f"Bearer {BYTEZ_KEY}",
-                "Content-Type": "application/json"
-            }
+    # The bot will respond to any message that mentions it or starts with "bot"
+    if client.user.mentioned_in(message) or message.content.lower().startswith("bot"):
+        async with message.channel.typing():
+            clean_content = message.content.replace(f'<@!{client.user.id}>', '').strip()
             
-            payload = {
-                "model": MODEL_ID,
-                "messages": msgs,
-                "temperature": 0.7,
-                "max_tokens": 300
-            }
+            output, error = model.run([
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": clean_content}
+            ])
 
-            response = requests.post(API_URL, headers=headers, json=payload, timeout=45)
-            
-            if response.status_code == 200:
-                data = response.json()
-                ai_text = data['choices'][0]['message']['content']
-                
-                state.history.append({"role": "user", "content": message.content})
-                state.history.append({"role": "assistant", "content": ai_text})
-                
-                if len(state.history) > 10: state.history = state.history[-10:]
-                
-                await message.reply(ai_text, mention_author=False)
-            
+            if error:
+                await message.channel.send(f"Error: {error}")
             else:
-                # Provide a helpful message if the model name is wrong
-                await message.reply(
-                    f"❌ **API Error {response.status_code}:** Model `{MODEL_ID}` not found.\n"
-                    "Use `!setmodel [model_name]` to try a different one (e.g., `openai/gpt-4o-mini`)."
-                )
+                # Handle list or string output from Bytez
+                response = output[0]['content'] if isinstance(output, list) else output
+                await message.channel.send(response)
 
-        except Exception as e:
-            print(f"Error: {e}")
-            await message.reply("`Logic Error: Check Termux console.`")
-
-bot.run(DISCORD_TOKEN)
+client.run(DISCORD_TOKEN)
