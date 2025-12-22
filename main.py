@@ -3,8 +3,6 @@ from bytez import Bytez
 import os
 
 # --- CONFIGURATION ---
-# In Termux, you can set this by typing: export DISCORD_TOKEN='your_token_here'
-# Or just replace os.getenv with your string like: DISCORD_TOKEN = 'your_actual_token'
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 BYTEZ_KEY = '61139c556078e162dbada319d9a5b925'
 
@@ -33,7 +31,7 @@ model = sdk.model("anthropic/claude-3-5-sonnet")
 
 # Setup Bot
 intents = discord.Intents.default()
-intents.message_content = True  # CRITICAL: Must be enabled in Discord Dev Portal
+intents.message_content = True
 client = discord.Client(intents=intents)
 
 @client.event
@@ -42,29 +40,27 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # 1. Ignore messages from the bot itself to prevent infinite loops
     if message.author == client.user:
         return
 
-    # 2. Respond to EVERY message (No pings or "bot" prefix required)
     async with message.channel.typing():
-        # Clean the content (in case there are pings to remove)
-        clean_content = message.content.strip()
-        
-        # If the message is empty (like just an image), don't trigger the AI
-        if not clean_content:
-            return
+        try:
+            # FIX: Only assign to ONE variable. 
+            # Most modern SDKs return the result directly.
+            result = model.run([
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": message.content}
+            ])
 
-        output, error = model.run([
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": clean_content}
-        ])
+            # Check if the result itself is an error or a list
+            if isinstance(result, list) and len(result) > 0:
+                response_text = result[0].get('content', "I couldn't generate a response.")
+            else:
+                response_text = str(result)
 
-        if error:
-            await message.channel.send(f"❌ API Error: {error}")
-        else:
-            # Handle Bytez output format
-            response = output[0]['content'] if isinstance(output, list) else output
-            await message.channel.send(response)
+            await message.channel.send(response_text)
+
+        except Exception as e:
+            await message.channel.send(f"❌ An error occurred: {e}")
 
 client.run(DISCORD_TOKEN)
