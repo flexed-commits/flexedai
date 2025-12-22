@@ -4,6 +4,7 @@ import requests
 import json
 from datetime import datetime
 from dotenv import load_dotenv
+from bytez import Bytez
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
