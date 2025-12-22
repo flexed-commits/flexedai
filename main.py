@@ -3,33 +3,40 @@ import os
 import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
-from openai import OpenAI  # Use the OpenAI SDK
+from openai import OpenAI
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-BYTEZ_KEY = os.getenv('BYTEZ_KEY')  # Make sure this is in your .env
+BYTEZ_KEY = os.getenv('BYTEZ_KEY')
 
-# Initialize Bytez Client using OpenAI SDK
+# Initialize Bytez Client
 client = OpenAI(
     api_key=BYTEZ_KEY,
     base_url="https://api.bytez.com/models/v2/openai/v1"
 )
-MODEL_ID = "Qwen/Qwen3-4B" # As per your snippet
+MODEL_ID = "Qwen/Qwen3-4B"
 START_TIME = datetime.utcnow()
 
+# Owner Details
+OWNER_INFO = {
+    "name": "Ψ.1nOnly.Ψ",
+    "id": 1081876265683927080,
+    "handle": ".flexed.",
+    "pfp": "https://cdn.discordapp.com/avatars/1081876265683927080/a2671291fa7a3f13e03022eeeac15ef2.webp?size=2048"
+}
+
 class ThoughtPartner:
-    def __init__(self, user_name, owner_name):
+    def __init__(self, user_name):
         self.user_name = user_name
-        self.owner_name = owner_name
-        # Openai-style history: list of dicts
-        self.history = [] 
+        self.history = [] # Stores last 10 messages
 
     def get_system_instruction(self):
         return (
-            f"You are a helpful AI thought partner for {self.user_name}. Owner: {self.owner_name}. "
-            "Traits: Empathetic, concise, and a Grandmaster-level Chess Expert. "
+            f"You are Gemini, a helpful AI thought partner for {self.user_name}. "
+            f"Your Owner is {OWNER_INFO['name']} (@{OWNER_INFO['handle']}). "
+            "Traits: Empathetic, concise, and a Grandmaster-level Chess Expert (2800 IQ). "
             "Safety: STRICT NO SLURS/SWEARING. Polite and respectful always. "
-            "Conciseness: Maximum Info-to-Word ratio. No fluff."
+            "Style: Maximum Info-to-Word ratio. No fluff. No citations."
         )
 
 user_states = {}
@@ -45,9 +52,7 @@ bot = discord.Client(intents=intents)
 
 @bot.event
 async def on_ready():
-    app_info = await bot.application_info()
-    bot.owner_name = app_info.owner.name
-    print(f'✨ Bytez Bot Online. Model: {MODEL_ID}')
+    print(f'✨ {bot.user} is online | Serving {OWNER_INFO["name"]}')
 
 @bot.event
 async def on_message(message):
@@ -55,35 +60,34 @@ async def on_message(message):
 
     uid = message.author.id
     if uid not in user_states:
-        user_states[uid] = ThoughtPartner(message.author.display_name, bot.owner_name)
+        user_states[uid] = ThoughtPartner(message.author.display_name)
 
     state = user_states[uid]
     clean_msg = message.content.lower().strip()
 
     # 1. System Stats Command
     if clean_msg in ["/status", "who is your owner?", "ping"]:
-        latency = round(bot.latency * 1000)
-        await message.reply(
-            f"### 🚀 Powered by Bytez\n"
-            f"* **Model:** {MODEL_ID}\n"
-            f"* **Owner:** {bot.owner_name}\n"
-            f"* **Latency:** {latency}ms\n"
-            f"* **Uptime:** {get_uptime()}"
-        )
+        embed = discord.Embed(title="System Status", color=0x2b2d31)
+        embed.set_author(name=OWNER_INFO["name"], icon_url=OWNER_INFO["pfp"])
+        embed.add_field(name="🚀 Model", value=MODEL_ID, inline=True)
+        embed.add_field(name="📡 Latency", value=f"{round(bot.latency * 1000)}ms", inline=True)
+        embed.add_field(name="⏳ Uptime", value=get_uptime(), inline=True)
+        embed.add_field(name="♟️ Chess IQ", value="2800 (GM)", inline=True)
+        await message.reply(embed=embed)
         return
 
     # 2. Main Chat Loop
     async with message.channel.typing():
         try:
-            # Prepare the message payload
-            messages = [
-                {"role": "system", "content": state.get_system_instruction()}
-            ]
+            # Build payload with history
+            messages = [{"role": "system", "content": state.get_system_instruction()}]
             
-            # Add user message
+            # Add recent history (last 10 turns)
+            messages.extend(state.history[-10:])
+            
+            # Add current message
             messages.append({"role": "user", "content": message.content})
 
-            # Call Bytez API
             response = client.chat.completions.create(
                 model=MODEL_ID,
                 messages=messages,
@@ -91,16 +95,16 @@ async def on_message(message):
                 max_tokens=250
             )
 
-            # Extract content
-            ai_response = response.choices[0].message.content
+            ai_text = response.choices[0].message.content
             
-            if ai_response:
-                await message.reply(ai_response, mention_author=False)
-            else:
-                await message.reply("The model returned an empty response.")
+            # Update history
+            state.history.append({"role": "user", "content": message.content})
+            state.history.append({"role": "assistant", "content": ai_text})
+
+            await message.reply(ai_text, mention_author=False)
 
         except Exception as e:
             print(f"Error: {e}")
-            await message.reply("I encountered a connection error. Please try again.")
+            await message.reply("`Error: API Connection Failed. Check console.`")
 
 bot.run(DISCORD_TOKEN)
