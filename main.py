@@ -11,10 +11,10 @@ BYTEZ_KEY = os.getenv('BYTEZ_KEY')
 
 # API Configuration
 API_URL = "https://api.bytez.com/models/v2/openai/v1/chat/completions"
-MODEL_ID = "Qwen/Qwen3-4B"
+# Using a more stable model to fix the 500 error
+MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct" 
 START_TIME = datetime.utcnow()
 
-# Owner Details
 OWNER_INFO = {
     "name": "Ψ.1nOnly.Ψ",
     "id": 1081876265683927080,
@@ -30,10 +30,10 @@ class ThoughtPartner:
     def get_system_instruction(self):
         return (
             f"You are Gemini, a helpful AI thought partner for {self.user_name}. "
-            f"Your Owner is {OWNER_INFO['name']} (@{OWNER_INFO['handle']}). "
-            "Traits: Empathetic, concise, and a Grandmaster-level Chess Expert (2800 IQ). "
-            "Safety: STRICT NO SLURS/SWEARING. Polite and respectful always. "
-            "Style: Maximum Info-to-Word ratio. No fluff. No citations."
+            f"Your Owner is {OWNER_INFO['name']}. "
+            "Traits: Empathetic, concise, Grandmaster Chess Expert (2800 IQ). "
+            "Safety: STRICT NO SLURS. Polite always. "
+            "Style: Maximum Info-to-Word ratio. No fluff."
         )
 
 user_states = {}
@@ -49,7 +49,7 @@ bot = discord.Client(intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f'✨ Bot is up! Serving {OWNER_INFO["name"]}')
+    print(f'✨ Bot Online | Serving {OWNER_INFO["name"]}')
 
 @bot.event
 async def on_message(message):
@@ -62,24 +62,21 @@ async def on_message(message):
     state = user_states[uid]
     clean_msg = message.content.lower().strip()
 
-    # 1. System Stats Command
-    if clean_msg in ["/status", "who is your owner?", "ping"]:
+    if clean_msg in ["/status", "ping"]:
         embed = discord.Embed(title="System Status", color=0x5865F2)
         embed.set_author(name=OWNER_INFO["name"], icon_url=OWNER_INFO["pfp"])
         embed.add_field(name="🚀 Model", value=MODEL_ID, inline=True)
         embed.add_field(name="📡 Latency", value=f"{round(bot.latency * 1000)}ms", inline=True)
         embed.add_field(name="⏳ Uptime", value=get_uptime(), inline=True)
-        embed.add_field(name="♟️ IQ", value="2800 (GM)", inline=True)
         await message.reply(embed=embed)
         return
 
-    # 2. Main Chat Loop
     async with message.channel.typing():
         try:
-            # Build the payload
-            messages = [{"role": "system", "content": state.get_system_instruction()}]
-            messages.extend(state.history[-6:]) # Keep last 6 messages for context
-            messages.append({"role": "user", "content": message.content})
+            # Prepare messages (System + last 4 messages for context)
+            msgs = [{"role": "system", "content": state.get_system_instruction()}]
+            msgs.extend(state.history[-4:])
+            msgs.append({"role": "user", "content": message.content})
 
             headers = {
                 "Authorization": f"Bearer {BYTEZ_KEY}",
@@ -88,25 +85,33 @@ async def on_message(message):
             
             payload = {
                 "model": MODEL_ID,
-                "messages": messages,
+                "messages": msgs,
                 "temperature": 0.7,
                 "max_tokens": 300
             }
 
-            # Direct HTTP Request (Bypasses the broken OpenAI library)
-            response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=45)
             
             if response.status_code == 200:
                 data = response.json()
                 ai_text = data['choices'][0]['message']['content']
                 
-                # Update local history
                 state.history.append({"role": "user", "content": message.content})
                 state.history.append({"role": "assistant", "content": ai_text})
                 
+                # Truncate history if it gets too long
+                if len(state.history) > 10: state.history = state.history[-10:]
+                
                 await message.reply(ai_text, mention_author=False)
+            
+            elif response.status_code == 500:
+                await message.reply("⚠️ **Server Error (500):** The current model is overloaded. I'm switching to a backup model for the next request.")
+                # Auto-fallback logic
+                global MODEL_ID
+                MODEL_ID = "google/gemma-2-9b-it" 
+            
             else:
-                await message.reply(f"❌ API Error: `{response.status_code}`\nCheck your Bytez Key.")
+                await message.reply(f"❌ Error `{response.status_code}`: Server is struggling. Try again in a moment.")
 
         except Exception as e:
             print(f"Error: {e}")
