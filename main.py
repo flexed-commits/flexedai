@@ -1,10 +1,16 @@
 import discord
 import os
-from bytez import Bytez
+from openai import OpenAI
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
-BYTEZ_KEY = "61139c556078e162dbada319d9a5b925"
+# Use Groq API Key from environment or paste it here
+GROQ_API_KEY = os.getenv('GROQ_API_KEY') or "gsk_your_key_here"
+
+client_ai = OpenAI(
+    api_key=GROQ_API_KEY,
+    base_url="https://api.groq.com/openai/v1",
+)
 
 OWNER = {
     "name": "Ψ.1nOnly.Ψ",
@@ -16,63 +22,46 @@ OWNER = {
 
 SYSTEM_PROMPT = f"You are a helpful assistant. Owner: {OWNER['name']}. If asked for PFP, show {OWNER['pfp']}."
 
-sdk = Bytez(BYTEZ_KEY)
-model = sdk.model("anthropic/claude-sonnet-4-5")
-
+# --- DISCORD SETUP ---
 intents = discord.Intents.default()
 intents.message_content = True 
-client = discord.Client(intents=intents)
+discord_client = discord.Client(intents=intents)
 
-@client.event
+@discord_client.event
 async def on_ready():
-    print(f'✅ Bot is online as {client.user}')
+    print(f'✅ Bot is online as {discord_client.user}')
 
-@client.event
+@discord_client.event
 async def on_message(message):
-    if message.author == client.user:
+    if message.author == discord_client.user:
         return
+
+    # Optional: Only respond to mentions or specific prefixes
+    # if not discord_client.user.mentioned_in(message): return
 
     async with message.channel.typing():
         try:
-            # Get raw result from Bytez
-            result = model.run([
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": message.content}
-            ])
+            # Using Groq's Chat Completion
+            chat_completion = client_ai.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": message.content}
+                ],
+                model="llama3-8b-8192", # Or "llama3-70b-8192" / "mixtral-8x7b-32768"
+            )
 
-            # DEBUG: This will show you the exact format in Termux
-            print(f"RAW DATA FROM BYTEZ: {result}")
+            # Extract the text
+            final_text = chat_completion.choices[0].message.content
 
-            final_text = ""
-
-            # 1. Handle (output, error) tuple
-            if isinstance(result, tuple):
-                output, error = result
-                if error:
-                    final_text = f"❌ API Error: {error}"
-                else:
-                    result_to_parse = output
+            # Discord has a 2000 character limit per message
+            if len(final_text) > 2000:
+                for i in range(0, len(final_text), 2000):
+                    await message.channel.send(final_text[i:i+2000])
             else:
-                result_to_parse = result
-
-            # 2. Extract text from list/dict/string
-            if not final_text:
-                if isinstance(result_to_parse, list) and len(result_to_parse) > 0:
-                    item = result_to_parse[0]
-                    final_text = item.get('content', str(item)) if isinstance(item, dict) else str(item)
-                elif isinstance(result_to_parse, dict):
-                    final_text = result_to_parse.get('output', result_to_parse.get('content', str(result_to_parse)))
-                else:
-                    final_text = str(result_to_parse)
-
-            # 3. Send the message
-            if final_text:
                 await message.channel.send(final_text)
-            else:
-                await message.channel.send("⚠️ Received empty response from AI.")
 
         except Exception as e:
             print(f"CRASH ERROR: {e}")
-            await message.channel.send(f"⚠️ Bot encountered a code error: {e}")
+            await message.channel.send(f"⚠️ Bot encountered an error: {e}")
 
-client.run(DISCORD_TOKEN)
+discord_client.run(DISCORD_TOKEN)
