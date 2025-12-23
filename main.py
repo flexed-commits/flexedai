@@ -23,17 +23,19 @@ OWNER = {
     "favserv": "https://discord.gg/bzePwKSDsp",
 }
 
-# System prompt updated with your specific bio
+# Improved System Prompt for better bio retention
 SYSTEM_PROMPT = (
-    f"You are a helpful assistant. Owner: {OWNER['name']}. "
-    f"If asked for the owner's PFP, include this link: {OWNER['pfp']}. "
-    f"If asked for owner id: {OWNER['id']}. "
-    f"If asked for owner username: {OWNER['username']}. "
-    f"If asked for profile link: {OWNER['link']}. "
-    f"If asked how to contact/add him: {OWNER['friend']} (Note: mutual friend required). "
-    f"If asked for the owner's bio, provide exactly this: {OWNER['bio']}. "
-    f"If asked for owner's guns.lol: {OWNER['gunslol']}. "
-    f"Favorite Server: 👑 Shivam’s Discord ({OWNER['favserv']}). "
+    f"You are a helpful assistant. Your Owner is {OWNER['name']}.\n\n"
+    f"OWNER DETAILS:\n"
+    f"- PFP: {OWNER['pfp']}\n"
+    f"- ID: {OWNER['id']}\n"
+    f"- Username: {OWNER['username']}\n"
+    f"- Profile Link: {OWNER['link']}\n"
+    f"- Contact: {OWNER['friend']} (Requires mutual friend)\n"
+    f"- Guns.lol: {OWNER['gunslol']}\n"
+    f"- Favorite Server: 👑 Shivam’s Discord ({OWNER['favserv']})\n\n"
+    f"CRITICAL: If asked for the owner's bio, you MUST provide this exact text in full:\n"
+    f"{OWNER['bio']}\n\n"
     f"Tone: Chill, explanatory, and adapts to the user."
 )
 
@@ -57,13 +59,12 @@ async def on_message(message):
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": message.content}
                 ],
-                # Groq uses specific model strings. Change this if using a different provider.
                 model="openai/gpt-oss-20b", 
             )
 
             final_text = chat_completion.choices[0].message.content
 
-            # --- EMBED LOGIC FOR PFP ---
+            # --- SENDING LOGIC (Using message.reply) ---
             if OWNER['pfp'] in final_text:
                 embed = discord.Embed(
                     title=f"Owner: {OWNER['name']}",
@@ -71,17 +72,18 @@ async def on_message(message):
                     color=discord.Color.blue()
                 )
                 embed.set_image(url=OWNER['pfp'])
-                await message.channel.send(embed=embed)
+                # .reply() creates the mention/connection to the original message
+                await message.reply(embed=embed)
 
             elif len(final_text) > 2000:
                 for i in range(0, len(final_text), 2000):
-                    await message.channel.send(final_text[i:i+2000])
+                    await message.reply(final_text[i:i+2000])
             else:
-                await message.channel.send(final_text)
+                await message.reply(final_text)
 
         except Exception as e:
             print(f"CRASH ERROR: {e}")
-            await message.channel.send("⚠️ Bot encountered an error processing that request.")
+            await message.reply("⚠️ Bot encountered an error processing that request.")
 
 if DISCORD_TOKEN:
     discord_client.run(DISCORD_TOKEN)
