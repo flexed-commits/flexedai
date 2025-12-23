@@ -26,24 +26,6 @@ OWNER = {
     "favserv": "https://discord.gg/bzePwKSDsp",
 }
 
-# Added Hinglish instruction to the system prompt
-SYSTEM_PROMPT = (
-    f"You are a helpful assistant. Your Owner is {OWNER['name']}.\n\n"
-    f"STRICT LANGUAGE RULE: Always reply in Hinglish (Hindi written in Roman/English script) "
-    f"by default. Only switch to English or another language if the user explicitly asks you to change it.\n\n"
-    f"OWNER DETAILS:\n"
-    f"- PFP: {OWNER['pfp']}\n"
-    f"- ID: {OWNER['id']}\n"
-    f"- Username: {OWNER['username']}\n"
-    f"- Profile Link: {OWNER['link']}\n"
-    f"- Contact: {OWNER['friend']} (Requires mutual friend)\n"
-    f"- Guns.lol: {OWNER['gunslol']}\n"
-    f"- Favorite Server: 👑 Shivam’s Discord ({OWNER['favserv']})\n\n"
-    f"CRITICAL: If asked for the owner's bio, you MUST provide this exact text in full:\n"
-    f"{OWNER['bio']}\n\n"
-    f"Tone: Chill, explanatory, and adapts to the user."
-)
-
 intents = discord.Intents.default()
 intents.message_content = True 
 discord_client = discord.Client(intents=intents)
@@ -54,28 +36,45 @@ async def on_ready():
 
 @discord_client.event
 async def on_message(message):
-    if message.author == discord_client.user:
+    # 3. Ignore bot messages (including itself)
+    if message.author.bot:
         return
 
     content = message.content.lower()
+    guild_id = message.guild.id if message.guild else None
+    channel_id = message.channel.id
 
-    # --- STATS COMMANDS ---
+    # --- DYNAMIC PROMPT LOGIC ---
+    # 1. Check for specific server to allow Owner Bio/Fav Server
+    allow_owner_info = (guild_id == 1349281907765936188)
+    
+    # 2. Strict Language Rules based on Channel/Server
+    lang_instruction = "Always reply in Hinglish (Hindi written in Roman script)." # Default
+    if guild_id == 1392347019917660161:
+        if channel_id == 1418064211640193127:
+            lang_instruction = "STRICT RULE: You MUST reply ONLY in English."
+        elif channel_id == 1418064267374231766:
+            lang_instruction = "STRICT RULE: You MUST reply ONLY in Hindi (Devanagari script)."
+
+    owner_info_text = ""
+    if allow_owner_info:
+        owner_info_text = (
+            f"OWNER DETAILS:\n- PFP: {OWNER['pfp']}\n- ID: {OWNER['id']}\n- Username: {OWNER['username']}\n"
+            f"- Profile Link: {OWNER['link']}\n- Contact: {OWNER['friend']}\n- Guns.lol: {OWNER['gunslol']}\n"
+            f"- Favorite Server: 👑 Shivam’s Discord ({OWNER['favserv']})\n"
+            f"CRITICAL: If asked for bio, provide this: {OWNER['bio']}"
+        )
+
+    system_prompt = (
+        f"You are a helpful assistant. Your Owner is {OWNER['name']}.\n"
+        f"{lang_instruction}\n{owner_info_text}\n"
+        f"Tone: Chill and explanatory. Listen to orders carefully."
+    )
+
+    # --- COMMANDS ---
     if content == "!ping":
         latency = round(discord_client.latency * 1000)
         await message.reply(f"🏓 Pong! Latency: **{latency}ms**")
-        return
-
-    if content == "!uptime":
-        current_time = time.time()
-        difference = int(round(current_time - bot_start_time))
-        uptime_str = str(timedelta(seconds=difference))
-        await message.reply(f"🚀 Uptime: **{uptime_str}**")
-        return
-
-    if content == "!shards":
-        shard_id = message.guild.shard_id if message.guild else 0
-        shard_count = discord_client.shard_count or 1
-        await message.reply(f"💎 Shard ID: **{shard_id}** / Total Shards: **{shard_count}**")
         return
 
     # --- AI CHAT LOGIC ---
@@ -83,7 +82,7 @@ async def on_message(message):
         try:
             chat_completion = client_ai.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message.content}
                 ],
                 model="openai/gpt-oss-20b", 
@@ -91,25 +90,28 @@ async def on_message(message):
 
             final_text = chat_completion.choices[0].message.content
 
-            if OWNER['pfp'] in final_text:
-                embed = discord.Embed(
-                    title=f"Owner: {OWNER['name']}",
-                    description=final_text.replace(OWNER['pfp'], "").strip(),
-                    color=discord.Color.blue()
-                )
-                embed.set_image(url=OWNER['pfp'])
-                await message.reply(embed=embed)
-            elif len(final_text) > 2000:
-                for i in range(0, len(final_text), 2000):
-                    await message.reply(final_text[i:i+2000])
+            # 5. Handle Long Messages with Mention Rules
+            if len(final_text) > 2000:
+                parts = [final_text[i:i+2000] for i in range(0, len(final_text), 2000)]
+                for index, part in enumerate(parts):
+                    if index == 0:
+                        # First part replies with mention
+                        await message.reply(part, mention_author=True)
+                    else:
+                        # Rest of the parts without mention
+                        await message.channel.send(part)
             else:
-                await message.reply(final_text)
+                # Normal reply
+                if OWNER['pfp'] in final_text and allow_owner_info:
+                    embed = discord.Embed(title=f"Owner: {OWNER['name']}", description=final_text.replace(OWNER['pfp'], "").strip(), color=discord.Color.blue())
+                    embed.set_image(url=OWNER['pfp'])
+                    await message.reply(embed=embed, mention_author=True)
+                else:
+                    await message.reply(final_text, mention_author=True)
 
         except Exception as e:
             print(f"CRASH ERROR: {e}")
-            await message.reply("⚠️ Bot encountered an error processing that request.")
+            await message.reply("⚠️ Bot encountered an error.")
 
 if DISCORD_TOKEN:
     discord_client.run(DISCORD_TOKEN)
-else:
-    print("Error: DISCORD_TOKEN environment variable not set.")
