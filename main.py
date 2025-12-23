@@ -7,7 +7,7 @@ from openai import OpenAI
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY') or "gsk_your_key_here"
-bot_start_time = time.time()  # Track when the bot starts
+bot_start_time = time.time()
 
 client_ai = OpenAI(
     api_key=GROQ_API_KEY,
@@ -26,8 +26,11 @@ OWNER = {
     "favserv": "https://discord.gg/bzePwKSDsp",
 }
 
+# Added Hinglish instruction to the system prompt
 SYSTEM_PROMPT = (
     f"You are a helpful assistant. Your Owner is {OWNER['name']}.\n\n"
+    f"STRICT LANGUAGE RULE: Always reply in Hinglish (Hindi written in Roman/English script) "
+    f"by default. Only switch to English or another language if the user explicitly asks you to change it.\n\n"
     f"OWNER DETAILS:\n"
     f"- PFP: {OWNER['pfp']}\n"
     f"- ID: {OWNER['id']}\n"
@@ -95,16 +98,16 @@ async def on_message(message):
                     color=discord.Color.blue()
                 )
                 embed.set_image(url=OWNER['pfp'])
-                await message.reply(embed=embed, mention_author=False)
+                await message.reply(embed=embed)
             elif len(final_text) > 2000:
                 for i in range(0, len(final_text), 2000):
-                    await message.reply(final_text[i:i+2000], mention_author=False)
+                    await message.reply(final_text[i:i+2000])
             else:
-                await message.reply(final_text, mention_author=False)
+                await message.reply(final_text)
 
         except Exception as e:
             print(f"CRASH ERROR: {e}")
-            await message.reply("⚠️ Bot encountered an error processing that request.", mention_author=False)
+            await message.reply("⚠️ Bot encountered an error processing that request.")
 
 if DISCORD_TOKEN:
     discord_client.run(DISCORD_TOKEN)
