@@ -40,7 +40,7 @@ async def on_message(message):
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": message.content}
                 ],
-                model="llama3-8b-8192", 
+                model="openai/gpt-oss-20b", 
             )
 
             final_text = chat_completion.choices[0].message.content
