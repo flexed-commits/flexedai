@@ -95,16 +95,16 @@ async def on_message(message):
                     color=discord.Color.blue()
                 )
                 embed.set_image(url=OWNER['pfp'])
-                await message.reply(embed=embed)
+                await message.reply(embed=embed, mention_author=False)
             elif len(final_text) > 2000:
                 for i in range(0, len(final_text), 2000):
-                    await message.reply(final_text[i:i+2000])
+                    await message.reply(final_text[i:i+2000], mention_author=False)
             else:
-                await message.reply(final_text)
+                await message.reply(final_text, mention_author=False)
 
         except Exception as e:
             print(f"CRASH ERROR: {e}")
-            await message.reply("⚠️ Bot encountered an error processing that request.")
+            await message.reply("⚠️ Bot encountered an error processing that request.", mention_author=False)
 
 if DISCORD_TOKEN:
     discord_client.run(DISCORD_TOKEN)
