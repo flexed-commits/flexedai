@@ -19,7 +19,7 @@ OWNER = {
 }
 
 # Explicit instructions in the system prompt to use the link
-SYSTEM_PROMPT = f"You are a helpful assistant. Owner: {OWNER['name']}. If asked for the owner's PFP or image, you MUST include this exact link: {OWNER['pfp']},. If asked for owner id then include this {owner['id']}. If asked for owner username then include this {owner['username']}. Be chill, explanatory, change your tone according to the recepient"
+SYSTEM_PROMPT = f"You are a helpful assistant. Owner: {OWNER['name']}. If asked for the owner's PFP or image, you MUST include this exact link: {OWNER['pfp']},. If asked for owner id then include this {OWNER['id']}. If asked for owner username then include this {OWNER['username']}. Be chill, explanatory, change your tone according to the recepient"
 
 intents = discord.Intents.default()
 intents.message_content = True 
