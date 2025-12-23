@@ -15,10 +15,11 @@ OWNER = {
     "name": "Ψ.1nOnly.Ψ",
     "username": ".flexed.",
     "pfp": "https://cdn.discordapp.com/avatars/1081876265683927080/a2671291fa7a3f13e03022eeeac15ef2.webp?size=2048",
+    "id": "1081876265683927080",
 }
 
 # Explicit instructions in the system prompt to use the link
-SYSTEM_PROMPT = f"You are a helpful assistant. Owner: {OWNER['name']}. If asked for the owner's PFP or image, you MUST include this exact link: {OWNER['pfp']}"
+SYSTEM_PROMPT = f"You are a helpful assistant. Owner: {OWNER['name']}. If asked for the owner's PFP or image, you MUST include this exact link: {OWNER['pfp']},. If asked for owner id then include this {owner['id']}. If asked for owner username then include this {owner['username']}. Be chill, explanatory, change your tone according to the recepient"
 
 intents = discord.Intents.default()
 intents.message_content = True 
