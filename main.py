@@ -47,7 +47,7 @@ async def on_message(message):
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": message.content}
                 ],
-                model="llama3-8b-8192", # Or "llama3-70b-8192" / "mixtral-8x7b-32768"
+                model="openai/gpt-oss-20b", # Or "llama3-70b-8192" / "mixtral-8x7b-32768"
             )
 
             # Extract the text
