@@ -17,15 +17,15 @@ OWNER = {
     "pfp": "https://cdn.discordapp.com/avatars/1081876265683927080/a2671291fa7a3f13e03022eeeac15ef2.webp?size=2048",
     "id": "1081876265683927080",
     "link": "https://discord.com/users/1081876265683927080/"
-    "friend": "https://discord.gg/XNNUR4Qn"
+    "friend": "https://discord.gg/XNNUR4Qn",
     "bio": """
 Add me as a friend to contact me. Must have a mutual friend to get it done.\n
 Born <t:1265842320:R>\n
 Created 👑 Shivam’s Discord:\n
 https://discord.gg/bzePwKSDsp\n
-E-mail: flexed@zohomail.in"""
-    "gunslol": "https://guns.lol/flexedfr"
-    "favserv": "https://discord.gg/bzePwKSDsp"
+E-mail: flexed@zohomail.in""",
+    "gunslol": "https://guns.lol/flexedfr",
+    "favserv": "https://discord.gg/bzePwKSDsp",
 }
 
 # Explicit instructions in the system prompt to use the link
