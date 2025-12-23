@@ -36,7 +36,7 @@ async def on_ready():
 
 @discord_client.event
 async def on_message(message):
-    # 3. Ignore bot messages (including itself)
+    # Ignore bot messages
     if message.author.bot:
         return
 
@@ -45,16 +45,28 @@ async def on_message(message):
     channel_id = message.channel.id
 
     # --- DYNAMIC PROMPT LOGIC ---
+    
     # 1. Check for specific server to allow Owner Bio/Fav Server
     allow_owner_info = (guild_id == 1349281907765936188)
-    
-    # 2. Strict Language Rules based on Channel/Server
+
+    # 2. Strict Language Rules
     lang_instruction = "Always reply in Hinglish (Hindi written in Roman script)." # Default
+    
     if guild_id == 1392347019917660161:
         if channel_id == 1418064211640193127:
             lang_instruction = "STRICT RULE: You MUST reply ONLY in English."
         elif channel_id == 1418064267374231766:
-            lang_instruction = "STRICT RULE: You MUST reply ONLY in Hindi (Devanagari script)."
+            # Updated: Ab is channel mein bot Hinglish bolega
+            lang_instruction = "STRICT RULE: You MUST reply ONLY in Hinglish (Hindi in Roman script)."
+
+    # 3. Respect Logic for Owner
+    respect_instruction = ""
+    if str(message.author.id) == OWNER['id']:
+        respect_instruction = (
+            f"CRITICAL: The user you are talking to is your Owner, {OWNER['name']}. "
+            "Address him with supreme respect, use words like 'Sir', 'Boss', or 'Master'. "
+            "Be extremely polite and helpful to him."
+        )
 
     owner_info_text = ""
     if allow_owner_info:
@@ -67,7 +79,9 @@ async def on_message(message):
 
     system_prompt = (
         f"You are a helpful assistant. Your Owner is {OWNER['name']}.\n"
-        f"{lang_instruction}\n{owner_info_text}\n"
+        f"{lang_instruction}\n"
+        f"{respect_instruction}\n"
+        f"{owner_info_text}\n"
         f"Tone: Chill and explanatory. Listen to orders carefully."
     )
 
@@ -90,20 +104,22 @@ async def on_message(message):
 
             final_text = chat_completion.choices[0].message.content
 
-            # 5. Handle Long Messages with Mention Rules
+            # Handle Long Messages and Embeds
             if len(final_text) > 2000:
                 parts = [final_text[i:i+2000] for i in range(0, len(final_text), 2000)]
                 for index, part in enumerate(parts):
                     if index == 0:
-                        # First part replies with mention
                         await message.reply(part, mention_author=True)
                     else:
-                        # Rest of the parts without mention
                         await message.channel.send(part)
             else:
-                # Normal reply
+                # Owner PFP Embed logic
                 if OWNER['pfp'] in final_text and allow_owner_info:
-                    embed = discord.Embed(title=f"Owner: {OWNER['name']}", description=final_text.replace(OWNER['pfp'], "").strip(), color=discord.Color.blue())
+                    embed = discord.Embed(
+                        title=f"Owner: {OWNER['name']}", 
+                        description=final_text.replace(OWNER['pfp'], "").strip(), 
+                        color=discord.Color.blue()
+                    )
                     embed.set_image(url=OWNER['pfp'])
                     await message.reply(embed=embed, mention_author=True)
                 else:
