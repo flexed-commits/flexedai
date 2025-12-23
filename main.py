@@ -1,10 +1,13 @@
 import discord
 import os
+import time
+from datetime import datetime, timedelta
 from openai import OpenAI
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY') or "gsk_your_key_here"
+bot_start_time = time.time()  # Track when the bot starts
 
 client_ai = OpenAI(
     api_key=GROQ_API_KEY,
@@ -23,7 +26,6 @@ OWNER = {
     "favserv": "https://discord.gg/bzePwKSDsp",
 }
 
-# Improved System Prompt for better bio retention
 SYSTEM_PROMPT = (
     f"You are a helpful assistant. Your Owner is {OWNER['name']}.\n\n"
     f"OWNER DETAILS:\n"
@@ -52,6 +54,28 @@ async def on_message(message):
     if message.author == discord_client.user:
         return
 
+    content = message.content.lower()
+
+    # --- STATS COMMANDS ---
+    if content == "!ping":
+        latency = round(discord_client.latency * 1000)
+        await message.reply(f"🏓 Pong! Latency: **{latency}ms**")
+        return
+
+    if content == "!uptime":
+        current_time = time.time()
+        difference = int(round(current_time - bot_start_time))
+        uptime_str = str(timedelta(seconds=difference))
+        await message.reply(f"🚀 Uptime: **{uptime_str}**")
+        return
+
+    if content == "!shards":
+        shard_id = message.guild.shard_id if message.guild else 0
+        shard_count = discord_client.shard_count or 1
+        await message.reply(f"💎 Shard ID: **{shard_id}** / Total Shards: **{shard_count}**")
+        return
+
+    # --- AI CHAT LOGIC ---
     async with message.channel.typing():
         try:
             chat_completion = client_ai.chat.completions.create(
@@ -64,7 +88,6 @@ async def on_message(message):
 
             final_text = chat_completion.choices[0].message.content
 
-            # --- SENDING LOGIC (Using message.reply) ---
             if OWNER['pfp'] in final_text:
                 embed = discord.Embed(
                     title=f"Owner: {OWNER['name']}",
@@ -72,9 +95,7 @@ async def on_message(message):
                     color=discord.Color.blue()
                 )
                 embed.set_image(url=OWNER['pfp'])
-                # .reply() creates the mention/connection to the original message
                 await message.reply(embed=embed)
-
             elif len(final_text) > 2000:
                 for i in range(0, len(final_text), 2000):
                     await message.reply(final_text[i:i+2000])
