@@ -18,8 +18,7 @@ OWNER = {
     "id": "1081876265683927080",
     "link": "https://discord.com/users/1081876265683927080/"
     "friend": "https://discord.gg/XNNUR4Qn",
-    "bio": """
-Add me as a friend to contact me. Must have a mutual friend to get it done.\n
+    "bio": """Add me as a friend to contact me. Must have a mutual friend to get it done.\n
 Born <t:1265842320:R>\n
 Created 👑 Shivam’s Discord:\n
 https://discord.gg/bzePwKSDsp\n
