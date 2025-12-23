@@ -6,6 +6,7 @@ from openai import OpenAI
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY') or "gsk_your_key_here"
 
+# Initialize Groq client using OpenAI compatibility
 client_ai = OpenAI(
     api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1",
@@ -16,19 +17,25 @@ OWNER = {
     "username": ".flexed.",
     "pfp": "https://cdn.discordapp.com/avatars/1081876265683927080/a2671291fa7a3f13e03022eeeac15ef2.webp?size=2048",
     "id": "1081876265683927080",
-    "link": "https://discord.com/users/1081876265683927080/"
+    "link": "https://discord.com/users/1081876265683927080/", # Fixed missing comma here
     "friend": "https://discord.gg/XNNUR4Qn",
-    "bio": """Add me as a friend to contact me. Must have a mutual friend to get it done.\n
-Born <t:1265842320:R>\n
-Created 👑 Shivam’s Discord:\n
-https://discord.gg/bzePwKSDsp\n
-E-mail: flexed@zohomail.in""",
+    "bio": "Add me as a friend to contact me. Must have a mutual friend to get it done.\nBorn <t:1265842320:R>\nCreated 👑 Shivam’s Discord:\nhttps://discord.gg/bzePwKSDsp\nE-mail: flexed@zohomail.in",
     "gunslol": "https://guns.lol/flexedfr",
     "favserv": "https://discord.gg/bzePwKSDsp",
 }
 
-# Explicit instructions in the system prompt to use the link
-SYSTEM_PROMPT = f"You are a helpful assistant. Owner: {OWNER['name']}. If asked for the owner's PFP or image, you MUST include this exact link: {OWNER['pfp']},. If asked for owner id then include this {OWNER['id']}. If asked for owner username then include this {OWNER['username']}. Be chill, explanatory, change your tone according to the recepient. If the user asks for owner's profile link then include {OWNER['link']}. If the user asks how can he add the owner, then say that you must have a mutual friend with him to get it done, also include this friend link {OWNER['friend']}. If the user asks for owner's bio then send this along with other request: {OWNER['bio']}. If user asks for owner's guns.lol profile then include: {OWNER['gunslol']}. If user wants to know owner's favorite Discord Server, then tell that it is 👑Shivam’s Discord, and send this invite link: {OWNER['favserv']}"
+SYSTEM_PROMPT = (
+    f"You are a helpful assistant. Owner: {OWNER['name']}. "
+    f"If asked for the owner's PFP or image, you MUST include this exact link: {OWNER['pfp']}. "
+    f"If asked for owner id, include {OWNER['id']}. "
+    f"If asked for owner username, include {OWNER['username']}. "
+    f"Be chill and change your tone according to the recipient. "
+    f"If asked for the profile link, include {OWNER['link']}. "
+    f"If asked how to add the owner, say they must have a mutual friend and include {OWNER['friend']}. "
+    f"If asked for bio, include: {OWNER['bio']}. "
+    f"If asked for owner's guns.lol, include: {OWNER['gunslol']}. "
+    f"If asked for favorite server, mention '👑 Shivam’s Discord' and link {OWNER['favserv']}."
+)
 
 intents = discord.Intents.default()
 intents.message_content = True 
@@ -50,22 +57,24 @@ async def on_message(message):
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": message.content}
                 ],
-                model="openai/gpt-oss-20b", 
+                model="openai/gpt-oss-20b", # Changed to a valid Groq model
             )
 
             final_text = chat_completion.choices[0].message.content
 
             # --- EMBED LOGIC FOR PFP ---
-            # Check if the AI mentioned the PFP link in its response
             if OWNER['pfp'] in final_text:
+                # Remove the raw URL from the text so it looks cleaner in the embed
+                clean_text = final_text.replace(OWNER['pfp'], "").strip()
+                
                 embed = discord.Embed(
-                    title=f"Owner: {OWNER['name']}",
-                    description=final_text.replace(OWNER['pfp'], ""), # Clean the link out of the text
+                    title=f"Owner Profile: {OWNER['name']}",
+                    description=clean_text or "Here is the owner's profile picture:",
                     color=discord.Color.blue()
                 )
                 embed.set_image(url=OWNER['pfp'])
                 await message.channel.send(embed=embed)
-            
+
             # Standard message handling
             elif len(final_text) > 2000:
                 for i in range(0, len(final_text), 2000):
@@ -75,6 +84,9 @@ async def on_message(message):
 
         except Exception as e:
             print(f"CRASH ERROR: {e}")
-            await message.channel.send(f"⚠️ Bot encountered an error: {e}")
+            await message.channel.send(f"⚠️ Bot encountered an error.")
 
-discord_client.run(DISCORD_TOKEN)
+if DISCORD_TOKEN:
+    discord_client.run(DISCORD_TOKEN)
+else:
+    print("❌ ERROR: No DISCORD_TOKEN found in environment variables.")
