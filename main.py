@@ -7,7 +7,7 @@ from openai import OpenAI
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY') or "gsk_your_key_here"
-bot_start_time = time.time()  # To calculate uptime
+bot_start_time = time.time() 
 
 client_ai = OpenAI(
     api_key=GROQ_API_KEY,
@@ -44,65 +44,50 @@ async def on_message(message):
     channel_id = message.channel.id
 
     # --- DYNAMIC LANGUAGE LOGIC ---
-    # Default: English for all other servers
-    lang_instruction = "STRICT RULE: You MUST reply ONLY in English."
+    # Default: Global English
+    lang_instruction = "STRICT RULE: Reply ONLY in English."
 
-    # Specific server logic
+    # Server-specific Logic
     if guild_id == 1392347019917660161:
         if channel_id == 1418064211640193127:
-            lang_instruction = "STRICT RULE: You MUST reply ONLY in English."
+            lang_instruction = "STRICT RULE: Reply ONLY in English."
         elif channel_id == 1418064267374231766:
-            lang_instruction = "STRICT RULE: You MUST reply ONLY in Hinglish (Hindi in Roman script)."
-    
-    # Optional: If you want Hinglish in the second server too
+            lang_instruction = "STRICT RULE: Reply ONLY in Hinglish (Hindi in Roman script)."
     elif guild_id == 1349281907765936188:
-        lang_instruction = "Always reply in Hinglish (Hindi written in Roman script)."
+        lang_instruction = "Reply in Hinglish (Hindi written in Roman script)."
 
     # --- COMMANDS ---
     
-    # 1. Ping Command
     if content == "!ping":
         latency = round(discord_client.latency * 1000)
-        await message.reply(f"🏓 Pong! Latency: **{latency}ms**")
+        await message.reply(f"🏓 Pong! `{latency}ms`")
         return
 
-    # 2. Uptime Command
     if content == "!uptime":
-        current_time = time.time()
-        difference = int(round(current_time - bot_start_time))
-        uptime_str = str(timedelta(seconds=difference))
+        uptime_diff = int(time.time() - bot_start_time)
+        uptime_str = str(timedelta(seconds=uptime_diff))
         await message.reply(f"⏱️ **Uptime:** `{uptime_str}`")
         return
 
-    # 3. Bot Info Command
     if content == "!info":
-        embed = discord.Embed(title="Bot Information", color=discord.Color.gold())
-        embed.set_thumbnail(url=discord_client.user.avatar.url if discord_client.user.avatar else None)
-        embed.add_field(name="Name", value=discord_client.user.name, inline=True)
+        embed = discord.Embed(title="Bot Status", color=discord.Color.blue())
         embed.add_field(name="Owner", value=OWNER['name'], inline=True)
         embed.add_field(name="Servers", value=len(discord_client.guilds), inline=True)
-        embed.add_field(name="Library", value="Discord.py", inline=True)
-        embed.set_footer(text=f"Requested by {message.author}", icon_url=message.author.display_avatar.url)
+        embed.add_field(name="Ping", value=f"{round(discord_client.latency * 1000)}ms", inline=True)
+        embed.set_footer(text="Short & Fast AI Bot")
         await message.reply(embed=embed)
         return
 
     # --- AI CHAT LOGIC ---
     allow_owner_info = (guild_id == 1349281907765936188)
-    
     respect_instruction = ""
     if str(message.author.id) == OWNER['id']:
-        respect_instruction = (
-            f"CRITICAL: The user is your Owner, {OWNER['name']}. Address him with supreme respect ('Sir'/'Boss')."
-        )
-
-    owner_info_text = ""
-    if allow_owner_info:
-        owner_info_text = f"OWNER DETAILS: {OWNER['bio']}. Use PFP: {OWNER['pfp']} if bio requested."
+        respect_instruction = f"The user is your Owner, {OWNER['name']}. Be respectful (Sir/Boss)."
 
     system_prompt = (
         f"You are a helpful assistant. {lang_instruction}\n"
-        f"{respect_instruction}\n{owner_info_text}\n"
-        "Tone: Chill and explanatory."
+        f"{respect_instruction}\n"
+        "CRITICAL: Keep your replies very short, direct, and concise. No long paragraphs."
     )
 
     async with message.channel.typing():
@@ -112,23 +97,19 @@ async def on_message(message):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message.content}
                 ],
-                model="openai/gpt-oss-20b", 
+                model="openai/gpt-oss-20b",
+                max_tokens=150 # Limiting tokens for shorter responses
             )
             final_text = chat_completion.choices[0].message.content
 
-            if len(final_text) > 2000:
-                for i in range(0, len(final_text), 2000):
-                    await message.channel.send(final_text[i:i+2000])
+            if allow_owner_info and OWNER['pfp'] in final_text:
+                embed = discord.Embed(description=final_text.replace(OWNER['pfp'], ""), color=discord.Color.blue())
+                embed.set_image(url=OWNER['pfp'])
+                await message.reply(embed=embed)
             else:
-                if allow_owner_info and OWNER['pfp'] in final_text:
-                    embed = discord.Embed(description=final_text.replace(OWNER['pfp'], ""), color=discord.Color.blue())
-                    embed.set_image(url=OWNER['pfp'])
-                    await message.reply(embed=embed)
-                else:
-                    await message.reply(final_text)
+                await message.reply(final_text)
         except Exception as e:
-            print(f"Error: {e}")
-            await message.reply("⚠️ Error connecting to AI.")
+            await message.reply("⚠️ AI Error.")
 
 if DISCORD_TOKEN:
     discord_client.run(DISCORD_TOKEN)
