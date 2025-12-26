@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import os
 import time
 import requests
@@ -24,122 +25,94 @@ OWNER = {
     "favserv": "https://discord.gg/bzePwKSDsp",
 }
 
-# --- BOT SETUP ---
-intents = discord.Intents.default()
-intents.message_content = True 
-bot = commands.Bot(command_prefix="!", intents=intents)
+# --- BOT CLASS FOR SLASH SYNCING ---
+class MyBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        super().__init__(command_prefix="!", intents=intents)
 
-# Global storage for thread IDs and language preferences
+    async def setup_hook(self):
+        # Ye line slash commands ko Discord server pe register karti hai
+        await self.tree.sync()
+        print(f"✅ Slash commands synced for {self.user}")
+
+bot = MyBot()
 channel_threads = {}
 channel_languages = {}
 
 def get_mimo_response(user_message, thread_id, system_prompt):
-    # Combining system prompt with user message as Mimo uses a simple endpoint
-    full_prompt = f"{system_prompt}\n\nUser: {user_message}"
     headers = {"api-key": MIMO_API_KEY}
-    body = {"message": full_prompt}
+    # Mimo works best when system instructions are part of the prompt
+    full_message = f"System Instruction: {system_prompt}\nUser: {user_message}"
+    body = {"message": full_message}
     if thread_id:
         body["threadId"] = thread_id
     
     try:
-        response = requests.post(MIMO_URL, headers=headers, json=body)
+        response = requests.post(MIMO_URL, headers=headers, json=body, timeout=10)
         return response.json()
     except Exception as e:
-        print(f"API Error: {e}")
+        print(f"Mimo Error: {e}")
         return None
 
-@bot.event
-async def on_ready():
-    print(f'✅ Bot is online as {bot.user}')
-    try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
-    except Exception as e:
-        print(e)
+# --- COMMANDS ---
 
-# --- SLASH COMMANDS ---
+@bot.hybrid_command(name="lang", description="Change AI language (e.g. Hindi, English, Marathi)")
+@app_commands.describe(language="The language you want the AI to speak in")
+async def lang(ctx, language: str):
+    channel_languages[ctx.channel.id] = language
+    await ctx.reply(f"🌐 Language updated to **{language}** for this channel.")
 
-@bot.tree.command(name="lang", description="Change the AI response language")
-async def lang(interaction: discord.Interaction, language: str):
-    channel_languages[interaction.channel_id] = language
-    await interaction.response.send_message(f"✅ Language set to: **{language}** for this channel.")
-
-@bot.command(name="ping")
+@bot.command()
 async def ping(ctx):
-    latency = round(bot.latency * 1000)
-    await ctx.reply(f"🏓 Pong! `{latency}ms`")
+    await ctx.reply(f"🏓 Pong! `{round(bot.latency * 1000)}ms`")
 
-@bot.command(name="uptime")
-async def uptime(ctx):
-    uptime_diff = int(time.time() - bot_start_time)
-    uptime_str = str(timedelta(seconds=uptime_diff))
-    await ctx.reply(f"⏱️ **Uptime:** `{uptime_str}`")
-
-@bot.command(name="info")
+@bot.command()
 async def info(ctx):
     embed = discord.Embed(title="Bot Status", color=discord.Color.blue())
     embed.add_field(name="Owner", value=OWNER['name'], inline=True)
-    embed.add_field(name="Servers", value=len(bot.guilds), inline=True)
-    embed.add_field(name="Ping", value=f"{round(bot.latency * 1000)}ms", inline=True)
-    embed.set_footer(text="Powered by Mimo AI")
+    embed.add_field(name="Bio", value=OWNER['bio'], inline=False)
+    embed.set_thumbnail(url=OWNER['pfp'])
     await ctx.reply(embed=embed)
 
-# --- MESSAGE HANDLER (AI) ---
-
+# --- AI MESSAGE HANDLER ---
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    # Don't trigger AI if it's a prefix command
-    if message.content.startswith('!'):
-        await bot.process_commands(message)
+    # Execute commands first
+    await bot.process_commands(message)
+    
+    # If message starts with prefix, don't trigger AI chat
+    if message.content.startswith(bot.command_prefix):
         return
 
-    guild_id = message.guild.id if message.guild else None
-    channel_id = message.channel.id
+    # Language Logic
+    current_lang = channel_languages.get(message.channel.id, "English")
+    
+    # Custom Server Logic (from your original code)
+    if not channel_languages.get(message.channel.id):
+        if message.guild and message.guild.id == 1349281907765936188:
+            current_lang = "Hinglish"
 
-    # 1. Determine Language
-    custom_lang = channel_languages.get(channel_id)
-    if custom_lang:
-        lang_instruction = f"STRICT RULE: Reply ONLY in {custom_lang}."
-    elif guild_id == 1392347019917660161 and channel_id == 1418064267374231766:
-        lang_instruction = "STRICT RULE: Reply ONLY in Hinglish."
-    elif guild_id == 1349281907765936188:
-        lang_instruction = "Reply in Hinglish."
-    else:
-        lang_instruction = "Reply ONLY in English."
-
-    # 2. Owner Respect Logic
-    respect_instruction = ""
+    respect = ""
     if str(message.author.id) == OWNER['id']:
-        respect_instruction = f"The user is your Owner, {OWNER['name']}. Be respectful (Sir/Boss)."
+        respect = f"User is your Boss {OWNER['name']}. Be polite."
 
-    system_prompt = (
-        f"You are a helpful assistant. {lang_instruction}\n"
-        f"{respect_instruction}\n"
-        "Keep replies very short and direct."
-    )
+    sys_prompt = f"Reply ONLY in {current_lang}. {respect} Keep it very short."
 
-    # 3. Get AI Response
     async with message.channel.typing():
-        thread_id = channel_threads.get(channel_id)
-        response_data = get_mimo_response(message.content, thread_id, system_prompt)
+        t_id = channel_threads.get(message.channel.id)
+        data = get_mimo_response(message.content, t_id, sys_prompt)
 
-        if response_data and "response" in response_data:
-            final_text = response_data["response"]
-            channel_threads[channel_id] = response_data.get("threadId")
-
-            # Owner PFP Logic (As per your original code)
-            allow_owner_info = (guild_id == 1349281907765936188)
-            if allow_owner_info and OWNER['pfp'] in final_text:
-                embed = discord.Embed(description=final_text.replace(OWNER['pfp'], ""), color=discord.Color.blue())
-                embed.set_image(url=OWNER['pfp'])
-                await message.reply(embed=embed)
-            else:
-                await message.reply(final_text)
+        if data and "response" in data:
+            channel_threads[message.channel.id] = data.get("threadId")
+            await message.reply(data["response"])
         else:
-            await message.reply("⚠️ AI Error (Mimo API).")
+            # Silent fail or error message
+            pass
 
 if DISCORD_TOKEN:
     bot.run(DISCORD_TOKEN)
