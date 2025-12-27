@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
-from groq import Groq
+import openai
 from collections import deque # Memory store karne ke liye
 
 # --- CONFIGURATION ---
