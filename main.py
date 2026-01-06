@@ -4,7 +4,6 @@ from discord import app_commands
 import os
 from openai import OpenAI  # Aapka preferred snippet use kiya
 from collections import deque
-from groq import Groq
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
