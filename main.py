@@ -12,7 +12,7 @@ client = OpenAI(
     api_key=os.environ.get("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1",
 )
-MODEL_NAME = "llama-3.1-8b-instant"
+MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct"
 
 OWNER = {"name": "Ψ.1nOnly.Ψ", "id": "1081876265683927080"}
 
