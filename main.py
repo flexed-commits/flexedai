@@ -48,8 +48,8 @@ def get_groq_response(messages_history):
 
 # --- COMMANDS ---
 
-@bot.hybrid_command(name="lang", description="AI ki language badlein")
-@app_commands.describe(language="Example: Hindi, Hinglish, Marathi")
+@bot.hybrid_command(name="lang", description="Change AI Language")
+@app_commands.describe(language="Example: Hindi, English, Spanish")
 async def lang(ctx, language: str):
     channel_languages[ctx.channel.id] = language
     # Memory clear takki context mix na ho
