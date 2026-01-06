@@ -4,6 +4,7 @@ from discord import app_commands
 import os
 from openai import OpenAI  # Aapka preferred snippet use kiya
 from collections import deque
+from groq import Groq
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
@@ -12,7 +13,7 @@ client = OpenAI(
     api_key=os.environ.get("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1",
 )
-MODEL_NAME = "openai/gpt-oss-20b"
+MODEL_NAME = "llama-3.1-8b-instant"
 
 OWNER = {"name": "Ψ.1nOnly.Ψ", "id": "1081876265683927080"}
 
