@@ -40,7 +40,7 @@ def get_groq_response(messages_history):
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=messages_history,
-            temperature=0.8,
+            temperature=0.7, # Lowered slightly for better focus/accuracy
             max_tokens=800
         )
         return response.choices[0].message.content
@@ -65,12 +65,9 @@ async def shard(ctx):
     shard_id = ctx.guild.shard_id if ctx.guild else 0
     await ctx.reply(f"💎 Shard ID: **{shard_id}**")
 
-# --- LANGUAGE COMMAND (Hybrid: Works as Slash and !lang) ---
-
 @bot.hybrid_command(name="lang", description="Change AI Language (Admin/Owner Only)")
 @app_commands.describe(language="Example: Hindi, English, Spanish")
 async def lang(ctx, language: str):
-    # Auto-Admin: Check if User is Owner OR has Admin perms
     is_admin = ctx.author.guild_permissions.administrator if ctx.guild else False
     is_owner = ctx.author.id == OWNER_ID
 
@@ -79,7 +76,6 @@ async def lang(ctx, language: str):
         return
 
     channel_languages[ctx.channel.id] = language
-    # Clear memory for everyone in this channel to reset context
     if ctx.channel.id in user_memory:
         user_memory[ctx.channel.id].clear()
     
@@ -93,20 +89,19 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # 1. Permission Safety (Fixes 403 Errors)
+    # 1. Permission Safety
     if message.guild:
         perms = message.channel.permissions_for(message.guild.me)
         if not perms.send_messages or not perms.view_channel:
             return
 
-    # 2. Process Commands (!ping, !lang, etc.)
-    # This allows !lang to work even if Slash commands are blocked
+    # 2. Process Prefix/Hybrid Commands
     ctx = await bot.get_context(message)
     if ctx.valid:
         await bot.invoke(ctx)
-        return
+        return # STOP here so it doesn't try to chat about the command
 
-    # 3. User-Specific Memory (Threads)
+    # 3. User-Specific Memory
     cid, uid = message.channel.id, message.author.id
     if cid not in user_memory: user_memory[cid] = {}
     if uid not in user_memory[cid]: user_memory[cid][uid] = deque(maxlen=10)
@@ -115,38 +110,36 @@ async def on_message(message):
     current_lang = channel_languages.get(cid, "English")
     is_boss = uid == OWNER_ID
     
+    # STRICTOR SYSTEM PROMPT: Prevents off-topic/AI filler
     sys_prompt = (
-        f"Role: Act like a human. Mirror the user's tone. Be conversational. "
-        f"You know real-time info for 2026. Be descriptive with images. "
-        f"Reply ONLY in {current_lang}."
+        f"Role: Human. Mirror user tone. "
+        f"Knowledge: Real-time 2026. Vision: Highly descriptive. "
+        f"Constraint: Reply ONLY in {current_lang}. Do NOT add disclaimers, AI warnings, "
+        f"or off-topic polite filler. Stay strictly on-topic with the user's message."
     )
     if is_boss:
-        sys_prompt += " User is your Boss (Ψ.1nOnly.Ψ). Be extremely loyal."
+        sys_prompt += " Boss: Ψ.1nOnly.Ψ. Be loyal and direct."
 
-    # 5. Build Content (Text + Vision)
-    content_list = [{"type": "text", "text": message.content or "Analyze this image."}]
+    # 5. Build Payload
+    content_list = [{"type": "text", "text": message.content or "Analyze this."}]
     if message.attachments:
         for attachment in message.attachments:
             if any(attachment.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'webp']):
                 content_list.append({"type": "image_url", "image_url": {"url": attachment.url}})
 
     messages_payload = [{"role": "system", "content": sys_prompt}]
-    
-    # Add history for this specific user
     for m in user_memory[cid][uid]:
         messages_payload.append(m)
     messages_payload.append({"role": "user", "content": content_list})
 
-    # 6. Response Logic
+    # 6. Response
     try:
         async with message.channel.typing():
             response_text = get_groq_response(messages_payload)
 
             if response_text:
-                # Update memory for this user's thread
-                user_memory[cid][uid].append({"role": "user", "content": message.content or "[Sent an image]"})
+                user_memory[cid][uid].append({"role": "user", "content": message.content or "[Image]"})
                 user_memory[cid][uid].append({"role": "assistant", "content": response_text})
-                
                 await message.reply(response_text)
     except Exception as e:
         print(f"Error: {e}")
