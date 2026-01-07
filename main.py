@@ -5,21 +5,19 @@ import os
 import time
 import datetime
 import asyncio
-from groq import AsyncGroq # Crucial for fixing "Can't keep up"
+from groq import AsyncGroq 
 from collections import deque
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
-# Use Async client to prevent blocking the Discord heartbeat
 client = AsyncGroq(api_key=GROQ_API_KEY)
 
 MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct"
 OWNER_ID = 1081876265683927080
 
 # --- MEMORY STORAGE ---
-# Structure: {channel_id: {user_id: deque}}
 user_memory = {} 
 channel_languages = {}
 
@@ -27,20 +25,19 @@ class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.members = True  # Required to see member details clearly
         self.start_time = time.time()
-        # Updated prefix to '/' as requested
         super().__init__(command_prefix="/", intents=intents)
 
     async def setup_hook(self):
         await self.tree.sync()
-        print(f"✅ {self.user} is online and Shards synced!")
+        print(f"✅ {self.user} is online!")
 
 bot = MyBot()
 
 # --- HELPER FUNCTIONS ---
 
 async def get_groq_response(messages_history):
-    """Asynchronous call to Groq to keep the bot responsive."""
     try:
         response = await client.chat.completions.create(
             model=MODEL_NAME,
@@ -79,22 +76,15 @@ async def forget(ctx):
     else:
         await ctx.reply("🤷 I don't have any active memory of you here.")
 
-@bot.hybrid_command(name="lang", description="Change AI Language (Admin/Owner Only)")
-@app_commands.describe(language="Example: Hindi, English, Spanish")
+@bot.hybrid_command(name="lang", description="Change AI Language")
 async def lang(ctx, language: str):
     is_admin = ctx.author.guild_permissions.administrator if ctx.guild else False
-    is_owner = ctx.author.id == OWNER_ID
-
-    if not (is_admin or is_owner):
+    if not (is_admin or ctx.author.id == OWNER_ID):
         await ctx.reply("❌ Administrator permissions required.", ephemeral=True)
         return
-
     channel_languages[ctx.channel.id] = language
-    if ctx.channel.id in user_memory:
-        user_memory[ctx.channel.id].clear()
-
-    status = "Boss" if is_owner else "Admin"
-    await ctx.reply(f"🌐 Language updated to **{language}** by {status}. Channel memory cleared.")
+    if ctx.channel.id in user_memory: user_memory[ctx.channel.id].clear()
+    await ctx.reply(f"🌐 Language updated to **{language}**.")
 
 # --- AI MESSAGE HANDLER ---
 
@@ -103,35 +93,49 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # Check for Slash/Hybrid commands
     ctx = await bot.get_context(message)
     if ctx.valid:
         await bot.invoke(ctx)
         return
 
-    # 1. Per-User Threading Logic
+    # 1. Per-User Threading
     cid, uid = message.channel.id, message.author.id
     if cid not in user_memory: user_memory[cid] = {}
     if uid not in user_memory[cid]: user_memory[cid][uid] = deque(maxlen=10)
 
+    # 2. GATHER IDENTITY CONTEXT
+    user = message.author
+    guild = message.guild
+    
+    # Metadata for the AI to understand WHO and WHERE it is
+    context_info = (
+        f"[USER INFO] Name: {user.display_name}, Username: {user.name}, ID: {user.id}, "
+        f"Avatar: {user.display_avatar.url}. "
+    )
+    if guild:
+        context_info += (
+            f"[SERVER INFO] Name: {guild.name}, ID: {guild.id}, "
+            f"Icon: {guild.icon.url if guild.icon else 'No Icon'}, "
+            f"Member Count: {guild.member_count}. "
+        )
+
     current_lang = channel_languages.get(cid, "English")
     is_boss = uid == OWNER_ID
 
-    # 2. System Prompt with Tone Mirroring and Boss Logic
+    # 3. Enhanced System Prompt
     sys_prompt = (
-        f"Role: Human. Mirror the user's tone, energy, and vocabulary. "
-        f"Knowledge: Real-time 2026. "
-        f"Constraint: Reply ONLY in {current_lang}. No AI disclaimers or filler."
+        f"Role: Human. Mirror user tone/slang. Language: {current_lang}. "
+        f"Real-time: 2026. {context_info} "
+        f"Strictly no AI filler/disclaimers."
     )
     if is_boss:
-        sys_prompt += " Priority: User is Boss (Ψ.1nOnly.Ψ). Be loyal, direct, and efficient."
+        sys_prompt += " Priority: User is Boss (Ψ.1nOnly.Ψ). Be loyal and direct."
 
-    # 3. Build History Payload
+    # 4. Build Payload
     messages_payload = [{"role": "system", "content": sys_prompt}]
     for m in user_memory[cid][uid]:
         messages_payload.append(m)
 
-    # Content construction (Text + Images)
     content_list = [{"type": "text", "text": message.content or "Analyze this."}]
     if message.attachments:
         for attachment in message.attachments:
@@ -140,13 +144,12 @@ async def on_message(message):
 
     messages_payload.append({"role": "user", "content": content_list})
 
-    # 4. Async Execution
+    # 5. Async Response
     try:
         async with message.channel.typing():
             response_text = await get_groq_response(messages_payload)
 
             if response_text:
-                # Save user and assistant messages to their private thread
                 user_memory[cid][uid].append({"role": "user", "content": message.content or "[Image]"})
                 user_memory[cid][uid].append({"role": "assistant", "content": response_text})
                 await message.reply(response_text)
