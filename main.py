@@ -12,6 +12,7 @@ from collections import deque
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
+# Initializing the client
 client = AsyncGroq(api_key=GROQ_API_KEY)
 
 MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct"
@@ -25,7 +26,7 @@ class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
-        intents.members = True  # Required to see member details clearly
+        intents.members = True 
         self.start_time = time.time()
         super().__init__(command_prefix="/", intents=intents)
 
@@ -39,6 +40,7 @@ bot = MyBot()
 
 async def get_groq_response(messages_history):
     try:
+        # Use the global client variable
         response = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=messages_history,
@@ -62,10 +64,22 @@ async def uptime(ctx):
     text = str(datetime.timedelta(seconds=uptime_sec))
     await ctx.reply(f"🚀 Uptime: **{text}**")
 
-@bot.hybrid_command(name="shard", description="Check shard info")
-async def shard(ctx):
-    shard_id = ctx.guild.shard_id if ctx.guild else 0
-    await ctx.reply(f"💎 Shard ID: **{shard_id}**")
+@bot.hybrid_command(name="refresh", description="Fully refreshes the AI API and clears your current memory")
+async def refresh(ctx):
+    """Refreshes the API client and wipes the user's local memory thread."""
+    global client
+    cid, uid = ctx.channel.id, ctx.author.id
+    
+    # 1. Clear conversation memory for this specific user in this channel
+    if cid in user_memory and uid in user_memory[cid]:
+        user_memory[cid][uid].clear()
+    
+    # 2. Re-initialize the API client
+    try:
+        client = AsyncGroq(api_key=GROQ_API_KEY)
+        await ctx.reply("🔄 **AI Refreshed.** API connection reset and local memory wiped.")
+    except Exception as e:
+        await ctx.reply(f"⚠️ Failed to refresh API: {e}")
 
 @bot.hybrid_command(name="forget", description="Clear your personal AI memory thread")
 async def forget(ctx):
@@ -98,16 +112,13 @@ async def on_message(message):
         await bot.invoke(ctx)
         return
 
-    # 1. Per-User Threading
     cid, uid = message.channel.id, message.author.id
     if cid not in user_memory: user_memory[cid] = {}
     if uid not in user_memory[cid]: user_memory[cid][uid] = deque(maxlen=10)
 
-    # 2. GATHER IDENTITY CONTEXT
     user = message.author
     guild = message.guild
-    
-    # Metadata for the AI to understand WHO and WHERE it is
+
     context_info = (
         f"[USER INFO] Name: {user.display_name}, Username: {user.name}, ID: {user.id}, "
         f"Avatar: {user.display_avatar.url}. "
@@ -122,7 +133,6 @@ async def on_message(message):
     current_lang = channel_languages.get(cid, "English")
     is_boss = uid == OWNER_ID
 
-    # 3. Enhanced System Prompt
     sys_prompt = (
         f"Role: Human. Mirror user tone/slang. Language: {current_lang}. "
         f"Real-time: 2026. {context_info} "
@@ -131,7 +141,6 @@ async def on_message(message):
     if is_boss:
         sys_prompt += " Priority: User is Boss (Ψ.1nOnly.Ψ). Be loyal and direct."
 
-    # 4. Build Payload
     messages_payload = [{"role": "system", "content": sys_prompt}]
     for m in user_memory[cid][uid]:
         messages_payload.append(m)
@@ -144,7 +153,6 @@ async def on_message(message):
 
     messages_payload.append({"role": "user", "content": content_list})
 
-    # 5. Async Response
     try:
         async with message.channel.typing():
             response_text = await get_groq_response(messages_payload)
