@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import os
 import time
+import datetime
 import json
 import re
 from groq import AsyncGroq 
@@ -18,7 +19,8 @@ DATA_FILE = "bot_data.json"
 def load_data():
     try:
         with open(DATA_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            return data
     except (FileNotFoundError, json.JSONDecodeError):
         return {"blacklist": [], "banned_words": []}
 
@@ -32,67 +34,90 @@ BANNED_WORDS = set(storage.get("banned_words", []))
 
 client = AsyncGroq(api_key=GROQ_API_KEY)
 user_memory = {}
+channel_languages = {}
 
 class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
         super().__init__(command_prefix="/", intents=intents)
+        self.start_time = time.time()
 
     async def setup_hook(self):
         await self.tree.sync()
-        print(f"\n🚀 {self.user} is now ONLINE!")
+        print(f"\n🚀 {self.user} is ONLINE!")
         print("="*30)
         print("📁 REGISTERED COMMANDS:")
-        # This loop prints every command the bot knows to the terminal
         for command in self.walk_commands():
-            print(f" -> {command.name} (Prefix)")
-        for cmd in self.tree.get_commands():
-            print(f" -> /{cmd.name} (Slash)")
+            print(f" -> {command.name}")
         print("="*30 + "\n")
 
 bot = MyBot()
 
-# --- OWNER ONLY COMMANDS ---
+# --- UTILITY COMMANDS (Restored) ---
 
-@bot.hybrid_command(name="blacklist", description="OWNER ONLY: Block/Unblock a user")
+@bot.hybrid_command(name="ping", description="Check latency")
+async def ping(ctx):
+    await ctx.reply(f"🏓 Pong! **{round(bot.latency * 1000)}ms**")
+
+@bot.hybrid_command(name="uptime", description="Check bot uptime")
+async def uptime(ctx):
+    uptime_sec = int(round(time.time() - bot.start_time))
+    text = str(datetime.timedelta(seconds=uptime_sec))
+    await ctx.reply(f"🚀 Uptime: **{text}**")
+
+@bot.hybrid_command(name="lang", description="Change AI Language")
+async def lang(ctx, language: str):
+    if not (ctx.author.guild_permissions.administrator or ctx.author.id == OWNER_ID):
+        return await ctx.reply("❌ Admin permissions required.", ephemeral=True)
+    channel_languages[ctx.channel.id] = language
+    await ctx.reply(f"🌐 Language updated to **{language}**.")
+
+@bot.hybrid_command(name="forget", description="Clear your conversation memory")
+async def forget(ctx):
+    cid, uid = ctx.channel.id, ctx.author.id
+    if cid in user_memory and uid in user_memory[cid]:
+        user_memory[cid][uid].clear()
+        await ctx.reply("🧠 Memory wiped for this channel.")
+    else:
+        await ctx.reply("🤷 No memory found to clear.")
+
+@bot.hybrid_command(name="refresh", description="OWNER ONLY: Full system reset")
+async def refresh(ctx):
+    if ctx.author.id != OWNER_ID: return
+    global client
+    user_memory.clear()
+    client = AsyncGroq(api_key=GROQ_API_KEY)
+    await ctx.reply("🔄 **Deep Refresh Complete.** API reset and memory purged.")
+
+# --- ADMIN COMMANDS ---
+
+@bot.hybrid_command(name="blacklist", description="OWNER ONLY: Block user")
 async def blacklist(ctx, user_id: str):
-    if ctx.author.id != OWNER_ID:
-        return await ctx.reply("❌ Owner restricted.", ephemeral=True)
-    
+    if ctx.author.id != OWNER_ID: return
     uid = int(user_id)
     if uid in BLACKLISTED_USERS:
         BLACKLISTED_USERS.remove(uid)
-        msg = f"✅ User `{uid}` removed from blacklist."
+        msg = f"✅ User `{uid}` unblocked."
     else:
         BLACKLISTED_USERS.add(uid)
         msg = f"🚫 User `{uid}` blacklisted."
-    
     save_data(BLACKLISTED_USERS, BANNED_WORDS)
     await ctx.reply(msg)
 
-@bot.hybrid_command(name="bannedword", description="OWNER ONLY: Add/Remove word to censor")
+@bot.hybrid_command(name="bannedword", description="OWNER ONLY: Add/Remove censor word")
 async def bannedword(ctx, word: str):
-    if ctx.author.id != OWNER_ID:
-        return await ctx.reply("❌ Owner restricted.", ephemeral=True)
-    
+    if ctx.author.id != OWNER_ID: return
     w = word.lower().strip()
     if w in BANNED_WORDS:
         BANNED_WORDS.remove(w)
-        msg = f"✅ Removed `{w}` from filter."
+        msg = f"✅ Word `{w}` removed."
     else:
         BANNED_WORDS.add(w)
-        msg = f"🚫 Added `{w}` to filter."
-    
+        msg = f"🚫 Word `{w}` added to censor."
     save_data(BLACKLISTED_USERS, BANNED_WORDS)
     await ctx.reply(msg)
 
-@bot.hybrid_command(name="listwords", description="OWNER ONLY: View all banned words")
-async def listwords(ctx):
-    if ctx.author.id != OWNER_ID: return
-    words = ", ".join(BANNED_WORDS) if BANNED_WORDS else "None"
-    await ctx.reply(f"📋 **Current Banned Words:**\n`{words}`")
-
-# --- AI MESSAGE HANDLER ---
+# --- AI HANDLER ---
 
 @bot.event
 async def on_message(message):
@@ -108,13 +133,11 @@ async def on_message(message):
     if cid not in user_memory: user_memory[cid] = {}
     if uid not in user_memory[cid]: user_memory[cid][uid] = deque(maxlen=10)
 
-    # Improved System Prompt for Mavericks's censoring logic
     sys_prompt = (
-        "Role: Human helper. Mirror tone. "
-        "FILTER: If your output contains profanity, slurs, or illegal terms, "
-        "replace the word with '(censored word)'. Do this automatically."
+        f"Role: Human. Language: {channel_languages.get(cid, 'English')}. "
+        "FILTER: Replace any profanity/illegal terms with '(censored word)' automatically."
     )
-    if uid == OWNER_ID: sys_prompt += " Priority: User is Boss."
+    if uid == OWNER_ID: sys_prompt += " User is Boss."
 
     messages_payload = [{"role": "system", "content": sys_prompt}]
     for m in user_memory[cid][uid]: messages_payload.append(m)
@@ -123,28 +146,23 @@ async def on_message(message):
     try:
         async with message.channel.typing():
             response = await client.chat.completions.create(
-                model=MODEL_NAME, 
-                messages=messages_payload, 
-                temperature=0.4
+                model=MODEL_NAME, messages=messages_payload, temperature=0.4
             )
             response_text = response.choices[0].message.content
 
             if response_text:
-                # 1. Manual Replacement from JSON
+                # Force JSON filter censor
                 final_output = response_text
                 for word in BANNED_WORDS:
-                    pattern = re.compile(re.escape(word), re.IGNORECASE)
-                    final_output = pattern.sub("(censored word)", final_output)
+                    final_output = re.compile(re.escape(word), re.IGNORECASE).sub("(censored word)", final_output)
 
-                # 2. Block if bypass detected (spaces/dots)
-                collapsed = "".join(char for char in final_output.lower() if char.isalnum())
-                if any(w in collapsed for w in BANNED_WORDS):
-                    return 
+                # Collapse check for bypasses
+                collapsed = "".join(c for c in final_output.lower() if c.isalnum())
+                if any(w in collapsed for w in BANNED_WORDS): return
 
                 user_memory[cid][uid].append({"role": "user", "content": message.content})
                 user_memory[cid][uid].append({"role": "assistant", "content": final_output})
                 await message.reply(final_output)
-                
     except Exception as e:
         print(f"Error: {e}")
 
