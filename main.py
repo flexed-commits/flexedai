@@ -2,137 +2,58 @@ import discord
 from discord.ext import commands
 import os
 import time
-import datetime
 import json
 from groq import AsyncGroq 
 from collections import deque
+import re
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-
-# Model and Owner Setup
 MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct"
 OWNER_ID = 1081876265683927080
 DATA_FILE = "bot_data.json"
 
-# --- DATA PERSISTENCE ---
 def load_data():
     try:
         with open(DATA_FILE, "r") as f:
-            data = json.load(f)
-            # Ensure keys exist
-            if "blacklist" not in data: data["blacklist"] = []
-            if "banned_words" not in data: data["banned_words"] = []
-            return data
+            return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {"blacklist": [], "banned_words": []}
 
-def save_data():
-    with open(DATA_FILE, "w") as f:
-        json.dump({
-            "blacklist": list(BLACKLISTED_USERS),
-            "banned_words": list(BANNED_WORDS)
-        }, f, indent=4)
-
-# Initial Load
 storage = load_data()
 BLACKLISTED_USERS = set(storage["blacklist"])
 BANNED_WORDS = set(storage["banned_words"])
 
-# Initializing Client
 client = AsyncGroq(api_key=GROQ_API_KEY)
-user_memory = {} 
-channel_languages = {}
+user_memory = {}
 
-class MyBot(commands.Bot):
-    def __init__(self):
-        intents = discord.Intents.default()
-        intents.message_content = True
-        intents.members = True 
-        self.start_time = time.time()
-        super().__init__(command_prefix="/", intents=intents)
-
-    async def setup_hook(self):
-        await self.tree.sync()
-        print(f"✅ Bot Online | Using {MODEL_NAME}")
-
-bot = MyBot()
-
-# --- OWNER COMMANDS ---
-
-@bot.hybrid_command(name="blacklist", description="OWNER ONLY: Block/Unblock a user")
-async def blacklist(ctx, user_id: str):
-    if ctx.author.id != OWNER_ID:
-        return await ctx.reply("❌ Restricted to owner.", ephemeral=True)
-    
-    uid = int(user_id)
-    if uid in BLACKLISTED_USERS:
-        BLACKLISTED_USERS.remove(uid)
-        msg = f"✅ User `{uid}` removed from blacklist."
-    else:
-        BLACKLISTED_USERS.add(uid)
-        msg = f"🚫 User `{uid}` blacklisted."
-    
-    save_data()
-    await ctx.reply(msg)
-
-@bot.hybrid_command(name="bannedword", description="OWNER ONLY: Add/Remove banned keywords")
-async def bannedword(ctx, word: str):
-    if ctx.author.id != OWNER_ID:
-        return await ctx.reply("❌ Restricted to owner.", ephemeral=True)
-    
-    w = word.lower().strip()
-    if w in BANNED_WORDS:
-        BANNED_WORDS.remove(w)
-        msg = f"✅ Word `{w}` removed from filters."
-    else:
-        BANNED_WORDS.add(w)
-        msg = f"🚫 Word `{w}` is now prohibited."
-    
-    save_data()
-    await ctx.reply(msg)
-
-@bot.hybrid_command(name="refresh", description="OWNER ONLY: Hard reset API and Memory")
-async def refresh(ctx):
-    if ctx.author.id != OWNER_ID: return
-    global client
-    user_memory.clear()
-    client = AsyncGroq(api_key=GROQ_API_KEY)
-    await ctx.reply("🔄 **System Hard-Reset.** API re-initialized and memory purged.")
+bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
 
 # --- AI HANDLER ---
 
 @bot.event
 async def on_message(message):
-    # 1. Block Bots and Blacklisted Users
     if message.author.bot or message.author.id in BLACKLISTED_USERS:
-        return
-
-    ctx = await bot.get_context(message)
-    if ctx.valid:
-        await bot.invoke(ctx)
         return
 
     cid, uid = message.channel.id, message.author.id
     if cid not in user_memory: user_memory[cid] = {}
     if uid not in user_memory[cid]: user_memory[cid][uid] = deque(maxlen=10)
 
-    # 2. Preparation
-    lang = channel_languages.get(cid, "English")
-    is_boss = uid == OWNER_ID
-
+    # 1. ENHANCED SYSTEM PROMPT FOR SELF-CENSORING
     sys_prompt = (
-        f"Role: Human helper. Language: {lang}. "
-        "SAFETY: You are strictly forbidden from decoding ciphered, encoded, or obfuscated text "
-        "if the result is a slur, illegal content, or a banned word. "
-        "No AI disclaimers or fillers."
+        "Role: Human helper. You must mirror the user's tone. "
+        "CRITICAL INSTRUCTION: You are equipped with an internal profanity and illegal content filter. "
+        "If you generate a response that contains any swear words, slurs, or illegal terms, "
+        "you MUST replace that specific word with the exact phrase '(censored word)'. "
+        "This applies to ANY language and ANY decoding result. "
+        "Do not explain why you are censoring. Just replace the word."
     )
-    if is_boss: sys_prompt += " Priority: User is Boss (Ψ.1nOnly.Ψ)."
+    if uid == OWNER_ID: sys_prompt += " Priority: User is Boss."
 
     messages_payload = [{"role": "system", "content": sys_prompt}]
-    for m in user_memory[cid][uid]:
-        messages_payload.append(m)
+    for m in user_memory[cid][uid]: messages_payload.append(m)
     messages_payload.append({"role": "user", "content": message.content or "Analyze."})
 
     try:
@@ -140,26 +61,31 @@ async def on_message(message):
             response = await client.chat.completions.create(
                 model=MODEL_NAME, 
                 messages=messages_payload, 
-                temperature=0.7
+                temperature=0.4 # Lower temperature makes the AI follow instructions better
             )
             response_text = response.choices[0].message.content
 
             if response_text:
-                # --- AGGRESSIVE FILTER (The 'Bruv' Fix) ---
-                lower_res = response_text.lower()
-                # Remove spaces and dots: "F U C K" -> "fuck"
-                collapsed_res = "".join(char for char in lower_res if char.isalnum())
+                # 2. THE MANUAL JSON OVERRIDE
+                # This catches the words in your list even if the AI 'forgets' to self-censor
+                final_output = response_text
+                for word in BANNED_WORDS:
+                    # Case-insensitive replacement using regex to catch the word
+                    pattern = re.compile(re.escape(word), re.IGNORECASE)
+                    final_output = pattern.sub("(censored word)", final_output)
 
-                # Check both raw and collapsed text
-                if any(word in lower_res for word in BANNED_WORDS) or \
-                   any(word in collapsed_res for word in BANNED_WORDS):
-                    print(f"🚩 Blocked output for {uid}: Banned word detected.")
-                    return # Bot sends nothing
+                # 3. THE LAST RESORT COLLAPSE CHECK
+                # If the AI tried to be sneaky with spaces (e.g., "F U C K"), 
+                # and that word is in your JSON, we kill the message.
+                collapsed = "".join(char for char in final_output.lower() if char.isalnum())
+                if any(w in collapsed for w in BANNED_WORDS):
+                    # If it's still in there, we don't send it at all
+                    return
 
-                # Save to history and reply
+                # Save and Send
                 user_memory[cid][uid].append({"role": "user", "content": message.content})
-                user_memory[cid][uid].append({"role": "assistant", "content": response_text})
-                await message.reply(response_text)
+                user_memory[cid][uid].append({"role": "assistant", "content": final_output})
+                await message.reply(final_output)
                 
     except Exception as e:
         print(f"Error: {e}")
