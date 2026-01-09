@@ -1,11 +1,12 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import os
 import time
 import json
+import re
 from groq import AsyncGroq 
 from collections import deque
-import re
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
@@ -21,34 +22,97 @@ def load_data():
     except (FileNotFoundError, json.JSONDecodeError):
         return {"blacklist": [], "banned_words": []}
 
+def save_data(bl, bw):
+    with open(DATA_FILE, "w") as f:
+        json.dump({"blacklist": list(bl), "banned_words": list(bw)}, f, indent=4)
+
 storage = load_data()
-BLACKLISTED_USERS = set(storage["blacklist"])
-BANNED_WORDS = set(storage["banned_words"])
+BLACKLISTED_USERS = set(storage.get("blacklist", []))
+BANNED_WORDS = set(storage.get("banned_words", []))
 
 client = AsyncGroq(api_key=GROQ_API_KEY)
 user_memory = {}
 
-bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
+class MyBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.all()
+        super().__init__(command_prefix="/", intents=intents)
 
-# --- AI HANDLER ---
+    async def setup_hook(self):
+        await self.tree.sync()
+        print(f"\n🚀 {self.user} is now ONLINE!")
+        print("="*30)
+        print("📁 REGISTERED COMMANDS:")
+        # This loop prints every command the bot knows to the terminal
+        for command in self.walk_commands():
+            print(f" -> {command.name} (Prefix)")
+        for cmd in self.tree.get_commands():
+            print(f" -> /{cmd.name} (Slash)")
+        print("="*30 + "\n")
+
+bot = MyBot()
+
+# --- OWNER ONLY COMMANDS ---
+
+@bot.hybrid_command(name="blacklist", description="OWNER ONLY: Block/Unblock a user")
+async def blacklist(ctx, user_id: str):
+    if ctx.author.id != OWNER_ID:
+        return await ctx.reply("❌ Owner restricted.", ephemeral=True)
+    
+    uid = int(user_id)
+    if uid in BLACKLISTED_USERS:
+        BLACKLISTED_USERS.remove(uid)
+        msg = f"✅ User `{uid}` removed from blacklist."
+    else:
+        BLACKLISTED_USERS.add(uid)
+        msg = f"🚫 User `{uid}` blacklisted."
+    
+    save_data(BLACKLISTED_USERS, BANNED_WORDS)
+    await ctx.reply(msg)
+
+@bot.hybrid_command(name="bannedword", description="OWNER ONLY: Add/Remove word to censor")
+async def bannedword(ctx, word: str):
+    if ctx.author.id != OWNER_ID:
+        return await ctx.reply("❌ Owner restricted.", ephemeral=True)
+    
+    w = word.lower().strip()
+    if w in BANNED_WORDS:
+        BANNED_WORDS.remove(w)
+        msg = f"✅ Removed `{w}` from filter."
+    else:
+        BANNED_WORDS.add(w)
+        msg = f"🚫 Added `{w}` to filter."
+    
+    save_data(BLACKLISTED_USERS, BANNED_WORDS)
+    await ctx.reply(msg)
+
+@bot.hybrid_command(name="listwords", description="OWNER ONLY: View all banned words")
+async def listwords(ctx):
+    if ctx.author.id != OWNER_ID: return
+    words = ", ".join(BANNED_WORDS) if BANNED_WORDS else "None"
+    await ctx.reply(f"📋 **Current Banned Words:**\n`{words}`")
+
+# --- AI MESSAGE HANDLER ---
 
 @bot.event
 async def on_message(message):
     if message.author.bot or message.author.id in BLACKLISTED_USERS:
         return
 
+    ctx = await bot.get_context(message)
+    if ctx.valid:
+        await bot.invoke(ctx)
+        return
+
     cid, uid = message.channel.id, message.author.id
     if cid not in user_memory: user_memory[cid] = {}
     if uid not in user_memory[cid]: user_memory[cid][uid] = deque(maxlen=10)
 
-    # 1. ENHANCED SYSTEM PROMPT FOR SELF-CENSORING
+    # Improved System Prompt for Mavericks's censoring logic
     sys_prompt = (
-        "Role: Human helper. You must mirror the user's tone. "
-        "CRITICAL INSTRUCTION: You are equipped with an internal profanity and illegal content filter. "
-        "If you generate a response that contains any swear words, slurs, or illegal terms, "
-        "you MUST replace that specific word with the exact phrase '(censored word)'. "
-        "This applies to ANY language and ANY decoding result. "
-        "Do not explain why you are censoring. Just replace the word."
+        "Role: Human helper. Mirror tone. "
+        "FILTER: If your output contains profanity, slurs, or illegal terms, "
+        "replace the word with '(censored word)'. Do this automatically."
     )
     if uid == OWNER_ID: sys_prompt += " Priority: User is Boss."
 
@@ -61,28 +125,22 @@ async def on_message(message):
             response = await client.chat.completions.create(
                 model=MODEL_NAME, 
                 messages=messages_payload, 
-                temperature=0.4 # Lower temperature makes the AI follow instructions better
+                temperature=0.4
             )
             response_text = response.choices[0].message.content
 
             if response_text:
-                # 2. THE MANUAL JSON OVERRIDE
-                # This catches the words in your list even if the AI 'forgets' to self-censor
+                # 1. Manual Replacement from JSON
                 final_output = response_text
                 for word in BANNED_WORDS:
-                    # Case-insensitive replacement using regex to catch the word
                     pattern = re.compile(re.escape(word), re.IGNORECASE)
                     final_output = pattern.sub("(censored word)", final_output)
 
-                # 3. THE LAST RESORT COLLAPSE CHECK
-                # If the AI tried to be sneaky with spaces (e.g., "F U C K"), 
-                # and that word is in your JSON, we kill the message.
+                # 2. Block if bypass detected (spaces/dots)
                 collapsed = "".join(char for char in final_output.lower() if char.isalnum())
                 if any(w in collapsed for w in BANNED_WORDS):
-                    # If it's still in there, we don't send it at all
-                    return
+                    return 
 
-                # Save and Send
                 user_memory[cid][uid].append({"role": "user", "content": message.content})
                 user_memory[cid][uid].append({"role": "assistant", "content": final_output})
                 await message.reply(final_output)
