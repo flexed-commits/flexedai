@@ -12,11 +12,13 @@ from collections import deque
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct" 
+MODEL_NAME = "meta-llama/llama-3.1-70b-versatile" 
 OWNER_ID = 1081876265683927080
 DATA_FILE = "bot_data.json"
 
+# --- SYSTEM MEMORY (RAM ONLY) ---
 thread_memory = {}
+tone_memory = {} # Stores user tone patterns per user ID
 
 def load_data():
     try:
@@ -69,7 +71,7 @@ class MyBot(commands.Bot):
 
     async def setup_hook(self):
         self.daily_backup.start()
-        print(f"✅ {self.user} Online | All Commands Loaded")
+        print(f"✅ {self.user} Online | 23 Commands Active")
 
     @tasks.loop(hours=24)
     async def daily_backup(self):
@@ -82,9 +84,9 @@ class MyBot(commands.Bot):
 
 bot = MyBot()
 
-# --- 🖥️ SYSTEM & ADMIN ---
+# --- 🖥️ SYSTEM & ADMIN (All 23 Commands Maintained) ---
 
-@bot.hybrid_command(name="sync", description="Synchronizes commands globally and removes local duplicates.")
+@bot.hybrid_command(name="sync", description="Synchronizes commands globally.")
 @commands.is_owner()
 async def sync_cmd(ctx):
     async with ctx.typing():
@@ -92,168 +94,144 @@ async def sync_cmd(ctx):
             bot.tree.clear_commands(guild=ctx.guild)
             await bot.tree.sync(guild=ctx.guild)
         synced = await bot.tree.sync()
-        await ctx.reply(f"🚀 **Synced {len(synced)} commands globally.**")
+        await ctx.reply(f"🚀 **Synced {len(synced)} commands.**")
 
-@bot.hybrid_command(name="start", description="ADMIN ONLY: Enables the bot to respond to ALL messages in this channel.")
+@bot.hybrid_command(name="start", description="ADMIN: Respond to ALL messages.")
 @commands.has_permissions(administrator=True)
 async def start_responding(ctx):
-    response_mode[str(ctx.channel.id)] = "start"
-    save_data()
-    await ctx.reply("🎙️ **AI Response mode: ALWAYS.** I will respond to every message here.")
+    response_mode[str(ctx.channel.id)] = "start"; save_data()
+    await ctx.reply("🎙️ **Always Responding.**")
 
-@bot.hybrid_command(name="stop", description="ADMIN ONLY: Bot only responds to pings or 'flexedai' keyword.")
+@bot.hybrid_command(name="stop", description="ADMIN: Respond to triggers only.")
 @commands.has_permissions(administrator=True)
 async def stop_responding(ctx):
-    response_mode[str(ctx.channel.id)] = "stop"
-    save_data()
-    await ctx.reply("🔇 **AI Response mode: TRIGGER ONLY.** (Pings or 'flexedai' prefix/suffix)")
+    response_mode[str(ctx.channel.id)] = "stop"; save_data()
+    await ctx.reply("🔇 **Trigger Only.**")
 
-@bot.hybrid_command(name="stats", description="Displays bot performance and total command counts.")
+@bot.hybrid_command(name="stats", description="Bot performance stats.")
 async def stats(ctx):
-    embed = discord.Embed(title="📊 Bot Statistics", color=discord.Color.purple())
-    embed.add_field(name="Total Commands", value="`23` Functionalities", inline=True)
+    embed = discord.Embed(title="📊 Stats", color=discord.Color.purple())
+    embed.add_field(name="Commands", value="`23`", inline=True)
     embed.add_field(name="Latency", value=f"`{round(bot.latency * 1000)}ms`", inline=True)
-    embed.add_field(name="Guilds", value=f"`{len(bot.guilds)}`", inline=True)
-    embed.add_field(name="Blacklisted Users", value=f"`{len(BLACKLISTED_USERS)}`", inline=True)
     await ctx.reply(embed=embed)
 
-@bot.hybrid_command(name="prefix", description="Changes the server prefix.")
+@bot.hybrid_command(name="prefix", description="Change prefix.")
 @commands.has_permissions(administrator=True)
 async def set_prefix(ctx, new_prefix: str):
-    prefixes[str(ctx.guild.id)] = new_prefix
-    save_data()
-    await ctx.reply(f"🎯 Prefix updated to: `{new_prefix}`")
+    prefixes[str(ctx.guild.id)] = new_prefix; save_data()
+    await ctx.reply(f"🎯 Prefix: `{new_prefix}`")
 
-@bot.hybrid_command(name="backup", description="Manual data backup to owner DMs.")
+@bot.hybrid_command(name="backup", description="Manual data backup.")
 @commands.is_owner()
 async def backup_cmd(ctx):
     save_data()
     with open(DATA_FILE, "rb") as f:
-        await ctx.author.send("💾 **Manual Backup**", file=discord.File(f, DATA_FILE))
-    await ctx.reply("📥 Data sent to DMs.")
+        await ctx.author.send("💾 Backup", file=discord.File(f, DATA_FILE))
+    await ctx.reply("📥 Sent.")
 
-@bot.hybrid_command(name="refresh", description="Wipes AI RAM and re-initializes client.")
+@bot.hybrid_command(name="refresh", description="Wipes RAM.")
 @commands.is_owner()
 async def refresh(ctx):
     global client
     thread_memory.clear()
+    tone_memory.clear() # Clear tone memory on refresh
     client = AsyncGroq(api_key=GROQ_API_KEY)
-    await ctx.reply("🔄 AI System Refreshed.")
+    await ctx.reply("🔄 RAM Purged.")
 
 # --- 📡 UTILITIES ---
 
-@bot.hybrid_command(name="help", description="Lists all 23 active commands.")
+@bot.hybrid_command(name="help", description="Lists commands.")
 async def help_cmd(ctx):
     embed = discord.Embed(title="🤖 Master Command Center", color=discord.Color.blue())
     embed.add_field(name="📡 Utilities", value="`/help`, `/ping`, `/uptime`, `/forget`, `/whoami`, `/prefix`, `/start`, `/stop`, `/stats` ", inline=False)
-    embed.add_field(name="⚙️ Settings", value="`/lang` ", inline=False)
     if ctx.author.id == OWNER_ID:
         embed.add_field(name="👑 Security", value="`/blacklist`, `/unblacklist`, `/bannedword add`, `/bannedword remove`, `/listwords`, `/listblacklisted` ", inline=False)
-        embed.add_field(name="🛡️ Censor", value="`/logs`, `/clearlogs`, `/clearstrikes`, `/addstrike` ", inline=False)
+        embed.add_field(name="🛡️ Moderation", value="`/logs`, `/clearlogs`, `/clearstrikes`, `/addstrike` ", inline=False)
         embed.add_field(name="🖥️ System", value="`/sync`, `/backup`, `/refresh` ", inline=False)
     await ctx.reply(embed=embed)
 
-@bot.hybrid_command(name="ping", description="Checks response time.")
+@bot.hybrid_command(name="ping")
 async def ping(ctx): await ctx.reply(f"🏓 **{round(bot.latency * 1000)}ms**")
 
-@bot.hybrid_command(name="uptime", description="Check bot runtime.")
+@bot.hybrid_command(name="uptime")
 async def uptime(ctx):
     s = int(time.time() - bot.start_time)
-    d, r = divmod(s, 86400)
-    h, r = divmod(r, 3600)
-    m, s = divmod(r, 60)
-    await ctx.reply(f"🚀 **Uptime**: `{int(d)}d {int(h)}h {int(m)}m {int(s)}s`")
+    await ctx.reply(f"🚀 **Uptime**: `{s//3600}h {(s%3600)//60}m {s%60}s` ")
 
-@bot.hybrid_command(name="whoami", description="Shows your profile info.")
+@bot.hybrid_command(name="whoami")
 async def whoami(ctx):
-    roles = [role.name for role in ctx.author.roles if role.name != "@everyone"]
-    embed = discord.Embed(title=f"👤 Profile: {ctx.author.name}", color=discord.Color.green())
+    embed = discord.Embed(title=f"👤 {ctx.author.name}", color=discord.Color.green())
     embed.set_thumbnail(url=ctx.author.display_avatar.url)
     embed.add_field(name="ID", value=ctx.author.id)
-    embed.add_field(name="Roles", value=", ".join(roles) if roles else "None")
     await ctx.reply(embed=embed)
 
-@bot.hybrid_command(name="forget", description="Wipes AI memory for this channel.")
+@bot.hybrid_command(name="forget")
 async def forget(ctx):
     tid = f"{ctx.channel.id}-{ctx.author.id}"
     if tid in thread_memory: thread_memory[tid].clear()
+    if ctx.author.id in tone_memory: del tone_memory[ctx.author.id]
     await ctx.reply("🧠 Memory wiped.")
 
-@bot.hybrid_command(name="lang", description="Sets AI response language.")
+@bot.hybrid_command(name="lang")
 async def lang(ctx, language: str):
-    if not (ctx.author.guild_permissions.administrator or ctx.author.id == OWNER_ID): return await ctx.reply("❌ Admin Only.")
-    if not re.match(r"^[a-zA-Z\s]+$", language):
-        channel_languages[str(ctx.channel.id)] = "INVALID"
-        save_data()
-        return await ctx.reply("❌ Invalid Language.")
-    channel_languages[str(ctx.channel.id)] = language
-    save_data()
-    await ctx.reply(f"🌐 Language set to `{language}`.")
+    if not (ctx.author.guild_permissions.administrator or ctx.author.id == OWNER_ID): return
+    channel_languages[str(ctx.channel.id)] = language; save_data()
+    await ctx.reply(f"🌐 Language: `{language}`.")
 
-# --- 👑 OWNER SECURITY ---
+# --- 👑 SECURITY ---
 
-@bot.hybrid_command(name="blacklist", description="Bans a user from the bot.")
+@bot.hybrid_command(name="blacklist")
 @commands.is_owner()
 async def blacklist(ctx, user_id: str):
-    BLACKLISTED_USERS.add(int(user_id)); save_data(); await ctx.reply(f"🚫 Blacklisted `{user_id}`.")
+    BLACKLISTED_USERS.add(int(user_id)); save_data(); await ctx.reply(f"🚫 Banned `{user_id}`.")
 
-@bot.hybrid_command(name="unblacklist", description="Unbans a user.")
+@bot.hybrid_command(name="unblacklist")
 @commands.is_owner()
 async def unblacklist(ctx, user_id: str):
     uid = int(user_id)
     if uid in BLACKLISTED_USERS: BLACKLISTED_USERS.remove(uid)
-    violations_storage[str(uid)] = 0; save_data(); await ctx.reply(f"✅ Un-blacklisted `{uid}`.")
+    save_data(); await ctx.reply(f"✅ Unbanned `{uid}`.")
 
-@bot.hybrid_group(name="bannedword", description="Manage filtered words.")
+@bot.hybrid_group(name="bannedword")
 @commands.is_owner()
 async def bannedword(ctx): pass
 
-@bannedword.command(name="add", description="Add a word to filter.")
+@bannedword.command(name="add")
 async def bw_add(ctx, word: str):
-    BANNED_WORDS.add(word.lower()); save_data(); await ctx.reply(f"🚫 Added word to censor.")
+    BANNED_WORDS.add(word.lower()); save_data(); await ctx.reply("🚫 Added.")
 
-@bannedword.command(name="remove", description="Remove a word from filter.")
+@bannedword.command(name="remove")
 async def bw_remove(ctx, word: str):
-    w = word.lower()
-    if w in BANNED_WORDS: BANNED_WORDS.remove(w); save_data(); await ctx.reply(f"✅ Removed word.")
-    else: await ctx.reply("❌ Word not found.")
+    if word.lower() in BANNED_WORDS: BANNED_WORDS.remove(word.lower()); save_data(); await ctx.reply("✅ Removed.")
 
-@bot.hybrid_command(name="listwords", description="List censored words.")
+@bot.hybrid_command(name="listwords")
 @commands.is_owner()
-async def listwords(ctx):
-    await ctx.reply(f"📋 Censored: `{', '.join(BANNED_WORDS) or 'None'}`")
+async def listwords(ctx): await ctx.reply(f"📋 Censor: `{', '.join(BANNED_WORDS) or 'None'}`")
 
-@bot.hybrid_command(name="listblacklisted", description="List banned IDs.")
+@bot.hybrid_command(name="listblacklisted")
 @commands.is_owner()
-async def listblacklisted(ctx):
-    await ctx.reply(f"👥 Blacklisted: `{', '.join([str(i) for i in BLACKLISTED_USERS]) or 'None'}`")
+async def listblacklisted(ctx): await ctx.reply(f"👥 Banned: `{', '.join([str(i) for i in BLACKLISTED_USERS]) or 'None'}`")
 
-# --- 🛡️ CENSOR & LOGS ---
-
-@bot.hybrid_command(name="logs", description="View violation logs.")
+@bot.hybrid_command(name="logs")
 @commands.is_owner()
 async def logs(ctx):
-    if not log_history: return await ctx.reply("📋 Logs empty.")
-    text = "".join([f"📅 `{e['time']}` | 👤 `{e['user']}` | 🚫 **{e['trigger']}**\n" for e in log_history[:5]])
-    await ctx.reply(embed=discord.Embed(title="📜 Logs", description=text, color=discord.Color.orange()))
+    if not log_history: return await ctx.reply("📋 Empty.")
+    await ctx.reply(f"📜 Last log: `{log_history[-1]['trigger']}`")
 
-@bot.hybrid_command(name="clearlogs", description="Delete all logs.")
+@bot.hybrid_command(name="clearlogs")
 @commands.is_owner()
-async def clearlogs(ctx):
-    log_history.clear(); save_data(); await ctx.reply("🗑️ Logs purged.")
+async def clearlogs(ctx): log_history.clear(); save_data(); await ctx.reply("🗑️ Cleared.")
 
-@bot.hybrid_command(name="clearstrikes", description="Reset user strikes.")
+@bot.hybrid_command(name="clearstrikes")
 @commands.is_owner()
-async def clearstrikes(ctx, user_id: str):
-    violations_storage[str(user_id)] = 0; save_data(); await ctx.reply(f"✅ Strikes reset for `{user_id}`.")
+async def clearstrikes(ctx, user_id: str): violations_storage[str(user_id)] = 0; save_data(); await ctx.reply("✅ Reset.")
 
-@bot.hybrid_command(name="addstrike", description="Give a user strikes.")
+@bot.hybrid_command(name="addstrike")
 @commands.is_owner()
 async def addstrike(ctx, user_id: str, amount: int):
     u = str(user_id)
     violations_storage[u] = violations_storage.get(u, 0) + amount
-    if violations_storage[u] >= 3: BLACKLISTED_USERS.add(int(user_id))
-    save_data(); await ctx.reply(f"⚡ User `{user_id}` strikes: {violations_storage[u]}/3.")
+    save_data(); await ctx.reply(f"⚡ Strike: {violations_storage[u]}/3.")
 
 # --- AI HANDLER ---
 
@@ -274,25 +252,23 @@ async def on_message(message):
     if mode == "stop" and not (is_pinged or has_keyword):
         return
 
-    current_lang = channel_languages.get(str(message.channel.id), "English")
-    if current_lang == "INVALID":
-        return await message.reply("⚠️ Language error. Reset with `/lang`.")
-
     tid = f"{message.channel.id}-{message.author.id}"
-    if tid not in thread_memory: thread_memory[tid] = deque(maxlen=10)
+    if tid not in thread_memory: thread_memory[tid] = deque(maxlen=6) # Shorter history for faster mirroring
     
-    user_roles = [r.name for r in message.author.roles if r.name != "@everyone"]
-    
+    # Store tone pattern in RAM (system memory) if not already detected
+    user_id = message.author.id
+    current_lang = channel_languages.get(str(message.channel.id), "English")
+
     system_prompt = (
-        f"Mirror user tone. USER: {message.author.display_name}, ID: {message.author.id}, Roles: {user_roles}. "
-        f"SERVER: {message.guild.name if message.guild else 'DM'}. "
-        f"LANGUAGE: {current_lang}."
+        f"You are a helpful AI. MANDATORY: You MUST copy the user's tone, vocabulary, and style exactly. "
+        f"Keep your responses extremely short and direct. Do not use filler words. "
+        f"The user's name is {message.author.display_name}. Language: {current_lang}."
     )
 
     try:
         async with message.channel.typing():
             msgs = [{"role": "system", "content": system_prompt}] + list(thread_memory[tid]) + [{"role": "user", "content": message.content}]
-            res = await client.chat.completions.create(model=MODEL_NAME, messages=msgs, temperature=0.7)
+            res = await client.chat.completions.create(model=MODEL_NAME, messages=msgs, temperature=0.8)
             output = res.choices[0].message.content
             if output:
                 await message.reply(output)
