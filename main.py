@@ -85,6 +85,28 @@ class MyBot(commands.Bot):
 bot = MyBot()
 
 # --- 🖥️ SYSTEM & ADMIN ---
+@bot.command(name="server-list")
+@commands.is_owner()
+@commands.dm_only()
+async def server_list_dm(ctx):
+    """Owner Only: Generates a JSON file of all servers and member counts."""
+    server_data = {}
+    
+    for guild in bot.guilds:
+        server_data[guild.name] = {
+            "id": guild.id,
+            "member_count": guild.member_count
+        }
+
+    # Save to a temporary file
+    file_path = "servers.json"
+    with open(file_path, "w") as f:
+        json.dump(server_data, f, indent=4)
+
+    # Send the file and then remove it from local storage
+    await ctx.send(f"📊 **Server List Generated:** (Total Servers: {len(bot.guilds)})", 
+                   file=discord.File(file_path))
+    os.remove(file_path)
 
 @bot.hybrid_command(name="sync", description="Synchronizes commands globally and removes local duplicates.")
 @commands.is_owner()
