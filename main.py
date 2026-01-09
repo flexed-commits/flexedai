@@ -1,57 +1,39 @@
-import discord
+import discord  # Fixed: Lowercase import
 from discord.ext import commands, tasks
 import os
-import time
-import datetime
 import json
-import re
 from groq import AsyncGroq 
 from collections import deque
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct"
+MODEL_NAME = "llama-4-maverick-17b-128e-instruct"
 OWNER_ID = 1081876265683927080
 DATA_FILE = "bot_data.json"
+
+# This stays in RAM and is NOT saved to disk (Reset on restart)
+thread_memory = {}
 
 def load_data():
     try:
         with open(DATA_FILE, "r") as f:
             data = json.load(f)
-            raw_mem = data.get("memory", {})
-            fixed_mem = {int(cid): {int(uid): deque(msgs, maxlen=10) for uid, msgs in users.items()} for cid, users in raw_mem.items()}
             return {
                 "blacklist": set(data.get("blacklist", [])),
                 "banned_words": set(data.get("banned_words", [])),
                 "languages": data.get("languages", {}),
-                "memory": fixed_mem,
                 "logs": data.get("logs", []),
                 "violations": data.get("violations", {})
             }
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"blacklist": set(), "banned_words": set(), "languages": {}, "memory": {}, "logs": [], "violations": {}}
+        return {"blacklist": set(), "banned_words": set(), "languages": {}, "logs": [], "violations": {}}
 
-def save_data():
-    serializable_mem = {str(cid): {str(uid): list(msgs) for uid, msgs in users.items()} for cid, users in user_memory.items()}
-    with open(DATA_FILE, "w") as f:
-        json.dump({
-            "blacklist": list(BLACKLISTED_USERS),
-            "banned_words": list(BANNED_WORDS),
-            "languages": channel_languages,
-            "memory": serializable_mem,
-            "logs": log_history,
-            "violations": violations_storage
-        }, f, indent=4)
-
-# Load State
+# Load Persistent State
 data = load_data()
 BLACKLISTED_USERS = data["blacklist"]
 BANNED_WORDS = data["banned_words"]
 channel_languages = data["languages"]
-user_memory = data["memory"]
-log_history = data["logs"]
-violations_storage = data["violations"]
 
 client = AsyncGroq(api_key=GROQ_API_KEY)
 
@@ -59,71 +41,58 @@ class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
         super().__init__(command_prefix="/", intents=intents, help_command=None)
-        self.start_time = time.time()
 
     async def setup_hook(self):
         await self.tree.sync()
-        self.daily_backup.start() # Start the daily backup loop
-        print(f"✅ {self.user} is live!")
-
-    # --- DAILY BACKUP TASK ---
-    @tasks.loop(hours=24)
-    async def daily_backup(self):
-        try:
-            owner = await self.fetch_user(OWNER_ID)
-            save_data() # Ensure data is fresh before sending
-            with open(DATA_FILE, "rb") as file:
-                await owner.send("📦 **Daily Backup**: Here is your current `bot_data.json` file.", file=discord.File(file, DATA_FILE))
-            print("📤 Daily backup sent to owner.")
-        except Exception as e:
-            print(f"❌ Backup failed: {e}")
-
-    @daily_backup.before_loop
-    async def before_backup(self):
-        await self.wait_until_ready()
+        print(f"✅ {self.user} is live using Llama 4 Maverick!")
 
 bot = MyBot()
 
-# --- OWNER COMMANDS ---
-
-@bot.hybrid_command(name="backup", description="OWNER ONLY: Manually trigger a JSON backup")
-async def backup(ctx):
-    if ctx.author.id != OWNER_ID: return
-    try:
-        save_data()
-        with open(DATA_FILE, "rb") as file:
-            await ctx.author.send("💾 **Manual Backup**: Current `bot_data.json`.", file=discord.File(file, DATA_FILE))
-        await ctx.reply("📥 Backup sent to your DMs.")
-    except Exception as e:
-        await ctx.reply(f"❌ Error: {e}")
-
-# ... (Include all other 14 commands here: help, ping, addstrike, logs, etc.) ...
-
-# --- AI HANDLER ---
 @bot.event
 async def on_message(message):
     if message.author.bot or message.author.id in BLACKLISTED_USERS: return
+    
     ctx = await bot.get_context(message)
-    if ctx.valid: await bot.invoke(ctx); return
+    if ctx.valid:
+        await bot.invoke(ctx)
+        return
 
-    cid, uid = message.channel.id, message.author.id
-    if cid not in user_memory: user_memory[cid] = {}
-    if uid not in user_memory[cid]: user_memory[cid][uid] = deque(maxlen=10)
+    # Thread-specific memory (User + Channel combo)
+    # Restarting the script clears this dictionary
+    thread_id = f"{message.channel.id}-{message.author.id}"
+    if thread_id not in thread_memory:
+        thread_memory[thread_id] = deque(maxlen=10)
+
+    # Tone Copying & Recall Instructions
+    system_prompt = (
+        f"Language: {channel_languages.get(str(message.channel.id), 'English')}. "
+        "CRITICAL INSTRUCTIONS: "
+        "1. Analyze the user's tone (humor, slang, length, mood) and mirror it perfectly. "
+        "2. Do NOT mention or use previous messages UNLESS the user explicitly asks you to recall "
+        "information or says 'what did I say earlier?'"
+    )
 
     try:
         async with message.channel.typing():
+            messages = [{"role": "system", "content": system_prompt}]
+            # Add history for context, but the prompt tells it to ignore it unless asked
+            messages.extend(list(thread_memory[thread_id]))
+            messages.append({"role": "user", "content": message.content})
+
             res = await client.chat.completions.create(
                 model=MODEL_NAME, 
-                messages=[{"role":"system","content":f"Language: {channel_languages.get(str(cid), 'English')}."}] + list(user_memory[cid][uid]) + [{"role":"user","content":message.content}],
-                temperature=0.3
+                messages=messages,
+                temperature=0.7 # Better for tone mimicking
             )
+            
             output = res.choices[0].message.content
             if output:
-                # [Censorship and Loophole Logic same as before]
-                user_memory[cid][uid].append({"role": "user", "content": message.content})
-                user_memory[cid][uid].append({"role": "assistant", "content": output})
-                save_data()
+                # Update volatile memory
+                thread_memory[thread_id].append({"role": "user", "content": message.content})
+                thread_memory[thread_id].append({"role": "assistant", "content": output})
                 await message.reply(output)
-    except Exception as e: print(f"Error: {e}")
+
+    except Exception as e:
+        print(f"Error: {e}")
 
 bot.run(DISCORD_TOKEN)
