@@ -12,12 +12,17 @@ from collections import deque
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-# Maverick is natively multimodal (Text + Vision)
 MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct" 
 OWNER_ID = 1081876265683927080
 DATA_FILE = "bot_data.json"
 
-# --- SYSTEM MEMORY (RAM ONLY) ---
+# Supported Languages
+VALID_LANGUAGES = [
+    "english", "hindi", "hinglish", "spanish", "french", 
+    "german", "italian", "portuguese", "chinese", "japanese", "korean"
+]
+
+# --- SYSTEM MEMORY ---
 thread_memory = {}
 tone_memory = {} 
 
@@ -174,11 +179,19 @@ async def forget(ctx):
     if tid in thread_memory: thread_memory[tid].clear()
     await ctx.reply("🧠 Memory wiped.")
 
-@bot.hybrid_command(name="lang")
+@bot.hybrid_command(name="lang", description="Change the AI response language.")
+@commands.has_permissions(administrator=True)
 async def lang(ctx, language: str):
-    if not (ctx.author.guild_permissions.administrator or ctx.author.id == OWNER_ID): return
-    channel_languages[str(ctx.channel.id)] = language; save_data()
-    await ctx.reply(f"🌐 Language: `{language}`.")
+    lang_input = language.lower().strip()
+    if lang_input not in VALID_LANGUAGES:
+        # Get the ID of the command dynamically for the warning message
+        cmd = bot.tree.get_command("lang")
+        cmd_mention = f"</lang:{cmd.id if cmd else '0'}>"
+        return await ctx.reply(f"⚠️ Invalid language set. Use {cmd_mention} to set the language to a valid one.")
+    
+    channel_languages[str(ctx.channel.id)] = language.capitalize()
+    save_data()
+    await ctx.reply(f"🌐 Language: `{language.capitalize()}`.")
 
 # --- 👑 OWNER SECURITY ---
 
@@ -239,7 +252,7 @@ async def server_list_dm(ctx):
     with open("servers.json", "w") as f: json.dump(server_data, f, indent=4)
     await ctx.send(file=discord.File("servers.json")); os.remove("servers.json")
 
-# --- AI HANDLER (VISION ENABLED) ---
+# --- AI HANDLER ---
 
 @bot.event
 async def on_message(message):
@@ -253,8 +266,6 @@ async def on_message(message):
     content_lower = message.content.lower().strip()
     is_pinged = bot.user.mentioned_in(message) and not message.mention_everyone
     has_keyword = content_lower.startswith("flexedai") or content_lower.endswith("flexedai")
-    
-    # Check for images
     images = [a for a in message.attachments if a.content_type and a.content_type.startswith('image')]
 
     if mode == "stop" and not (is_pinged or has_keyword or images):
@@ -263,20 +274,19 @@ async def on_message(message):
     tid = f"{message.channel.id}-{message.author.id}"
     if tid not in thread_memory: thread_memory[tid] = deque(maxlen=6)
 
+    # Get language with fallback
     current_lang = channel_languages.get(str(message.channel.id), "English")
     user_roles = [r.name for r in message.author.roles if r.name != "@everyone"]
 
     system_prompt = (
         f"You are FlexedAI. Mirror the user's tone exactly. Keep responses very short and concise.\n"
-        f"When asked, you have access to this info:\n"
-        f"USER: Display Name: {message.author.display_name}, Username: {message.author.name}, ID: {message.author.id}, PFP: {message.author.display_avatar.url}, Roles: {', '.join(user_roles)}.\n"
-        f"SERVER: Name: {message.guild.name if message.guild else 'DM'}, Channel: {message.channel.name if message.guild else 'DM'}.\n"
-        f"LANGUAGE: {current_lang}."
+        f"CRITICAL: You MUST respond in {current_lang}. If {current_lang} is Hinglish, use Hindi words written in Roman English script.\n"
+        f"USER INFO: Display Name: {message.author.display_name}, Username: {message.author.name}, ID: {message.author.id}.\n"
+        f"SERVER INFO: Name: {message.guild.name if message.guild else 'DM'}.\n"
     )
 
     try:
         async with message.channel.typing():
-            # Maverick multimodal content construction
             content_payload = []
             if message.content:
                 content_payload.append({"type": "text", "text": message.content})
@@ -286,13 +296,8 @@ async def on_message(message):
             for img in images:
                 content_payload.append({"type": "image_url", "image_url": {"url": img.url}})
 
-            # Build messages list
             msgs = [{"role": "system", "content": system_prompt}]
-            # Convert text memory into content format if necessary, 
-            # or keep as strings for simple text history
-            for m in thread_memory[tid]:
-                msgs.append(m)
-            
+            for m in thread_memory[tid]: msgs.append(m)
             msgs.append({"role": "user", "content": content_payload})
 
             res = await client.chat.completions.create(
@@ -301,15 +306,14 @@ async def on_message(message):
                 temperature=0.7,
                 max_tokens=512
             )
-            
+
             output = res.choices[0].message.content
             if output:
                 await message.reply(output)
-                # Store text memory (images aren't re-sent in history to save tokens)
                 mem_text = message.content if message.content else "[Sent an image]"
                 thread_memory[tid].append({"role": "user", "content": mem_text})
                 thread_memory[tid].append({"role": "assistant", "content": output})
-                
+
     except Exception as e: 
         print(f"AI Error: {e}")
 
