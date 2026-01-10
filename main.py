@@ -12,7 +12,7 @@ from collections import deque
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-MODEL_NAME = "meta-llama/llama-3.1-70b-versatile" 
+MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct" 
 OWNER_ID = 1081876265683927080
 DATA_FILE = "bot_data.json"
 
