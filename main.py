@@ -12,6 +12,7 @@ from collections import deque
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+# Maverick is natively multimodal (Text + Vision)
 MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct" 
 OWNER_ID = 1081876265683927080
 DATA_FILE = "bot_data.json"
@@ -238,12 +239,12 @@ async def server_list_dm(ctx):
     with open("servers.json", "w") as f: json.dump(server_data, f, indent=4)
     await ctx.send(file=discord.File("servers.json")); os.remove("servers.json")
 
-# --- AI HANDLER ---
+# --- AI HANDLER (VISION ENABLED) ---
 
 @bot.event
 async def on_message(message):
     if message.author.bot or message.author.id in BLACKLISTED_USERS: return
-    
+
     ctx = await bot.get_context(message)
     if ctx.valid:
         await bot.invoke(ctx); return
@@ -252,17 +253,19 @@ async def on_message(message):
     content_lower = message.content.lower().strip()
     is_pinged = bot.user.mentioned_in(message) and not message.mention_everyone
     has_keyword = content_lower.startswith("flexedai") or content_lower.endswith("flexedai")
+    
+    # Check for images
+    images = [a for a in message.attachments if a.content_type and a.content_type.startswith('image')]
 
-    if mode == "stop" and not (is_pinged or has_keyword):
+    if mode == "stop" and not (is_pinged or has_keyword or images):
         return
 
     tid = f"{message.channel.id}-{message.author.id}"
     if tid not in thread_memory: thread_memory[tid] = deque(maxlen=6)
-    
+
     current_lang = channel_languages.get(str(message.channel.id), "English")
     user_roles = [r.name for r in message.author.roles if r.name != "@everyone"]
 
-    # --- ENHANCED CONTEXT INJECTION ---
     system_prompt = (
         f"You are FlexedAI. Mirror the user's tone exactly. Keep responses very short and concise.\n"
         f"When asked, you have access to this info:\n"
@@ -273,13 +276,41 @@ async def on_message(message):
 
     try:
         async with message.channel.typing():
-            msgs = [{"role": "system", "content": system_prompt}] + list(thread_memory[tid]) + [{"role": "user", "content": message.content}]
-            res = await client.chat.completions.create(model=MODEL_NAME, messages=msgs, temperature=0.7)
+            # Maverick multimodal content construction
+            content_payload = []
+            if message.content:
+                content_payload.append({"type": "text", "text": message.content})
+            elif images:
+                content_payload.append({"type": "text", "text": "Describe this image."})
+
+            for img in images:
+                content_payload.append({"type": "image_url", "image_url": {"url": img.url}})
+
+            # Build messages list
+            msgs = [{"role": "system", "content": system_prompt}]
+            # Convert text memory into content format if necessary, 
+            # or keep as strings for simple text history
+            for m in thread_memory[tid]:
+                msgs.append(m)
+            
+            msgs.append({"role": "user", "content": content_payload})
+
+            res = await client.chat.completions.create(
+                model=MODEL_NAME, 
+                messages=msgs, 
+                temperature=0.7,
+                max_tokens=512
+            )
+            
             output = res.choices[0].message.content
             if output:
                 await message.reply(output)
-                thread_memory[tid].append({"role": "user", "content": message.content})
+                # Store text memory (images aren't re-sent in history to save tokens)
+                mem_text = message.content if message.content else "[Sent an image]"
+                thread_memory[tid].append({"role": "user", "content": mem_text})
                 thread_memory[tid].append({"role": "assistant", "content": output})
-    except Exception as e: print(f"AI Error: {e}")
+                
+    except Exception as e: 
+        print(f"AI Error: {e}")
 
 bot.run(DISCORD_TOKEN)
