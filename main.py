@@ -7,8 +7,7 @@ from collections import deque
 # --- CONFIG & DATA ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-# Model check: llama-4 doesn't exist in 2026 yet, using llama-3.1-70b-versatile
-MODEL_NAME = "llama-3.1-70b-versatile" 
+MODEL_NAME = "llama-4-maverick-17b-128e-instruct" 
 OWNER_ID = 1081876265683927080
 DATA_FILE, LOG_FILE = "bot_data.json", "interaction_logs.json"
 
