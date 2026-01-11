@@ -1,304 +1,205 @@
-import discord
+import discord, os, time, datetime, json, re
 from discord.ext import commands, tasks
 from discord import app_commands
-import os
-import time
-import datetime
-import json
-import re
 from groq import AsyncGroq 
 from collections import deque
 
-# --- CONFIGURATION ---
+# --- CONFIG & DATA ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct" 
 OWNER_ID = 1081876265683927080
-DATA_FILE = "bot_data.json"
-LOG_FILE = "interaction_logs.json"
+DATA_FILE, LOG_FILE = "bot_data.json", "interaction_logs.json"
 
-VALID_LANGUAGES = ["English", "Hindi", "Hinglish", "Spanish", "French", "Japanese"]
-
-# --- DATA PERSISTENCE ---
-
-def load_data():
+def load_json(fp, default):
     try:
-        with open(DATA_FILE, "r") as f:
-            data = json.load(f)
-            return {
-                "blacklist": set(data.get("blacklist", [])),
-                "banned_words": set(data.get("banned_words", [])),
-                "languages": data.get("languages", {}),
-                "violations": data.get("violations", {}),
-                "prefixes": data.get("prefixes", {}),
-                "response_mode": data.get("response_mode", {}),
-                "admin_logs": data.get("admin_logs", [])
-            }
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"blacklist": set(), "banned_words": set(), "languages": {}, "violations": {}, "prefixes": {}, "response_mode": {}, "admin_logs": []}
+        with open(fp, "r") as f: return json.load(f)
+    except: return default
 
-def load_interaction_logs():
-    try:
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, "r") as f:
-                return json.load(f)
-        return []
-    except:
-        return []
-
-def save_data():
-    with open(DATA_FILE, "w") as f:
-        json.dump({
-            "blacklist": list(BLACKLISTED_USERS),
-            "banned_words": list(BANNED_WORDS),
-            "languages": channel_languages,
-            "violations": violations_storage,
-            "prefixes": prefixes,
-            "response_mode": response_mode,
-            "admin_logs": admin_logs
-        }, f, indent=4)
-
-def save_interaction_logs(logs):
-    cutoff = time.time() - 86400 
-    cleaned_logs = [log for log in logs if log['timestamp'] > cutoff]
-    with open(LOG_FILE, "w") as f:
-        json.dump(cleaned_logs, f, indent=4)
-    return cleaned_logs
-
-data = load_data()
-BLACKLISTED_USERS = data["blacklist"]
-BANNED_WORDS = data["banned_words"]
-channel_languages = data["languages"]
-violations_storage = data["violations"]
-prefixes = data["prefixes"]
-response_mode = data["response_mode"]
-admin_logs = data["admin_logs"]
-interaction_logs = load_interaction_logs()
+data = load_json(DATA_FILE, {})
+BLACKLISTED = set(data.get("bl", []))
+BANNED_WORDS = set(data.get("bw", []))
+LANGS = data.get("langs", {})
+STRIKES = data.get("strikes", {})
+PREFIXES = data.get("pfx", {})
+MODES = data.get("modes", {})
+ADMIN_LOGS = data.get("alogs", [])
+interaction_logs = load_json(LOG_FILE, [])
 
 client = AsyncGroq(api_key=GROQ_API_KEY)
 thread_memory = {}
 
-def get_prefix(bot, message):
-    if not message.guild:
-        return prefixes.get(str(message.author.id), "!")
-    return prefixes.get(str(message.guild.id), "/")
+def save_all():
+    with open(DATA_FILE, "w") as f:
+        json.dump({"bl": list(BLACKLISTED), "bw": list(BANNED_WORDS), "langs": LANGS, 
+                   "strikes": STRIKES, "pfx": PREFIXES, "modes": MODES, "alogs": ADMIN_LOGS}, f, indent=2)
+    global interaction_logs
+    cutoff = time.time() - 86400
+    interaction_logs = [l for l in interaction_logs if l['timestamp'] > cutoff]
+    with open(LOG_FILE, "w") as f: json.dump(interaction_logs, f)
 
-class MyBot(commands.Bot):
-    def __init__(self):
-        intents = discord.Intents.all()
-        super().__init__(command_prefix=get_prefix, intents=intents, help_command=None)
-        self.start_time = time.time()
+def get_prefix(bot, msg):
+    return PREFIXES.get(str(msg.guild.id if msg.guild else msg.author.id), "!") if msg.guild or msg.author.id == OWNER_ID else "/"
 
-    async def setup_hook(self):
-        self.daily_backup.start()
-        print(f"✅ {self.user} Online | All 23+ Commands Ready")
+bot = commands.Bot(command_prefix=get_prefix, intents=discord.Intents.all(), help_command=None)
+bot.start_time = time.time()
 
-    @tasks.loop(hours=24)
-    async def daily_backup(self):
-        try:
-            owner = await self.fetch_user(OWNER_ID)
-            save_data()
-            global interaction_logs
-            interaction_logs = save_interaction_logs(interaction_logs)
-            await owner.send("📦 **System Backup**", files=[discord.File(DATA_FILE), discord.File(LOG_FILE)])
-        except: pass
-
-bot = MyBot()
-
-def quick_embed(title, description, color=discord.Color.blue()):
-    return discord.Embed(title=title, description=description, color=color)
-
-# --- GLOBAL ERROR HANDLER ---
+# --- ERROR HANDLER ---
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.NotOwner):
-        await ctx.send("❌ **Access Denied:** Only the bot owner can use this command.")
-    elif isinstance(error, commands.MissingPermissions):
-        await ctx.send(f"⚠️ **Missing Permissions:** You need `{', '.join(error.missing_permissions)}` to do that.")
-    elif isinstance(error, commands.PrivateMessageOnly):
-        await ctx.send("📥 This command must be used in DMs.")
+    if isinstance(error, commands.NotOwner): await ctx.send("❌ **Owner Only.**")
+    elif isinstance(error, commands.MissingPermissions): await ctx.send(f"⚠️ Missing: `{error.missing_permissions}`")
 
 @bot.tree.error
-async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.CheckFailure):
-        await interaction.response.send_message("❌ **Restricted:** This is a bot owner command.", ephemeral=True)
-    elif isinstance(error, app_commands.MissingPermissions):
-        await interaction.response.send_message(f"⚠️ **Perms Error:** Missing `{', '.join(error.missing_permissions)}`", ephemeral=True)
+async def on_app_error(intx, error):
+    if isinstance(error, app_commands.CheckFailure): await intx.response.send_message("❌ **Owner Only.**", ephemeral=True)
 
-# --- 👑 OWNER ONLY COMMANDS ---
-
-@bot.command(name="sync")
+# --- OWNER ONLY (PREFIX) ---
+@bot.command()
 @commands.is_owner()
-async def sync_cmd(ctx):
-    synced = await bot.tree.sync()
-    await ctx.send(f"🚀 Synced {len(synced)} slash commands.")
+async def sync(ctx):
+    fmt = await bot.tree.sync()
+    await ctx.send(f"🚀 Synced {len(fmt)} commands.")
 
-@bot.command(name="messages")
+@bot.command()
 @commands.is_owner()
 @commands.dm_only()
-async def messages_log(ctx):
-    now = time.time()
-    recent = [l for l in interaction_logs if l['timestamp'] > (now - 86400)]
-    output = {"servers": {}, "dm": {}}
-    for entry in recent:
-        user_key = f"{entry['user_name']}/{entry['user_id']}"
-        if entry.get('guild_id'):
-            s_id, c_id = str(entry['guild_id']), str(entry['channel_id'])
-            if s_id not in output["servers"]: output["servers"][s_id] = {}
-            if c_id not in output["servers"][s_id]: output["servers"][s_id][c_id] = {}
-            if user_key not in output["servers"][s_id][c_id]:
-                output["servers"][s_id][c_id][user_key] = {"prompt": [], "response": []}
-            output["servers"][s_id][c_id][user_key]["prompt"].append(entry["prompt"])
-            output["servers"][s_id][c_id][user_key]["response"].append(entry["response"])
-        else:
-            if user_key not in output["dm"]: output["dm"][user_key] = {"prompt": [], "response": []}
-            output["dm"][user_key]["prompt"].append(entry["prompt"])
-            output["dm"][user_key]["response"].append(entry["response"])
+async def messages(ctx):
+    with open("export.json", "w") as f: json.dump(interaction_logs, f, indent=2)
+    await ctx.send(file=discord.File("export.json"))
+    os.remove("export.json")
 
-    fname = f"msg_logs_{int(now)}.json"
-    with open(fname, "w") as f: json.dump(output, f, indent=2)
-    await ctx.send(file=discord.File(fname))
-    os.remove(fname)
-
-@bot.hybrid_group(name="blacklist", description="Owner: Manage user blacklist.")
+# --- HYBRID COMMANDS (OWNER) ---
+@bot.hybrid_group(name="blacklist")
 @commands.is_owner()
-async def blacklist_group(ctx): pass
+async def bl_grp(ctx): pass
 
-@blacklist_group.command(name="add")
+@bl_grp.command(name="add")
 async def bl_add(ctx, user_id: str):
-    BLACKLISTED_USERS.add(int(user_id)); save_data()
-    await ctx.reply(f"🚫 User `{user_id}` has been blacklisted.")
+    BLACKLISTED.add(int(user_id)); save_all(); await ctx.reply(f"🚫 {user_id} blacklisted.")
 
-@blacklist_group.command(name="remove")
-async def bl_remove(ctx, user_id: str):
-    uid = int(user_id)
-    if uid in BLACKLISTED_USERS: BLACKLISTED_USERS.remove(uid)
-    save_data(); await ctx.reply(f"✅ User `{uid}` has been restored.")
+@bl_grp.command(name="remove")
+async def bl_rem(ctx, user_id: str):
+    BLACKLISTED.discard(int(user_id)); save_all(); await ctx.reply(f"✅ {user_id} removed.")
 
-@bot.hybrid_command(name="list", description="Owner: Show restricted lists.")
+@bot.hybrid_command(name="list")
 @commands.is_owner()
 async def list_cmd(ctx, target: str):
-    if target.lower() == "blacklist":
-        bl = ", ".join([str(u) for u in BLACKLISTED_USERS]) if BLACKLISTED_USERS else "None"
-        await ctx.reply(embed=quick_embed("📋 Blacklisted User IDs", f"`{bl}`"))
+    if target == "blacklist": await ctx.reply(f"📋 `{list(BLACKLISTED)}` or None")
 
-@bot.hybrid_command(name="addstrike", description="Owner: Issue strikes (3 = Ban).")
+@bot.hybrid_command(name="addstrike")
 @commands.is_owner()
-async def add_strike_cmd(ctx, user_id: str, amount: int):
-    u_str = str(user_id)
-    violations_storage[u_str] = violations_storage.get(u_str, 0) + amount
-    admin_logs.append(f"[{datetime.datetime.now()}] Strike added to {user_id}. ({violations_storage[u_str]}/3)")
-    if violations_storage[u_str] >= 3:
-        BLACKLISTED_USERS.add(int(user_id)); violations_storage[u_str] = 3
-        admin_logs.append(f"[{datetime.datetime.now()}] AUTO-BAN: {user_id}")
-        save_data(); return await ctx.reply(embed=quick_embed("⚡ BAN", f"User `{user_id}` hit 3 strikes and is banned.", discord.Color.red()))
-    save_data(); await ctx.reply(f"⚡ Strike recorded. Current: {violations_storage[u_str]}/3.")
+async def strike_add(ctx, user_id: str, amt: int):
+    u = str(user_id)
+    STRIKES[u] = STRIKES.get(u, 0) + amt
+    ADMIN_LOGS.append(f"[{datetime.datetime.now()}] Strike {user_id}: {STRIKES[u]}/3")
+    if STRIKES[u] >= 3:
+        BLACKLISTED.add(int(user_id)); STRIKES[u] = 3; await ctx.reply(f"⚡ BANNED {user_id}")
+    else: await ctx.reply(f"⚡ Strike recorded ({STRIKES[u]}/3)")
+    save_all()
 
-@bot.hybrid_command(name="strikelist", description="Owner: Ledger of active strikes.")
+@bot.hybrid_command(name="strikelist")
 @commands.is_owner()
-async def strike_list(ctx):
-    text = "\n".join([f"<@{u}>: {v}/3" for u, v in violations_storage.items() if v > 0]) or "No active strikes."
-    await ctx.reply(embed=quick_embed("⚡ Strike Ledger", text))
+async def s_list(ctx): await ctx.reply(f"⚡ Strikes: {STRIKES}")
 
-@bot.hybrid_command(name="clearstrike", description="Owner: Reset strikes.")
+@bot.hybrid_command(name="clearstrike")
 @commands.is_owner()
-async def clear_strike_cmd(ctx, user_id: str):
-    violations_storage[str(user_id)] = 0; save_data()
-    await ctx.reply(f"✅ Reset strikes for `{user_id}`.")
+async def s_clear(ctx, user_id: str):
+    STRIKES[str(user_id)] = 0; save_all(); await ctx.reply("✅ Wiped.")
 
-@bot.hybrid_group(name="bannedword", description="Owner: Manage censor list.")
+@bot.hybrid_group(name="bannedword")
 @commands.is_owner()
-async def bw_group(ctx): pass
+async def bw_grp(ctx): pass
 
-@bw_group.command(name="add")
-async def bw_add(ctx, word: str):
-    BANNED_WORDS.add(word.lower()); save_data(); await ctx.reply(f"🚫 `{word}` added.")
+@bw_grp.command(name="add")
+async def bw_a(ctx, word: str): BANNED_WORDS.add(word.lower()); save_all(); await ctx.reply(f"🚫 `{word}` added.")
 
-@bw_group.command(name="remove")
-async def bw_remove(ctx, word: str):
-    if word.lower() in BANNED_WORDS: BANNED_WORDS.remove(word.lower())
-    save_data(); await ctx.reply(f"✅ Removed.")
-
-@bot.hybrid_command(name="listwords", description="Owner: List filtered words.")
+@bot.hybrid_command(name="listwords")
 @commands.is_owner()
-async def list_words(ctx):
-    await ctx.reply(f"📋 Banned Words: `{', '.join(BANNED_WORDS) or 'None'}`")
+async def bw_l(ctx): await ctx.reply(f"📋 `{list(BANNED_WORDS)}`")
 
-@bot.hybrid_command(name="logs", description="Owner: Show moderation history.")
+@bot.hybrid_command(name="logs")
 @commands.is_owner()
-async def view_logs(ctx):
-    h = "\n".join(admin_logs[-15:]) if admin_logs else "No logs."
-    await ctx.reply(embed=quick_embed("📜 Admin Action Logs", f"```\n{h}\n```"))
+async def l_view(ctx): await ctx.reply(f"📜 Logs: ```{ADMIN_LOGS[-10:]}```")
 
-@bot.hybrid_command(name="clearadminlogs", description="Owner: Wipe action history.")
+@bot.hybrid_command(name="clearadminlogs")
 @commands.is_owner()
-async def clear_admin_logs(ctx):
-    admin_logs.clear(); save_data(); await ctx.reply("🧹 Logs wiped.")
+async def l_clr(ctx): ADMIN_LOGS.clear(); save_all(); await ctx.reply("🧹 Wiped.")
 
-@bot.hybrid_command(name="searchlogs", description="Owner: Search interaction history.")
+@bot.hybrid_command(name="searchlogs")
 @commands.is_owner()
-async def search_logs(ctx, keyword: str):
-    res = [l for l in interaction_logs if keyword.lower() in l['prompt'].lower() or keyword.lower() in l['response'].lower()]
-    text = "\n\n".join([f"**{l['user_name']}**: {l['prompt'][:60]}..." for l in res[:5]]) or "No matches."
-    await ctx.reply(embed=quick_embed("🔍 Log Search", text))
+async def l_srch(ctx, key: str):
+    r = [l for l in interaction_logs if key.lower() in l['prompt'].lower()]
+    await ctx.reply(f"🔍 Found {len(r)} matches.")
+
+# --- UTILS (ADMIN/USER) ---
+@bot.hybrid_command()
+async def prefix(ctx, new: str):
+    if not (ctx.author.guild_permissions.administrator or ctx.author.id == OWNER_ID): return
+    PREFIXES[str(ctx.guild.id if ctx.guild else ctx.author.id)] = new; save_all(); await ctx.reply(f"🎯 Prefix: `{new}`")
+
+@bot.hybrid_command()
+@app_commands.choices(l=[app_commands.Choice(name=i, value=i) for i in ["English", "Hindi", "Hinglish"]])
+async def lang(ctx, l: app_commands.Choice[str]):
+    if not ctx.author.guild_permissions.administrator: return
+    LANGS[str(ctx.channel.id)] = l.value; save_all(); await ctx.reply(f"🌐 {l.name}")
+
+@bot.hybrid_command()
+async def start(ctx):
+    if not ctx.author.guild_permissions.administrator: return
+    MODES[str(ctx.channel.id)] = "start"; save_all(); await ctx.reply("🎙️ ALWAYS mode.")
+
+@bot.hybrid_command()
+async def stop(ctx):
+    if not ctx.author.guild_permissions.administrator: return
+    MODES[str(ctx.channel.id)] = "stop"; save_all(); await ctx.reply("🔇 TRIGGER mode.")
+
+@bot.hybrid_command()
+async def whoami(ctx): await ctx.reply(f"👤 {ctx.author.name} | ID: {ctx.author.id}")
+
+@bot.hybrid_command()
+async def stats(ctx): await ctx.reply(f"📊 Latency: {round(bot.latency*1000)}ms")
+
+@bot.hybrid_command()
+async def forget(ctx):
+    tid = f"{ctx.channel.id}-{ctx.author.id}"
+    if tid in thread_memory: thread_memory[tid].clear()
+    await ctx.reply("🧠 Wiped.")
 
 # --- AI HANDLER ---
-
 @bot.event
-async def on_message(message):
-    if message.author.bot or message.author.id in BLACKLISTED_USERS: return
-    
-    ctx = await bot.get_context(message)
-    if ctx.valid:
-        await bot.invoke(ctx)
-        return
+async def on_message(msg):
+    if msg.author.bot or msg.author.id in BLACKLISTED: return
+    ctx = await bot.get_context(msg)
+    if ctx.valid: await bot.invoke(ctx); return
 
-    is_dm = message.guild is None
-    content_lower = message.content.lower().strip()
-    
-    # Prefix/Suffix Trigger
-    has_trigger = content_lower.startswith("flexedai") or content_lower.endswith("flexedai")
-    mode = response_mode.get(str(message.channel.id), "stop")
-    is_pinged = bot.user.mentioned_in(message) and not message.mention_everyone
-    images = [a for a in message.attachments if a.content_type and a.content_type.startswith('image')]
+    is_dm = not msg.guild
+    txt = msg.content.lower().strip()
+    trigger = txt.startswith("flexedai") or txt.endswith("flexedai") or bot.user.mentioned_in(msg)
+    if not is_dm and MODES.get(str(msg.channel.id), "stop") == "stop" and not (trigger or msg.attachments): return
 
-    if not is_dm and mode == "stop" and not (is_pinged or images or has_trigger): return
-
-    tid = f"{message.channel.id}-{message.author.id}"
+    tid = f"{msg.channel.id}-{msg.author.id}"
     if tid not in thread_memory: thread_memory[tid] = deque(maxlen=6)
-
-    lang = channel_languages.get(str(message.channel.id), "English")
-    roles = [r.name for r in message.author.roles if r.name != "@everyone"] if not is_dm else ["DM User"]
-
-    system = (
-        f"You are FlexedAI. Mirror the user's tone/energy EXACTLY. Concise. Respond in {lang}.\n"
-        f"USER: {message.author.display_name} (@{message.author.name}), ID: {message.author.id}, Roles: {', '.join(roles)}.\n"
-        f"LOC: Server: {message.guild.name if not is_dm else 'DMs'}, Channel: {message.channel.name if not is_dm else 'DMs'}."
-    )
-
+    
+    sys_p = f"Mirror user tone. Concise. Lang: {LANGS.get(str(msg.channel.id), 'English')}. User: {msg.author.name} (ID: {msg.author.id})."
+    
     try:
-        async with message.channel.typing():
-            user_text = message.content or "Describe image."
-            payload = [{"type": "text", "text": user_text}]
-            for img in images: payload.append({"type": "image_url", "image_url": {"url": img.url}})
+        async with msg.channel.typing():
+            payload = [{"type": "text", "text": msg.content or "Analyze"}]
+            for a in msg.attachments:
+                if a.content_type.startswith("image"): payload.append({"type": "image_url", "image_url": {"url": a.url}})
             
-            msgs = [{"role": "system", "content": system}]
-            for m in thread_memory[tid]: msgs.append(m)
-            msgs.append({"role": "user", "content": payload})
-            
-            res = await client.chat.completions.create(model=MODEL_NAME, messages=msgs, temperature=0.8)
-            output = res.choices[0].message.content
-            if output:
-                await message.reply(output)
-                thread_memory[tid].append({"role": "user", "content": user_text})
-                thread_memory[tid].append({"role": "assistant", "content": output})
-                global interaction_logs
-                interaction_logs.append({
-                    "timestamp": time.time(), "guild_id": message.guild.id if not is_dm else None,
-                    "channel_id": message.channel.id, "user_name": message.author.name,
-                    "user_id": message.author.id, "prompt": user_text, "response": output
-                })
-                interaction_logs = save_interaction_logs(interaction_logs)
-    except Exception as e: print(f"AI Error: {e}")
+            hist = [{"role": "system", "content": sys_p}]
+            for h in thread_memory[tid]: hist.append(h)
+            hist.append({"role": "user", "content": payload})
+
+            resp = await client.chat.completions.create(model=MODEL_NAME, messages=hist)
+            out = resp.choices[0].message.content
+            if out:
+                await msg.reply(out)
+                thread_memory[tid].append({"role": "user", "content": msg.content})
+                thread_memory[tid].append({"role": "assistant", "content": out})
+                interaction_logs.append({"timestamp": time.time(), "user_id": msg.author.id, "prompt": msg.content, "response": out})
+    except Exception as e: print(f"Error: {e}")
 
 bot.run(DISCORD_TOKEN)
