@@ -3,9 +3,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 import os
 import time
-import datetime
 import json
-import re
 from groq import AsyncGroq 
 from collections import deque
 
@@ -78,23 +76,19 @@ thread_memory = {}
 
 # --- FIXED PREFIX LOGIC ---
 def get_prefix(bot, message):
-    # If in DMs, use the owner's custom prefix or default to '!'
     if not message.guild:
         return prefixes.get(str(message.author.id), "!")
-    # In guilds, use set prefix or default to '/'
-    return prefixes.get(str(message.guild.id), "/")
+    # Falling back to "!" if no prefix is set, as "/" often conflicts with Slash Commands
+    return prefixes.get(str(message.guild.id), "!")
 
 class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
-        # Pass the callable function to command_prefix
         super().__init__(command_prefix=get_prefix, intents=intents, help_command=None)
         self.start_time = time.time()
 
     async def setup_hook(self):
         self.daily_backup.start()
-        # This will sync commands globally on startup if needed, 
-        # but we use the manual !sync for immediate changes.
         print(f"✅ {self.user} Online | All Systems Go")
 
     @tasks.loop(hours=24)
@@ -121,27 +115,30 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     elif isinstance(error, app_commands.CheckFailure):
         await interaction.response.send_message("❌ Restricted command.", ephemeral=True)
 
-# --- 👑 OWNER COMMANDS (SYNC & LOGS) ---
+# --- 👑 OWNER COMMANDS ---
 
-@bot.command(name="sync", help="Force syncs slash commands globally.")
+@bot.command(name="sync")
 @commands.is_owner()
 async def sync_commands(ctx):
-    # Using bot.command (prefix) instead of hybrid to avoid sync recursion issues
+    """Force syncs slash commands globally."""
     async with ctx.typing():
         try:
+            # Syncing globally
             synced = await bot.tree.sync()
             await ctx.send(f"🚀 **Successfully synced {len(synced)} slash commands globally.**")
         except Exception as e:
             await ctx.send(f"❌ Sync failed: `{e}`")
 
-@bot.command(name="messages", help="Exports 24h interaction JSON.")
+@bot.command(name="messages")
 @commands.is_owner()
 @commands.dm_only()
 async def messages_log(ctx):
+    """Exports 24h interaction JSON."""
     now = time.time()
     day_ago = now - 86400
     recent = [l for l in interaction_logs if l['timestamp'] > day_ago]
     output = {"servers": {}, "dm": {}}
+    
     for entry in recent:
         user_key = f"{entry['user_name']}/{entry['user_id']}"
         if entry.get('guild_id'):
@@ -153,7 +150,9 @@ async def messages_log(ctx):
             output["servers"][s_id][c_id][user_key]["prompt"].append(entry["prompt"])
             output["servers"][s_id][c_id][user_key]["response"].append(entry["response"])
         else:
-            if user_key not in output["dm"]: output_data["dm"][user_key] = {"prompt": [], "response": []}
+            # FIXED: Corrected reference from output_data to output
+            if user_key not in output["dm"]: 
+                output["dm"][user_key] = {"prompt": [], "response": []}
             output["dm"][user_key]["prompt"].append(entry["prompt"])
             output["dm"][user_key]["response"].append(entry["response"])
 
@@ -167,10 +166,9 @@ async def messages_log(ctx):
 @bot.hybrid_command(name="prefix", description="Set a custom prefix for this server/DM.")
 @app_commands.describe(new_prefix="The new character to use for commands")
 async def set_prefix_cmd(ctx, new_prefix: str):
-    # Allow admins or the bot owner to change prefix
     if not (ctx.author.guild_permissions.administrator or ctx.author.id == OWNER_ID):
         return await ctx.reply("❌ You need Administrator permissions to change the prefix.")
-    
+
     target_id = str(ctx.guild.id if ctx.guild else ctx.author.id)
     prefixes[target_id] = new_prefix
     save_data()
@@ -192,25 +190,26 @@ async def lang_set(ctx, language: app_commands.Choice[str]):
 
 @bot.event
 async def on_message(message):
-    if message.author.bot or message.author.id in BLACKLISTED_USERS: return
-    
-    # Check for commands
+    if message.author.bot or message.author.id in BLACKLISTED_USERS: 
+        return
+
+    # 1. Check for prefix commands first
     ctx = await bot.get_context(message)
     if ctx.valid:
         await bot.invoke(ctx)
-        return
+        return # Important: stop here so AI doesn't process the command text
 
+    # 2. AI Logic (Only triggers if it's not a command)
     is_dm = message.guild is None
     content_lower = message.content.lower().strip()
-    
-    # TRIGGER: Prefix or Suffix check
+
     has_trigger = content_lower.startswith("flexedai") or content_lower.endswith("flexedai")
     mode = response_mode.get(str(message.channel.id), "stop")
     is_pinged = bot.user.mentioned_in(message) and not message.mention_everyone
     images = [a for a in message.attachments if a.content_type and a.content_type.startswith('image')]
 
-    # DM Always | Server Mode/Trigger check
-    if not is_dm and mode == "stop" and not (is_pinged or images or has_trigger): return
+    if not is_dm and mode == "stop" and not (is_pinged or images or has_trigger): 
+        return
 
     tid = f"{message.channel.id}-{message.author.id}"
     if tid not in thread_memory: thread_memory[tid] = deque(maxlen=6)
@@ -229,18 +228,18 @@ async def on_message(message):
             user_text = message.content or "Analyze image."
             payload = [{"type": "text", "text": user_text}]
             for img in images: payload.append({"type": "image_url", "image_url": {"url": img.url}})
-            
+
             msgs = [{"role": "system", "content": system}]
             for m in thread_memory[tid]: msgs.append(m)
             msgs.append({"role": "user", "content": payload})
-            
+
             res = await client.chat.completions.create(model=MODEL_NAME, messages=msgs, temperature=0.8)
             output = res.choices[0].message.content
             if output:
                 await message.reply(output)
                 thread_memory[tid].append({"role": "user", "content": user_text})
                 thread_memory[tid].append({"role": "assistant", "content": output})
-                
+
                 global interaction_logs
                 interaction_logs.append({
                     "timestamp": time.time(), "guild_id": message.guild.id if not is_dm else None,
@@ -248,8 +247,7 @@ async def on_message(message):
                     "user_id": message.author.id, "prompt": user_text, "response": output
                 })
                 interaction_logs = save_interaction_logs(interaction_logs)
-    except Exception as e: print(f"AI Error: {e}")
-
-# (Note: All security, stats, uptime, blacklist, strikes, and help commands are still active in the bot's internal registry)
+    except Exception as e: 
+        print(f"AI Error: {e}")
 
 bot.run(DISCORD_TOKEN)
