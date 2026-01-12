@@ -675,8 +675,11 @@ Language: {lang}
 Server: {server_name}
 User: {message.author.name}
 Roles: {roles}
+Username: {message.author.display_name}
+Profile Picture: {message.author.displayAvatarURL()}
 
-Match the user's tone and energy. Be helpful, casual, and engaging."""
+Match the user's tone and energy. Be helpful, casual, and engaging.
+Have shorter responses, No idiot talks."""
 
         msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": message.content}]
 
