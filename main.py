@@ -258,7 +258,158 @@ async def server_list(ctx):
     
     await ctx.send(file=discord.File(fname))
     os.remove(fname)
-
+@bot.command(name="data", description="Owner: Complete bot configuration data.")
+@commands.is_owner()
+async def bot_data(ctx):
+    if not isinstance(ctx.channel, discord.DMChannel):
+        await ctx.send("⚠️ This command must be run in DMs for security.")
+        return
+    
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    # Build comprehensive data export
+    data = {
+        "export_timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        "bot_info": {
+            "total_servers": len(bot.guilds),
+            "total_users_tracked": 0,
+            "total_interactions_logged": 0
+        },
+        "users": {
+            "blacklisted": [],
+            "strikes": [],
+            "all_tracked": []
+        },
+        "banned_words": [],
+        "server_configurations": {},
+        "channel_configurations": {},
+        "statistics": {
+            "total_strikes_issued": 0,
+            "total_blacklists": 0,
+            "total_banned_words": 0,
+            "channels_in_start_mode": 0,
+            "channels_in_stop_mode": 0
+        }
+    }
+    
+    # Get all users with strikes or blacklisted
+    c.execute("SELECT user_id, strikes, blacklisted FROM users")
+    users = c.fetchall()
+    data['bot_info']['total_users_tracked'] = len(users)
+    
+    for user in users:
+        user_data = {
+            "user_id": user[0],
+            "strikes": user[1],
+            "blacklisted": bool(user[2])
+        }
+        data['users']['all_tracked'].append(user_data)
+        
+        if user[2] == 1:  # blacklisted
+            data['users']['blacklisted'].append(user[0])
+            data['statistics']['total_blacklists'] += 1
+        
+        if user[1] > 0:  # has strikes
+            data['users']['strikes'].append({
+                "user_id": user[0],
+                "strike_count": user[1]
+            })
+            data['statistics']['total_strikes_issued'] += user[1]
+    
+    # Get banned words
+    c.execute("SELECT word FROM banned_words")
+    banned = c.fetchall()
+    data['banned_words'] = [w[0] for w in banned]
+    data['statistics']['total_banned_words'] = len(data['banned_words'])
+    
+    # Get all settings grouped by server/channel
+    c.execute("SELECT id, prefix, language, mode FROM settings")
+    settings = c.fetchall()
+    
+    for setting in settings:
+        setting_id = setting[0]
+        prefix = setting[1] if setting[1] else "!"
+        language = setting[2] if setting[2] else "English"
+        mode = setting[3] if setting[3] else "stop"
+        
+        # Try to determine if it's a guild or channel
+        try:
+            # Check if it's a guild ID
+            guild = bot.get_guild(int(setting_id))
+            if guild:
+                data['server_configurations'][guild.name] = {
+                    "guild_id": setting_id,
+                    "prefix": prefix,
+                    "member_count": guild.member_count
+                }
+            else:
+                # It's a channel
+                channel = bot.get_channel(int(setting_id))
+                if channel:
+                    guild_name = channel.guild.name if channel.guild else "DM"
+                    data['channel_configurations'][f"{guild_name} > {channel.name}"] = {
+                        "channel_id": setting_id,
+                        "guild_id": str(channel.guild.id) if channel.guild else "DM",
+                        "language": language,
+                        "mode": mode
+                    }
+                    
+                    if mode == "start":
+                        data['statistics']['channels_in_start_mode'] += 1
+                    else:
+                        data['statistics']['channels_in_stop_mode'] += 1
+                else:
+                    # Orphaned setting (guild/channel no longer exists)
+                    data['channel_configurations'][f"Unknown Channel {setting_id}"] = {
+                        "channel_id": setting_id,
+                        "language": language,
+                        "mode": mode,
+                        "note": "Channel/Guild not found - may have been deleted"
+                    }
+        except:
+            pass
+    
+    # Get total interaction count
+    c.execute("SELECT COUNT(*) FROM interaction_logs")
+    interaction_count = c.fetchone()[0]
+    data['bot_info']['total_interactions_logged'] = interaction_count
+    
+    # Get admin logs (last 100)
+    c.execute("SELECT log, timestamp FROM admin_logs ORDER BY timestamp DESC LIMIT 100")
+    logs = c.fetchall()
+    data['admin_logs_recent'] = [{"log": l[0], "timestamp": l[1]} for l in logs]
+    
+    conn.close()
+    
+    # Create filename and export
+    timestamp = int(time.time())
+    filename = f"bot_data_complete_{timestamp}.json"
+    
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=2)
+    
+    # Create summary embed
+    embed = discord.Embed(
+        title="🗄️ Complete Bot Configuration Data",
+        description=f"**Export Time:** {data['export_timestamp']}",
+        color=discord.Color.purple()
+    )
+    
+    embed.add_field(name="📊 Servers", value=data['bot_info']['total_servers'], inline=True)
+    embed.add_field(name="👥 Users Tracked", value=data['bot_info']['total_users_tracked'], inline=True)
+    embed.add_field(name="💬 Total Interactions", value=data['bot_info']['total_interactions_logged'], inline=True)
+    
+    embed.add_field(name="🚫 Blacklisted Users", value=data['statistics']['total_blacklists'], inline=True)
+    embed.add_field(name="⚡ Total Strikes Issued", value=data['statistics']['total_strikes_issued'], inline=True)
+    embed.add_field(name="🔇 Banned Words", value=data['statistics']['total_banned_words'], inline=True)
+    
+    embed.add_field(name="🟢 Channels (Start Mode)", value=data['statistics']['channels_in_start_mode'], inline=True)
+    embed.add_field(name="🔴 Channels (Stop Mode)", value=data['statistics']['channels_in_stop_mode'], inline=True)
+    embed.add_field(name="⚙️ Server Configs", value=len(data['server_configurations']), inline=True)
+    
+    await ctx.send(embed=embed, file=discord.File(filename))
+    os.remove(filename)
 @bot.hybrid_command(name="backup", description="Owner: Trigger immediate backup.")
 @commands.is_owner()
 async def manual_backup(ctx):
