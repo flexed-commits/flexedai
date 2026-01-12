@@ -73,20 +73,16 @@ def migrate_json_to_db():
     for user_id, strikes in data.get('violations', {}).items():
         clean_id = user_id.replace('<@', '').replace('>', '')
         blacklisted = 1 if strikes >= 3 else 0
-        c.execute("INSERT OR REPLACE INTO users (user_id, strikes, blacklisted) VALUES (?, ?, ?)", 
-                  (clean_id, strikes, blacklisted))
+        c.execute("INSERT OR REPLACE INTO users (user_id, strikes, blacklisted) VALUES (?, ?, ?)", (clean_id, strikes, blacklisted))
     
     for channel_id, lang in data.get('languages', {}).items():
-        c.execute("INSERT OR REPLACE INTO settings (id, language) VALUES (?, ?)", 
-                  (str(channel_id), lang))
+        c.execute("INSERT OR REPLACE INTO settings (id, language) VALUES (?, ?)", (str(channel_id), lang))
     
     for guild_id, prefix in data.get('prefixes', {}).items():
-        c.execute("INSERT OR REPLACE INTO settings (id, prefix) VALUES (?, ?)", 
-                  (str(guild_id), prefix))
+        c.execute("INSERT OR REPLACE INTO settings (id, prefix) VALUES (?, ?)", (str(guild_id), prefix))
     
     for channel_id, mode in data.get('response_mode', {}).items():
-        c.execute("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, ?)", 
-                  (str(channel_id), mode))
+        c.execute("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, ?)", (str(channel_id), mode))
     
     for log in data.get('admin_logs', []):
         c.execute("INSERT INTO admin_logs (log) VALUES (?)", (log,))
@@ -109,11 +105,7 @@ def migrate_interaction_logs():
     c = conn.cursor()
     
     for log in logs:
-        c.execute("""INSERT INTO interaction_logs 
-                     (timestamp, guild_id, channel_id, user_name, user_id, prompt, response) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                  (log['timestamp'], str(log.get('guild_id', 'DM')), str(log['channel_id']), 
-                   log['user_name'], str(log['user_id']), log['prompt'], log['response']))
+        c.execute("""INSERT INTO interaction_logs (timestamp, guild_id, channel_id, user_name, user_id, prompt, response) VALUES (?, ?, ?, ?, ?, ?, ?)""", (log['timestamp'], str(log.get('guild_id', 'DM')), str(log['channel_id']), log['user_name'], str(log['user_id']), log['prompt'], log['response']))
     
     conn.commit()
     conn.close()
@@ -152,15 +144,7 @@ def export_db_to_json():
     cutoff = time.time() - 86400
     c.execute("SELECT * FROM interaction_logs WHERE timestamp > ? ORDER BY timestamp DESC", (cutoff,))
     interactions = c.fetchall()
-    data['interaction_logs'] = [{
-        "timestamp": i[0],
-        "guild_id": i[1],
-        "channel_id": i[2],
-        "user_name": i[3],
-        "user_id": i[4],
-        "prompt": i[5],
-        "response": i[6]
-    } for i in interactions]
+    data['interaction_logs'] = [{"timestamp": i[0], "guild_id": i[1], "channel_id": i[2], "user_name": i[3], "user_id": i[4], "prompt": i[5], "response": i[6]} for i in interactions]
     
     conn.close()
     return data
@@ -191,26 +175,20 @@ bot = FlexedBot()
 async def daily_backup_task():
     try:
         owner = await bot.fetch_user(OWNER_ID)
-        
         db_data = export_db_to_json()
         timestamp = int(time.time())
-        
         filename = f"backup_{timestamp}.json"
+        
         with open(filename, "w") as f:
             json.dump(db_data, f, indent=2)
         
-        embed = discord.Embed(
-            title="📦 24-Hour Database Backup",
-            description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            color=discord.Color.green()
-        )
+        embed = discord.Embed(title="📦 24-Hour Database Backup", description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", color=discord.Color.green())
         embed.add_field(name="Users", value=len(db_data['users']), inline=True)
         embed.add_field(name="Banned Words", value=len(db_data['banned_words']), inline=True)
         embed.add_field(name="Interactions (24h)", value=len(db_data['interaction_logs']), inline=True)
         
         await owner.send(embed=embed, file=discord.File(filename))
         os.remove(filename)
-        
         print(f"✅ Backup sent to owner at {datetime.datetime.now()}")
     except Exception as e:
         print(f"❌ Backup failed: {e}")
@@ -231,20 +209,10 @@ async def sync(ctx):
 @commands.is_owner()
 async def messages(ctx):
     cutoff = time.time() - 86400
-    rows = db_query("SELECT * FROM interaction_logs WHERE timestamp > ? ORDER BY timestamp DESC", 
-                    (cutoff,), fetch=True)
-    
-    data = [{
-        "timestamp": r[0],
-        "guild_id": r[1],
-        "channel_id": r[2],
-        "user_name": r[3],
-        "user_id": r[4],
-        "prompt": r[5],
-        "response": r[6]
-    } for r in rows]
-    
+    rows = db_query("SELECT * FROM interaction_logs WHERE timestamp > ? ORDER BY timestamp DESC", (cutoff,), fetch=True)
+    data = [{"timestamp": r[0], "guild_id": r[1], "channel_id": r[2], "user_name": r[3], "user_id": r[4], "prompt": r[5], "response": r[6]} for r in rows]
     fname = f"logs_{int(time.time())}.json"
+    
     with open(fname, "w") as f: 
         json.dump(data, f, indent=2)
     
@@ -266,6 +234,7 @@ async def server_list(ctx):
     
     guilds = [{"id": str(g.id), "name": g.name, "member_count": g.member_count} for g in bot.guilds]
     fname = f"servers_{int(time.time())}.json"
+    
     with open(fname, "w") as f:
         json.dump(guilds, f, indent=2)
     
@@ -277,16 +246,12 @@ async def server_list(ctx):
 async def manual_backup(ctx):
     db_data = export_db_to_json()
     timestamp = int(time.time())
-    
     filename = f"manual_backup_{timestamp}.json"
+    
     with open(filename, "w") as f:
         json.dump(db_data, f, indent=2)
     
-    embed = discord.Embed(
-        title="📦 Manual Database Backup",
-        description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        color=discord.Color.blue()
-    )
+    embed = discord.Embed(title="📦 Manual Database Backup", description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", color=discord.Color.blue())
     embed.add_field(name="Users", value=len(db_data['users']), inline=True)
     embed.add_field(name="Banned Words", value=len(db_data['banned_words']), inline=True)
     embed.add_field(name="Interactions (24h)", value=len(db_data['interaction_logs']), inline=True)
@@ -319,10 +284,9 @@ async def add_strike(ctx, user_id: str, amount: int = 1):
     res = db_query("SELECT strikes FROM users WHERE user_id = ?", (user_id,), fetch=True)
     current_strikes = res[0][0] if res else 0
     new_strikes = current_strikes + amount
-    
     is_banned = 1 if new_strikes >= 3 else 0
-    db_query("INSERT OR REPLACE INTO users (user_id, strikes, blacklisted) VALUES (?, ?, ?)", 
-             (user_id, new_strikes, is_banned))
+    
+    db_query("INSERT OR REPLACE INTO users (user_id, strikes, blacklisted) VALUES (?, ?, ?)", (user_id, new_strikes, is_banned))
     
     log_msg = f"Strike to {user_id}. Total: {new_strikes}/3."
     if is_banned:
@@ -342,11 +306,9 @@ async def remove_strike(ctx, user_id: str, amount: int = 1):
     
     current_strikes = res[0][0]
     new_strikes = max(0, current_strikes - amount)
-    
     is_banned = 1 if new_strikes >= 3 else 0
     
-    db_query("UPDATE users SET strikes = ?, blacklisted = ? WHERE user_id = ?", 
-             (new_strikes, is_banned, user_id))
+    db_query("UPDATE users SET strikes = ?, blacklisted = ? WHERE user_id = ?", (new_strikes, is_banned, user_id))
     
     log_msg = f"Removed {amount} strike(s) from {user_id}. Total: {new_strikes}/3."
     if current_strikes >= 3 and new_strikes < 3:
@@ -474,8 +436,7 @@ async def forget(ctx):
 @bot.hybrid_command(name="searchlogs", description="Owner: Search interaction logs.")
 @commands.is_owner()
 async def search_logs(ctx, keyword: str):
-    rows = db_query("SELECT * FROM interaction_logs WHERE prompt LIKE ? OR response LIKE ? ORDER BY timestamp DESC LIMIT 20", 
-                    (f"%{keyword}%", f"%{keyword}%"), fetch=True)
+    rows = db_query("SELECT * FROM interaction_logs WHERE prompt LIKE ? OR response LIKE ? ORDER BY timestamp DESC LIMIT 20", (f"%{keyword}%", f"%{keyword}%"), fetch=True)
     
     if not rows:
         await ctx.send(f"❌ No results for `{keyword}`.")
@@ -508,10 +469,10 @@ async def on_message(message):
     if ctx.valid:
         return
 
-mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
-mode = mode_check[0][0] if mode_check else "stop"
+    mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
+    mode = mode_check[0][0] if mode_check else "stop"
     
-should_respond = False
+    should_respond = False
     
     if mode == "start":
         should_respond = True
@@ -556,10 +517,7 @@ Match the user's tone and energy. Be helpful, casual, and engaging."""
             bot.memory[tid].append({"role": "user", "content": message.content})
             bot.memory[tid].append({"role": "assistant", "content": reply})
             
-            db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                     (time.time(), str(message.guild.id) if message.guild else "DM", 
-                      str(message.channel.id), message.author.name, str(message.author.id), 
-                      message.content, reply))
+            db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", (time.time(), str(message.guild.id) if message.guild else "DM", str(message.channel.id), message.author.name, str(message.author.id), message.content, reply))
         except Exception as e:
             await message.reply(f"❌ Error: {str(e)}")
 
