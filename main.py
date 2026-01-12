@@ -511,7 +511,7 @@ async def on_message(message):
 mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
 mode = mode_check[0][0] if mode_check else "stop"
     
-    should_respond = False
+should_respond = False
     
     if mode == "start":
         should_respond = True
