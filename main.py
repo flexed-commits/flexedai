@@ -18,7 +18,6 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # Create tables
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         user_id TEXT PRIMARY KEY, 
         strikes INTEGER DEFAULT 0, 
@@ -55,7 +54,6 @@ def init_db():
     conn.close()
 
 def migrate_json_to_db():
-    """Migrate existing JSON data to SQLite database"""
     if not os.path.exists(JSON_FILE):
         print("⚠️ No bot_data.json found. Skipping migration.")
         return
@@ -66,50 +64,40 @@ def migrate_json_to_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # Migrate blacklist
     for user_id in data.get('blacklist', []):
         c.execute("INSERT OR IGNORE INTO users (user_id, blacklisted) VALUES (?, 1)", (str(user_id),))
     
-    # Migrate banned words
     for word in data.get('banned_words', []):
         c.execute("INSERT OR IGNORE INTO banned_words (word) VALUES (?)", (word.lower(),))
     
-    # Migrate violations (strikes)
     for user_id, strikes in data.get('violations', {}).items():
-        # Clean user_id format (remove <@> tags if present)
         clean_id = user_id.replace('<@', '').replace('>', '')
         blacklisted = 1 if strikes >= 3 else 0
         c.execute("INSERT OR REPLACE INTO users (user_id, strikes, blacklisted) VALUES (?, ?, ?)", 
                   (clean_id, strikes, blacklisted))
     
-    # Migrate language settings
     for channel_id, lang in data.get('languages', {}).items():
         c.execute("INSERT OR REPLACE INTO settings (id, language) VALUES (?, ?)", 
                   (str(channel_id), lang))
     
-    # Migrate prefixes
     for guild_id, prefix in data.get('prefixes', {}).items():
         c.execute("INSERT OR REPLACE INTO settings (id, prefix) VALUES (?, ?)", 
                   (str(guild_id), prefix))
     
-    # Migrate response modes
     for channel_id, mode in data.get('response_mode', {}).items():
         c.execute("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, ?)", 
                   (str(channel_id), mode))
     
-    # Migrate admin logs
     for log in data.get('admin_logs', []):
         c.execute("INSERT INTO admin_logs (log) VALUES (?)", (log,))
     
     conn.commit()
     conn.close()
     
-    # Backup and remove old JSON
     os.rename(JSON_FILE, f"{JSON_FILE}.backup")
     print(f"✅ Migrated bot_data.json → {DB_FILE}")
 
 def migrate_interaction_logs():
-    """Migrate interaction logs from JSON to database"""
     if not os.path.exists(INTERACTION_JSON):
         print("⚠️ No interaction_logs.json found. Skipping migration.")
         return
@@ -140,7 +128,43 @@ def db_query(query, params=(), fetch=False):
         conn.commit()
         return c.fetchall() if fetch else None
 
-# Initialize database and migrate
+def export_db_to_json():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    data = {}
+    
+    c.execute("SELECT * FROM users")
+    users = c.fetchall()
+    data['users'] = [{"user_id": u[0], "strikes": u[1], "blacklisted": bool(u[2])} for u in users]
+    
+    c.execute("SELECT word FROM banned_words")
+    data['banned_words'] = [w[0] for w in c.fetchall()]
+    
+    c.execute("SELECT * FROM settings")
+    settings = c.fetchall()
+    data['settings'] = [{"id": s[0], "prefix": s[1], "language": s[2], "mode": s[3]} for s in settings]
+    
+    c.execute("SELECT * FROM admin_logs ORDER BY timestamp DESC LIMIT 100")
+    logs = c.fetchall()
+    data['admin_logs'] = [{"log": l[0], "timestamp": l[1]} for l in logs]
+    
+    cutoff = time.time() - 86400
+    c.execute("SELECT * FROM interaction_logs WHERE timestamp > ? ORDER BY timestamp DESC", (cutoff,))
+    interactions = c.fetchall()
+    data['interaction_logs'] = [{
+        "timestamp": i[0],
+        "guild_id": i[1],
+        "channel_id": i[2],
+        "user_name": i[3],
+        "user_id": i[4],
+        "prompt": i[5],
+        "response": i[6]
+    } for i in interactions]
+    
+    conn.close()
+    return data
+
 init_db()
 migrate_json_to_db()
 migrate_interaction_logs()
@@ -157,11 +181,45 @@ class FlexedBot(commands.Bot):
         self.memory = {}
 
     async def setup_hook(self):
+        self.daily_backup.start()
         print(f"✅ {self.user} Online | All Commands Locked & Loaded")
+        print(f"🔄 Daily backup task started")
 
 bot = FlexedBot()
 
-# --- 👑 OWNER COMMANDS ---
+@tasks.loop(hours=24)
+async def daily_backup_task():
+    try:
+        owner = await bot.fetch_user(OWNER_ID)
+        
+        db_data = export_db_to_json()
+        timestamp = int(time.time())
+        
+        filename = f"backup_{timestamp}.json"
+        with open(filename, "w") as f:
+            json.dump(db_data, f, indent=2)
+        
+        embed = discord.Embed(
+            title="📦 24-Hour Database Backup",
+            description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Users", value=len(db_data['users']), inline=True)
+        embed.add_field(name="Banned Words", value=len(db_data['banned_words']), inline=True)
+        embed.add_field(name="Interactions (24h)", value=len(db_data['interaction_logs']), inline=True)
+        
+        await owner.send(embed=embed, file=discord.File(filename))
+        os.remove(filename)
+        
+        print(f"✅ Backup sent to owner at {datetime.datetime.now()}")
+    except Exception as e:
+        print(f"❌ Backup failed: {e}")
+
+@daily_backup_task.before_loop
+async def before_backup():
+    await bot.wait_until_ready()
+
+bot.daily_backup = daily_backup_task
 
 @bot.hybrid_command(name="sync", description="Owner: Sync slash commands.")
 @commands.is_owner()
@@ -172,7 +230,7 @@ async def sync(ctx):
 @bot.hybrid_command(name="messages", description="Owner: Export interaction logs (last 24h).")
 @commands.is_owner()
 async def messages(ctx):
-    cutoff = time.time() - 86400  # 24 hours ago
+    cutoff = time.time() - 86400
     rows = db_query("SELECT * FROM interaction_logs WHERE timestamp > ? ORDER BY timestamp DESC", 
                     (cutoff,), fetch=True)
     
@@ -214,7 +272,28 @@ async def server_list(ctx):
     await ctx.send(file=discord.File(fname))
     os.remove(fname)
 
-# --- BLACKLIST SYSTEM ---
+@bot.hybrid_command(name="backup", description="Owner: Trigger immediate backup.")
+@commands.is_owner()
+async def manual_backup(ctx):
+    db_data = export_db_to_json()
+    timestamp = int(time.time())
+    
+    filename = f"manual_backup_{timestamp}.json"
+    with open(filename, "w") as f:
+        json.dump(db_data, f, indent=2)
+    
+    embed = discord.Embed(
+        title="📦 Manual Database Backup",
+        description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="Users", value=len(db_data['users']), inline=True)
+    embed.add_field(name="Banned Words", value=len(db_data['banned_words']), inline=True)
+    embed.add_field(name="Interactions (24h)", value=len(db_data['interaction_logs']), inline=True)
+    
+    await ctx.send(embed=embed, file=discord.File(filename))
+    os.remove(filename)
+
 @bot.hybrid_group(name="blacklist", description="Owner: Manage user access.", invoke_without_command=True)
 @commands.is_owner()
 async def blacklist_group(ctx):
@@ -234,7 +313,6 @@ async def bl_rem(ctx, user_id: str):
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"User {user_id} removed from blacklist.",))
     await ctx.send(f"✅ `{user_id}` restored.")
 
-# --- STRIKE SYSTEM ---
 @bot.hybrid_command(name="addstrike", description="Owner: Add strikes to a user.")
 @commands.is_owner()
 async def add_strike(ctx, user_id: str, amount: int = 1):
@@ -263,9 +341,8 @@ async def remove_strike(ctx, user_id: str, amount: int = 1):
         return
     
     current_strikes = res[0][0]
-    new_strikes = max(0, current_strikes - amount)  # Prevent negative strikes
+    new_strikes = max(0, current_strikes - amount)
     
-    # If strikes drop below 3, remove blacklist
     is_banned = 1 if new_strikes >= 3 else 0
     
     db_query("UPDATE users SET strikes = ?, blacklisted = ? WHERE user_id = ?", 
@@ -292,7 +369,6 @@ async def clear_strike(ctx, user_id: str):
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"Strikes cleared for {user_id}.",))
     await ctx.send(f"✅ Strikes reset for `{user_id}`.")
 
-# --- WORD FILTER ---
 @bot.hybrid_group(name="bannedword", invoke_without_command=True)
 @commands.is_owner()
 async def bw_group(ctx):
@@ -315,7 +391,6 @@ async def bw_rem(ctx, word: str):
 async def list_words(ctx):
     await bw_group.invoke(ctx)
 
-# --- LOGS ---
 @bot.hybrid_command(name="logs", description="Owner: View recent moderation logs.")
 @commands.is_owner()
 async def view_logs(ctx):
@@ -329,7 +404,6 @@ async def clear_admin_logs(ctx):
     db_query("DELETE FROM admin_logs")
     await ctx.send("🗑️ Admin logs cleared.")
 
-# --- RESPONSE MODE ---
 @bot.hybrid_command(name="start", description="Set bot to respond to all messages in this channel.")
 async def start_mode(ctx):
     db_query("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, 'start')", (str(ctx.channel.id),))
@@ -340,7 +414,6 @@ async def stop_mode(ctx):
     db_query("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, 'stop')", (str(ctx.channel.id),))
     await ctx.send("✅ Bot will only respond to pings, 'flexedai', or images.")
 
-# --- LANGUAGE ---
 @bot.hybrid_command(name="lang", description="Set channel language.")
 async def set_lang(ctx):
     view = discord.ui.View()
@@ -356,18 +429,16 @@ async def set_lang(ctx):
     
     await ctx.send("🌐 Select a language:", view=view)
 
-# --- PREFIX ---
 @bot.hybrid_command(name="prefix", description="Change command prefix.")
 async def set_prefix(ctx, new_prefix: str):
     guild_or_user_id = str(ctx.guild.id if ctx.guild else ctx.author.id)
     db_query("INSERT OR REPLACE INTO settings (id, prefix) VALUES (?, ?)", (guild_or_user_id, new_prefix))
     await ctx.send(f"⚙️ Prefix updated to `{new_prefix}`")
 
-# --- UTILITIES ---
 @bot.hybrid_command(name="help", description="Display command center.")
 async def help_cmd(ctx):
     embed = discord.Embed(title="📡 FlexedAI Command Center", color=discord.Color.blue())
-    embed.add_field(name="👑 Owner", value="`sync`, `messages`, `clearlogs`, `server-list`", inline=False)
+    embed.add_field(name="👑 Owner", value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`", inline=False)
     embed.add_field(name="🛡️ Moderation", value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/logs`", inline=False)
     embed.add_field(name="⚙️ Settings", value="`/start`, `/stop`, `/lang`, `/prefix`", inline=False)
     embed.add_field(name="📊 Utilities", value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`, `/searchlogs`", inline=False)
@@ -413,18 +484,15 @@ async def search_logs(ctx, keyword: str):
     text = "\n".join([f"[{r[3]}]: {r[5][:50]}..." for r in rows])
     await ctx.send(f"```\n{text}\n```")
 
-# --- AI RESPONSE HANDLER ---
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    # Check blacklist
     user_check = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(message.author.id),), fetch=True)
     if user_check and user_check[0][0] == 1:
         return
 
-    # Censor banned words
     content_low = message.content.lower()
     banned = db_query("SELECT word FROM banned_words", fetch=True)
     if any(bw[0] in content_low for bw in banned):
@@ -435,33 +503,30 @@ async def on_message(message):
             pass
         return
 
-    # Process commands first
     await bot.process_commands(message)
     ctx = await bot.get_context(message)
     if ctx.valid:
         return
 
-    # Check response mode
-    mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
+mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
     mode = mode_check[0][0] if mode_check else "stop"
     
     should_respond = False
     
     if mode == "start":
         should_respond = True
-    elif bot.user.mentioned_in(message) or message.reference and message.reference.resolved.author == bot.user:
+    elif bot.user.mentioned_in(message) or (message.reference and message.reference.resolved and message.reference.resolved.author == bot.user):
         should_respond = True
     elif "flexedai" in content_low:
         should_respond = True
-    elif not message.guild:  # Always respond in DMs
+    elif not message.guild:
         should_respond = True
-    elif message.attachments:  # Respond to images
+    elif message.attachments:
         should_respond = True
     
     if not should_respond:
         return
 
-    # AI Response
     tid = f"{message.channel.id}-{message.author.id}"
     if tid not in bot.memory:
         bot.memory[tid] = deque(maxlen=6)
