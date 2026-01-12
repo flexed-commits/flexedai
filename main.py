@@ -205,6 +205,24 @@ async def sync(ctx):
     await bot.tree.sync()
     await ctx.send("🚀 Commands synced globally.")
 
+@bot.hybrid_command(name="allinteractions", description="Owner: Export ALL interaction logs.")
+@commands.is_owner()
+async def all_interactions(ctx):
+    rows = db_query("SELECT * FROM interaction_logs ORDER BY timestamp DESC", fetch=True)
+    
+    if not rows:
+        await ctx.send("❌ No interaction logs found.")
+        return
+    
+    data = [{"timestamp": r[0], "guild_id": r[1], "channel_id": r[2], "user_name": r[3], "user_id": r[4], "prompt": r[5], "response": r[6]} for r in rows]
+    fname = f"all_logs_{int(time.time())}.json"
+    
+    with open(fname, "w") as f: 
+        json.dump(data, f, indent=2)
+    
+    await ctx.send(f"📊 Exported {len(data)} total interactions.", file=discord.File(fname))
+    os.remove(fname)
+
 @bot.hybrid_command(name="messages", description="Owner: Export interaction logs (last 24h).")
 @commands.is_owner()
 async def messages(ctx):
