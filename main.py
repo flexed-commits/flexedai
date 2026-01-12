@@ -410,6 +410,8 @@ async def bot_data(ctx):
     
     await ctx.send(embed=embed, file=discord.File(filename))
     os.remove(filename)
+    
+    print(f"✅ Complete data export sent to owner at {datetime.datetime.now()}")
 @bot.hybrid_command(name="backup", description="Owner: Trigger immediate backup.")
 @commands.is_owner()
 async def manual_backup(ctx):
