@@ -715,12 +715,17 @@ async def on_message(message):
         user_content, was_truncated = truncate_message(message.content)
         
         system = f"""You are FlexedAI, a smart Discord bot. 
+Basic Info about configuration, user and server: 
 Language: {lang}
 Server: {server_name}
 Username: {message.author.name}
 Roles: {roles}
 Display Name: {message.author.display_name}
 Profile Picture: {message.author.display_avatar.url}
+Current Channel: <#{ctx.channel.id}>
+
+Bot's Info:
+Display Name: 
 
 Match the user's tone and energy. Be helpful, casual, and engaging.
 Have shorter responses, No idiot talks."""
