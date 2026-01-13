@@ -725,10 +725,15 @@ Profile Picture: {message.author.display_avatar.url}
 Current Channel: <#{ctx.channel.id}>
 
 Bot's Info:
-Display Name: 
+Bot's Display Name: {bot.user.display_name}
+Bot's Username: {bot.user.name}
+Bot ID: {bot.user.id}
+Bot's Server Roles: {ctx.guild.me.roles}
+Bot's Avatar: {bot.user.display_avatar.url}
 
 Match the user's tone and energy. Be helpful, casual, and engaging.
-Have shorter responses, No idiot talks."""
+Have shorter responses, No idiot talks.
+Just don't make silly mistakes. Try to be engaging not annoying."""
 
         msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
 
