@@ -17,6 +17,13 @@ INTERACTION_JSON = "interaction_logs.json"
 MAX_MESSAGE_LENGTH = 2000
 MAX_INPUT_TOKENS = 8000  # Conservative limit for input
 
+# Available languages constant
+AVAILABLE_LANGUAGES = [
+    "English", "Hindi", "Hinglish", "Spanish", "French", 
+    "German", "Portuguese", "Italian", "Japanese", "Korean",
+    "Chinese", "Russian", "Arabic", "Turkish", "Dutch"
+]
+
 # --- DATABASE SETUP ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -251,6 +258,90 @@ async def before_backup():
 
 bot.daily_backup = daily_backup_task
 
+# Language Select View (Dropdown for slash command)
+class LanguageSelectView(discord.ui.View):
+    def __init__(self, channel_id, author_id):
+        super().__init__(timeout=60)
+        self.channel_id = channel_id
+        self.author_id = author_id
+        self.add_item(LanguageSelect(channel_id, author_id))
+
+class LanguageSelect(discord.ui.Select):
+    def __init__(self, channel_id, author_id):
+        self.channel_id = channel_id
+        self.author_id = author_id
+        
+        options = [
+            discord.SelectOption(label=lang, value=lang, emoji="🌐")
+            for lang in AVAILABLE_LANGUAGES
+        ]
+        
+        super().__init__(
+            placeholder="Choose a language...",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Only the command user can select a language.", ephemeral=True)
+            return
+        
+        selected_lang = self.values[0]
+        db_query("INSERT OR REPLACE INTO settings (id, language) VALUES (?, ?)", (str(self.channel_id), selected_lang))
+        
+        await interaction.response.send_message(f"🌐 Language set to **{selected_lang}**.", ephemeral=True)
+        self.view.stop()
+
+# Language Button View (for prefix command)
+class LanguageButtonView(discord.ui.View):
+    def __init__(self, channel_id, author_id, owner_id):
+        super().__init__(timeout=120)
+        self.channel_id = channel_id
+        self.author_id = author_id
+        self.owner_id = owner_id
+        self.message = None
+        
+        # Create buttons in rows (5 per row max)
+        for i, lang in enumerate(AVAILABLE_LANGUAGES):
+            button = discord.ui.Button(
+                label=lang,
+                style=discord.ButtonStyle.primary,
+                custom_id=f"lang_{lang}",
+                row=i // 5  # Distribute across rows
+            )
+            button.callback = self.create_callback(lang)
+            self.add_item(button)
+    
+    def create_callback(self, lang):
+        async def callback(interaction: discord.Interaction):
+            # Check if user is admin or owner
+            if interaction.user.id != self.owner_id:
+                if not interaction.guild or not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message("❌ Only admins and bot owner can change language settings.", ephemeral=True)
+                    return
+            
+            # Set the language
+            db_query("INSERT OR REPLACE INTO settings (id, language) VALUES (?, ?)", (str(self.channel_id), lang))
+            
+            # Disable all buttons
+            for item in self.children:
+                item.disabled = True
+            
+            # Update the message with disabled buttons
+            await interaction.response.edit_message(
+                content=f"🌐 Language set to **{lang}** by {interaction.user.mention}.",
+                view=self
+            )
+            
+            # Send ephemeral confirmation
+            await interaction.followup.send(f"✅ Language set to **{lang}**.", ephemeral=True)
+            
+            self.stop()
+        
+        return callback
+
 @bot.hybrid_command(name="sync", description="Owner: Sync slash commands.")
 @commands.is_owner()
 async def sync(ctx):
@@ -259,6 +350,7 @@ async def sync(ctx):
 
 @bot.hybrid_command(name="allinteractions", description="Owner: Export ALL interaction logs.")
 @commands.is_owner()
+@commands.dm_only()
 async def all_interactions(ctx):
     rows = db_query("SELECT * FROM interaction_logs ORDER BY timestamp DESC", fetch=True)
 
@@ -277,6 +369,7 @@ async def all_interactions(ctx):
 
 @bot.hybrid_command(name="messages", description="Owner: Export interaction logs (last 24h).")
 @commands.is_owner()
+@commands.dm_only()
 async def messages(ctx):
     cutoff = time.time() - 86400
     rows = db_query("SELECT * FROM interaction_logs WHERE timestamp > ? ORDER BY timestamp DESC", (cutoff,), fetch=True)
@@ -297,11 +390,8 @@ async def clear_logs(ctx):
 
 @bot.command(name="server-list", description="Owner: Export server list.")
 @commands.is_owner()
+@commands.dm_only()
 async def server_list(ctx):
-    if not isinstance(ctx.channel, discord.DMChannel):
-        await ctx.send("⚠️ This command must be run in DMs.")
-        return
-
     guilds = [{"id": str(g.id), "name": g.name, "member_count": g.member_count} for g in bot.guilds]
     fname = f"servers_{int(time.time())}.json"
 
@@ -310,13 +400,11 @@ async def server_list(ctx):
 
     await ctx.send(file=discord.File(fname))
     os.remove(fname)
+# Part 2 of 2
 @bot.command(name="data", description="Owner: Complete bot configuration data.")
 @commands.is_owner()
+@commands.dm_only()
 async def bot_data(ctx):
-    if not isinstance(ctx.channel, discord.DMChannel):
-        await ctx.send("⚠️ This command must be run in DMs for security.")
-        return
-
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
@@ -479,12 +567,14 @@ async def blacklist_group(ctx):
     await ctx.send(f"📋 **Blacklisted Users:** `{ids}`")
 
 @blacklist_group.command(name="add")
+@commands.is_owner()
 async def bl_add(ctx, user_id: str):
     db_query("INSERT OR REPLACE INTO users (user_id, blacklisted) VALUES (?, 1)", (user_id,))
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"User {user_id} BLACKLISTED.",))
     await ctx.send(f"🚫 `{user_id}` has been blacklisted.")
 
 @blacklist_group.command(name="remove")
+@commands.is_owner()
 async def bl_rem(ctx, user_id: str):
     db_query("UPDATE users SET blacklisted = 0 WHERE user_id = ?", (user_id,))
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"User {user_id} removed from blacklist.",))
@@ -551,11 +641,13 @@ async def bw_group(ctx):
     await ctx.send(f"📋 **Banned Words:** `{words}`")
 
 @bw_group.command(name="add")
+@commands.is_owner()
 async def bw_add(ctx, word: str):
     db_query("INSERT OR IGNORE INTO banned_words VALUES (?)", (word.lower(),))
     await ctx.send(f"🚫 `{word}` added to filter.")
 
 @bw_group.command(name="remove")
+@commands.is_owner()
 async def bw_rem(ctx, word: str):
     db_query("DELETE FROM banned_words WHERE word = ?", (word.lower(),))
     await ctx.send(f"✅ `{word}` removed from filter.")
@@ -588,20 +680,44 @@ async def stop_mode(ctx):
     db_query("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, 'stop')", (str(ctx.channel.id),))
     await ctx.send("✅ Bot will only respond to pings, 'flexedai', or images.")
 
-@bot.hybrid_command(name="lang", description="Set channel language.")
-async def set_lang(ctx):
-    view = discord.ui.View()
-
-    async def lang_callback(interaction, lang):
+# Slash command version with dropdown
+@bot.hybrid_command(name="lang", description="Set channel language (Admin only).")
+@commands.has_permissions(administrator=True)
+async def set_lang_slash(ctx, lang: str = None):
+    # If called as slash command without parameter, show dropdown
+    if ctx.interaction and lang is None:
+        view = LanguageSelectView(ctx.channel.id, ctx.author.id)
+        await ctx.send("🌐 Select a language:", view=view, ephemeral=True)
+        return
+    
+    # If lang parameter provided (for slash command)
+    if lang:
+        if lang not in AVAILABLE_LANGUAGES:
+            await ctx.send(f"❌ Invalid language. Available: {', '.join(AVAILABLE_LANGUAGES)}", ephemeral=True)
+            return
+        
         db_query("INSERT OR REPLACE INTO settings (id, language) VALUES (?, ?)", (str(ctx.channel.id), lang))
-        await interaction.response.send_message(f"🌐 Language set to **{lang}**.", ephemeral=True)
+        await ctx.send(f"🌐 Language set to **{lang}**.", ephemeral=True)
+        return
+    
+    # If called as prefix command (!lang), show buttons (admin/owner only)
+    if not ctx.interaction:
+        # Check if user is admin or owner
+        if ctx.author.id != OWNER_ID:
+            if not ctx.guild or not ctx.author.guild_permissions.administrator:
+                await ctx.send("❌ Only admins and bot owner can change language settings.")
+                return
+        
+        view = LanguageButtonView(ctx.channel.id, ctx.author.id, OWNER_ID)
+        await ctx.send(f"🌐 **Available Languages:** {', '.join(AVAILABLE_LANGUAGES)}\n\nClick a button below to select:", view=view)
 
-    for lang in ["English", "Hindi", "Hinglish", "Spanish", "French"]:
-        btn = discord.ui.Button(label=lang, style=discord.ButtonStyle.primary)
-        btn.callback = lambda i, l=lang: lang_callback(i, l)
-        view.add_item(btn)
-
-    await ctx.send("🌐 Select a language:", view=view)
+# Autocomplete for slash command
+@set_lang_slash.autocomplete('lang')
+async def lang_autocomplete(interaction: discord.Interaction, current: str):
+    return [
+        discord.app_commands.Choice(name=lang, value=lang)
+        for lang in AVAILABLE_LANGUAGES if current.lower() in lang.lower()
+    ][:25]  # Discord limits to 25 choices
 
 @bot.hybrid_command(name="prefix", description="Change command prefix.")
 async def set_prefix(ctx, new_prefix: str):
@@ -612,7 +728,7 @@ async def set_prefix(ctx, new_prefix: str):
 @bot.hybrid_command(name="help", description="Display command center.")
 async def help_cmd(ctx):
     embed = discord.Embed(title="📡 FlexedAI Command Center", color=discord.Color.blue())
-    embed.add_field(name="👑 Owner", value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`", inline=False)
+    embed.add_field(name="👑 Owner", value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", inline=False)
     embed.add_field(name="🛡️ Moderation", value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/logs`", inline=False)
     embed.add_field(name="⚙️ Settings", value="`/start`, `/stop`, `/lang`, `/prefix`", inline=False)
     embed.add_field(name="📊 Utilities", value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`, `/searchlogs`", inline=False)
@@ -716,7 +832,7 @@ async def on_message(message):
         
         system = f"""You are FlexedAI, a smart Discord bot. 
 Basic Info about configuration, user and server: 
-Language: {lang}
+Language: {lang} (STRICT: You MUST respond in {lang} language ONLY. Do not switch languages unless the user explicitly uses the /lang or !lang command to change it.)
 Server: {server_name}
 Username: {message.author.name}
 Roles: {roles}
@@ -728,7 +844,7 @@ Bot's Info:
 Bot's Display Name: {bot.user.display_name}
 Bot's Username: {bot.user.name}
 Bot ID: {bot.user.id}
-Bot's Server Roles: {ctx.guild.me.roles}
+Bot's Server Roles: {ctx.guild.me.roles if ctx.guild else 'N/A'}
 Bot's Avatar: {bot.user.display_avatar.url}
 
 Match the user's tone and energy. Be helpful, casual, and engaging.
