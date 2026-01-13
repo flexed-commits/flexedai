@@ -1131,7 +1131,8 @@ Bot's Avatar: {bot.user.display_avatar.url}
 Match the user's tone and energy. Be helpful, casual, and engaging.
 Have shorter responses, No idiot talks.
 Just don't make silly mistakes. Try to be engaging not annoying.
-To make responses shorter start to do this: Do not ask questions at the end of response like *What else can I help you with?*, *What do you want me to know?* etc."""
+To make responses shorter start to do this: Do not ask questions at the end of response like *What else can I help you with?*, *What do you want me to know?* etc.
+Use a little bit of slang abbreviations to make responses shorter. (Only if the user loves it.)"""
 
         msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
 
