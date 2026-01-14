@@ -145,6 +145,11 @@ def is_bot_admin(user_id):
     res = db_query("SELECT user_id FROM bot_admins WHERE user_id = ?", (str(user_id),), fetch=True)
     return bool(res)
 
+def get_channel_language(channel_id):
+    """Get the configured language for a channel"""
+    res = db_query("SELECT language FROM settings WHERE id = ?", (str(channel_id),), fetch=True)
+    return res[0][0] if res and res[0][0] else "English"
+
 def export_db_to_json():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -220,7 +225,7 @@ async def split_and_send(message, content):
         chunks.append(current_chunk)
     
     # Send first chunk as reply, rest as follow-ups
-    first_message = await message.reply(chunks[0])
+    await message.reply(chunks[0])
     
     for chunk in chunks[1:]:
         await message.channel.send(chunk)
@@ -268,7 +273,11 @@ async def daily_backup_task():
         with open(filename, "w") as f:
             json.dump(db_data, f, indent=2)
 
-        embed = discord.Embed(title="📦 24-Hour Database Backup", description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", color=discord.Color.green())
+        embed = discord.Embed(
+            title="📦 24-Hour Database Backup", 
+            description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 
+            color=discord.Color.green()
+        )
         embed.add_field(name="Users", value=len(db_data['users']), inline=True)
         embed.add_field(name="Banned Words", value=len(db_data['banned_words']), inline=True)
         embed.add_field(name="Interactions (24h)", value=len(db_data['interaction_logs']), inline=True)
@@ -318,8 +327,9 @@ class LanguageSelect(discord.ui.Select):
         selected_lang = self.values[0]
         db_query("INSERT OR REPLACE INTO settings (id, language) VALUES (?, ?)", (str(self.channel_id), selected_lang))
         
-        await interaction.response.send_message(f"🌐 Language set to **{selected_lang}**.", ephemeral=True)
+        await interaction.response.send_message(f"🌐 Language set to **{selected_lang}** for this channel.", ephemeral=True)
         self.view.stop()
+
 # Language Button View (for prefix command)
 class LanguageButtonView(discord.ui.View):
     def __init__(self, channel_id, author_id, owner_id):
@@ -345,7 +355,7 @@ class LanguageButtonView(discord.ui.View):
             # Check if user is admin or owner
             if interaction.user.id != self.owner_id:
                 if not interaction.guild or not interaction.user.guild_permissions.administrator:
-                    await interaction.response.send_message("❌ Only admins and bot owner can change language settings.", ephemeral=True)
+                    await interaction.response.send_message("❌ Only administrators and the bot owner can change language settings.", ephemeral=True)
                     return
             
             # Set the language
@@ -362,7 +372,7 @@ class LanguageButtonView(discord.ui.View):
             )
             
             # Send ephemeral confirmation
-            await interaction.followup.send(f"✅ Language set to **{lang}**.", ephemeral=True)
+            await interaction.followup.send(f"✅ Language successfully changed to **{lang}** for this channel.", ephemeral=True)
             
             self.stop()
         
@@ -375,7 +385,7 @@ def owner_or_bot_admin():
             return True
         if is_bot_admin(ctx.author.id):
             return True
-        await ctx.send("❌ **Permission Denied**\nThis command requires: **Bot Owner** or **Bot Admin** privileges.")
+        await ctx.send("❌ **Permission Denied**\n**Required:** Bot Owner or Bot Admin privileges\n\nThis command is restricted to authorized personnel only.")
         return False
     return commands.check(predicate)
 
@@ -383,7 +393,7 @@ def owner_or_bot_admin():
 @owner_or_bot_admin()
 async def sync(ctx):
     await bot.tree.sync()
-    await ctx.send("🚀 Commands synced globally.")
+    await ctx.send("🚀 **Slash commands synced globally!**\nAll commands are now up to date across Discord.")
 
 @bot.hybrid_command(name="allinteractions", description="Owner/Admin: Export ALL interaction logs.")
 @owner_or_bot_admin()
@@ -392,7 +402,7 @@ async def all_interactions(ctx):
     rows = db_query("SELECT * FROM interaction_logs ORDER BY timestamp DESC", fetch=True)
 
     if not rows:
-        await ctx.send("❌ No interaction logs found.")
+        await ctx.send("❌ **No interaction logs found.**\nThe database is currently empty.")
         return
 
     data = [{"timestamp": r[0], "guild_id": r[1], "channel_id": r[2], "user_name": r[3], "user_id": r[4], "prompt": r[5], "response": r[6]} for r in rows]
@@ -401,7 +411,7 @@ async def all_interactions(ctx):
     with open(fname, "w") as f: 
         json.dump(data, f, indent=2)
 
-    await ctx.send(f"📊 Exported {len(data)} total interactions.", file=discord.File(fname))
+    await ctx.send(f"📊 **Export Complete**\n**Total Interactions:** {len(data)}\n\nAll interaction logs have been exported successfully.", file=discord.File(fname))
     os.remove(fname)
 
 @bot.hybrid_command(name="messages", description="Owner/Admin: Export interaction logs (last 24h).")
@@ -410,21 +420,27 @@ async def all_interactions(ctx):
 async def messages(ctx):
     cutoff = time.time() - 86400
     rows = db_query("SELECT * FROM interaction_logs WHERE timestamp > ? ORDER BY timestamp DESC", (cutoff,), fetch=True)
+    
+    if not rows:
+        await ctx.send("❌ **No interactions in the last 24 hours.**")
+        return
+    
     data = [{"timestamp": r[0], "guild_id": r[1], "channel_id": r[2], "user_name": r[3], "user_id": r[4], "prompt": r[5], "response": r[6]} for r in rows]
     fname = f"logs_{int(time.time())}.json"
 
     with open(fname, "w") as f: 
         json.dump(data, f, indent=2)
 
-    await ctx.send(file=discord.File(fname))
+    await ctx.send(f"📊 **24-Hour Export Complete**\n**Interactions:** {len(data)}", file=discord.File(fname))
     os.remove(fname)
 
 @bot.hybrid_command(name="clearlogs", description="Owner/Admin: Wipe interaction logs.")
 @owner_or_bot_admin()
 @commands.dm_only()
 async def clear_logs(ctx):
+    count = db_query("SELECT COUNT(*) FROM interaction_logs", fetch=True)[0][0]
     db_query("DELETE FROM interaction_logs")
-    await ctx.send("🗑️ Interaction logs cleared.")
+    await ctx.send(f"🗑️ **Interaction logs cleared!**\n**Removed:** {count} interaction records")
 
 @bot.command(name="server-list", description="Owner/Admin: Export server list.")
 @owner_or_bot_admin()
@@ -436,9 +452,8 @@ async def server_list(ctx):
     with open(fname, "w") as f:
         json.dump(guilds, f, indent=2)
 
-    await ctx.send(file=discord.File(fname))
+    await ctx.send(f"📊 **Server List Export**\n**Total Servers:** {len(guilds)}", file=discord.File(fname))
     os.remove(fname)
-
 @bot.command(name="data", description="Owner/Admin: Complete bot configuration data.")
 @owner_or_bot_admin()
 @commands.dm_only()
@@ -572,7 +587,7 @@ async def bot_data(ctx):
     embed.add_field(name="💬 Total Interactions", value=data['bot_info']['total_interactions_logged'], inline=True)
 
     embed.add_field(name="🚫 Blacklisted Users", value=data['statistics']['total_blacklists'], inline=True)
-    embed.add_field(name="⚡ Total Strikes Issued", value=data['statistics']['total_strikes_issued'], inline=True)
+    embed.add_field(name="⚡ Total Strikes", value=data['statistics']['total_strikes_issued'], inline=True)
     embed.add_field(name="🔇 Banned Words", value=data['statistics']['total_banned_words'], inline=True)
 
     embed.add_field(name="🟢 Channels (Start Mode)", value=data['statistics']['channels_in_start_mode'], inline=True)
@@ -595,7 +610,11 @@ async def manual_backup(ctx):
     with open(filename, "w") as f:
         json.dump(db_data, f, indent=2)
 
-    embed = discord.Embed(title="📦 Manual Database Backup", description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", color=discord.Color.blue())
+    embed = discord.Embed(
+        title="📦 Manual Database Backup", 
+        description=f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 
+        color=discord.Color.blue()
+    )
     embed.add_field(name="Users", value=len(db_data['users']), inline=True)
     embed.add_field(name="Banned Words", value=len(db_data['banned_words']), inline=True)
     embed.add_field(name="Interactions (24h)", value=len(db_data['interaction_logs']), inline=True)
@@ -607,8 +626,17 @@ async def manual_backup(ctx):
 @owner_or_bot_admin()
 async def blacklist_group(ctx):
     res = db_query("SELECT user_id FROM users WHERE blacklisted = 1", fetch=True)
-    ids = ", ".join([r[0] for r in res]) if res else "None"
-    await ctx.send(f"📋 **Blacklisted Users:** `{ids}`")
+    if res:
+        user_list = "\n".join([f"• <@{r[0]}> (`{r[0]}`)" for r in res])
+        embed = discord.Embed(
+            title="🚫 Blacklisted Users",
+            description=user_list,
+            color=discord.Color.red()
+        )
+        embed.set_footer(text=f"Total: {len(res)} user(s)")
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send("✅ **No blacklisted users**\nThe blacklist is currently empty.")
 
 @blacklist_group.command(name="add")
 @owner_or_bot_admin()
@@ -618,9 +646,22 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
     
     # Send DM to user
-    dm_sent = await send_user_dm(user_id, f"🚫 **You have been blacklisted from FlexedAI Bot**\n\n**Reason:** {reason}\n\nYou can no longer use the bot.")
+    dm_sent = await send_user_dm(
+        user_id, 
+        f"🚫 **You have been blacklisted from FlexedAI Bot**\n\n**Reason:** {reason}\n\nYou can no longer use this bot. If you believe this is a mistake, please contact the bot administrators."
+    )
     
-    await ctx.send(f"🚫 `{user_id}` has been blacklisted.\n**Reason:** {reason}\n**DM Sent:** {'✅ Yes' if dm_sent else '❌ Failed'}")
+    embed = discord.Embed(
+        title="🚫 User Blacklisted",
+        description=f"User `{user_id}` has been added to the blacklist.",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="User ID", value=user_id, inline=True)
+    embed.add_field(name="Actioned By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    embed.add_field(name="DM Notification", value="✅ Sent" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
+    
+    await ctx.send(embed=embed)
 
 @blacklist_group.command(name="remove")
 @owner_or_bot_admin()
@@ -630,9 +671,22 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
     
     # Send DM to user
-    dm_sent = await send_user_dm(user_id, f"✅ **Your blacklist has been removed**\n\n**Reason:** {reason}\n\nYou can now use FlexedAI Bot again.")
+    dm_sent = await send_user_dm(
+        user_id, 
+        f"✅ **Your blacklist has been removed**\n\n**Reason:** {reason}\n\nYou can now use FlexedAI Bot again. Welcome back!"
+    )
     
-    await ctx.send(f"✅ `{user_id}` restored.\n**Reason:** {reason}\n**DM Sent:** {'✅ Yes' if dm_sent else '❌ Failed'}")
+    embed = discord.Embed(
+        title="✅ User Unblacklisted",
+        description=f"User `{user_id}` has been removed from the blacklist.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="User ID", value=user_id, inline=True)
+    embed.add_field(name="Actioned By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    embed.add_field(name="DM Notification", value="✅ Sent" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="addstrike", description="Owner/Admin: Add strikes to a user.")
 @owner_or_bot_admin()
@@ -653,11 +707,26 @@ async def add_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No re
     # Send DM to user
     dm_message = f"⚡ **You have received {amount} strike(s)**\n\n**Reason:** {reason}\n**Total Strikes:** {new_strikes}/3"
     if is_banned:
-        dm_message += "\n\n🚫 **You have been automatically blacklisted** for reaching 3 strikes. You can no longer use the bot."
+        dm_message += "\n\n🚫 **You have been automatically blacklisted** for reaching 3 strikes.\nYou can no longer use FlexedAI Bot."
+    else:
+        dm_message += f"\n\n⚠️ Warning: You are {3 - new_strikes} strike(s) away from being blacklisted."
     
     dm_sent = await send_user_dm(user_id, dm_message)
     
-    await ctx.send(f"⚡ {log_msg}\n**DM Sent:** {'✅ Yes' if dm_sent else '❌ Failed'}")
+    embed = discord.Embed(
+        title="⚡ Strike Added",
+        description=f"Strike(s) added to user `{user_id}`",
+        color=discord.Color.orange() if not is_banned else discord.Color.red()
+    )
+    embed.add_field(name="User ID", value=user_id, inline=True)
+    embed.add_field(name="Strikes Added", value=amount, inline=True)
+    embed.add_field(name="Total Strikes", value=f"{new_strikes}/3", inline=True)
+    embed.add_field(name="Actioned By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Status", value="🚫 AUTO-BANNED" if is_banned else "⚠️ Active", inline=True)
+    embed.add_field(name="DM Sent", value="✅ Yes" if dm_sent else "❌ Failed", inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="removestrike", description="Owner/Admin: Remove strikes from a user.")
 @owner_or_bot_admin()
@@ -665,7 +734,7 @@ async def remove_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No
     res = db_query("SELECT strikes FROM users WHERE user_id = ?", (user_id,), fetch=True)
 
     if not res or res[0][0] == 0:
-        await ctx.send(f"⚠️ User `{user_id}` has no strikes to remove.")
+        await ctx.send(f"⚠️ **User `{user_id}` has no strikes to remove.**")
         return
 
     current_strikes = res[0][0]
@@ -684,61 +753,142 @@ async def remove_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No
     # Send DM to user
     dm_message = f"✅ **{amount} strike(s) have been removed from your account**\n\n**Reason:** {reason}\n**Remaining Strikes:** {new_strikes}/3"
     if was_unbanned:
-        dm_message += "\n\n🎉 **Your blacklist has been lifted!** You can use the bot again."
+        dm_message += "\n\n🎉 **Your blacklist has been lifted!** You can use FlexedAI Bot again."
     
     dm_sent = await send_user_dm(user_id, dm_message)
     
-    await ctx.send(f"✅ {log_msg}\n**DM Sent:** {'✅ Yes' if dm_sent else '❌ Failed'}")
+    embed = discord.Embed(
+        title="✅ Strike Removed",
+        description=f"Strike(s) removed from user `{user_id}`",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="User ID", value=user_id, inline=True)
+    embed.add_field(name="Strikes Removed", value=amount, inline=True)
+    embed.add_field(name="Remaining Strikes", value=f"{new_strikes}/3", inline=True)
+    embed.add_field(name="Actioned By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Status", value="🎉 Unbanned" if was_unbanned else "✅ Active", inline=True)
+    embed.add_field(name="DM Sent", value="✅ Yes" if dm_sent else "❌ Failed", inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="strikelist", description="Owner/Admin: View all users with strikes.")
 @owner_or_bot_admin()
 async def strike_list(ctx):
-    res = db_query("SELECT user_id, strikes FROM users WHERE strikes > 0", fetch=True)
-    text = "\n".join([f"<@{r[0]}>: {r[1]}/3" for r in res]) if res else "No active strikes."
-    await ctx.send(embed=discord.Embed(title="⚡ Strike Ledger", description=text, color=discord.Color.orange()))
+    res = db_query("SELECT user_id, strikes FROM users WHERE strikes > 0 ORDER BY strikes DESC", fetch=True)
+    
+    if not res:
+        await ctx.send("✅ **No active strikes**\nAll users are in good standing.")
+        return
+    
+    strike_text = "\n".join([f"{'🚫' if r[1] >= 3 else '⚡'} <@{r[0]}> - **{r[1]}/3** strikes" for r in res])
+    
+    embed = discord.Embed(
+        title="⚡ Strike Ledger", 
+        description=strike_text, 
+        color=discord.Color.orange()
+    )
+    embed.set_footer(text=f"Total users with strikes: {len(res)}")
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="clearstrike", description="Owner/Admin: Clear all strikes for a user.")
 @owner_or_bot_admin()
 async def clear_strike(ctx, user_id: str):
+    res = db_query("SELECT strikes FROM users WHERE user_id = ?", (user_id,), fetch=True)
+    
+    if not res or res[0][0] == 0:
+        await ctx.send(f"⚠️ **User `{user_id}` has no strikes to clear.**")
+        return
+    
+    previous_strikes = res[0][0]
     db_query("UPDATE users SET strikes = 0, blacklisted = 0 WHERE user_id = ?", (user_id,))
-    db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"Strikes cleared for {user_id} by {ctx.author.name}.",))
-    await ctx.send(f"✅ Strikes reset for `{user_id}`.")
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"All strikes cleared for {user_id} by {ctx.author.name}.",))
+    
+    embed = discord.Embed(
+        title="✅ Strikes Cleared",
+        description=f"All strikes have been cleared for user `{user_id}`",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="User ID", value=user_id, inline=True)
+    embed.add_field(name="Previous Strikes", value=f"{previous_strikes}/3", inline=True)
+    embed.add_field(name="Actioned By", value=ctx.author.mention, inline=True)
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_group(name="bannedword", invoke_without_command=True)
 @owner_or_bot_admin()
 async def bw_group(ctx):
-    res = db_query("SELECT word FROM banned_words", fetch=True)
-    words = ', '.join([r[0] for r in res]) if res else 'None'
-    await ctx.send(f"📋 **Banned Words:** `{words}`")
+    res = db_query("SELECT word FROM banned_words ORDER BY word", fetch=True)
+    
+    if not res:
+        await ctx.send("✅ **No banned words**\nThe word filter is currently empty.")
+        return
+    
+    words = ', '.join([f"`{r[0]}`" for r in res])
+    embed = discord.Embed(
+        title="🔇 Banned Words List",
+        description=words,
+        color=discord.Color.red()
+    )
+    embed.set_footer(text=f"Total: {len(res)} banned word(s)")
+    
+    await ctx.send(embed=embed)
 
 @bw_group.command(name="add")
 @owner_or_bot_admin()
 async def bw_add(ctx, word: str):
-    db_query("INSERT OR IGNORE INTO banned_words VALUES (?)", (word.lower(),))
-    await ctx.send(f"🚫 `{word}` added to filter.")
+    word_lower = word.lower()
+    existing = db_query("SELECT word FROM banned_words WHERE word = ?", (word_lower,), fetch=True)
+    
+    if existing:
+        await ctx.send(f"⚠️ **`{word}` is already in the banned words list.**")
+        return
+    
+    db_query("INSERT INTO banned_words VALUES (?)", (word_lower,))
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"Banned word added: '{word}' by {ctx.author.name}",))
+    
+    await ctx.send(f"🚫 **Word banned successfully**\n`{word}` has been added to the filter.")
 
 @bw_group.command(name="remove")
 @owner_or_bot_admin()
 async def bw_rem(ctx, word: str):
-    db_query("DELETE FROM banned_words WHERE word = ?", (word.lower(),))
-    await ctx.send(f"✅ `{word}` removed from filter.")
+    word_lower = word.lower()
+    existing = db_query("SELECT word FROM banned_words WHERE word = ?", (word_lower,), fetch=True)
+    
+    if not existing:
+        await ctx.send(f"⚠️ **`{word}` is not in the banned words list.**")
+        return
+    
+    db_query("DELETE FROM banned_words WHERE word = ?", (word_lower,))
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"Banned word removed: '{word}' by {ctx.author.name}",))
+    
+    await ctx.send(f"✅ **Word unbanned successfully**\n`{word}` has been removed from the filter.")
 
 @bot.hybrid_command(name="listwords", description="Owner/Admin: List all banned words.")
 @owner_or_bot_admin()
 async def list_words(ctx):
     await bw_group.invoke(ctx)
+
 @bot.hybrid_command(name="logs", description="Owner/Admin: View recent moderation logs.")
 @owner_or_bot_admin()
 async def view_logs(ctx):
     res = db_query("SELECT log, timestamp FROM admin_logs ORDER BY timestamp DESC LIMIT 15", fetch=True)
-    text = "\n".join([f"[{r[1]}] {r[0]}" for r in res]) if res else "No logs."
-    await ctx.send(f"```\n{text}\n```")
+    
+    if not res:
+        await ctx.send("📋 **No admin logs found**\nNo moderation actions have been logged yet.")
+        return
+    
+    log_text = "\n".join([f"[{r[1]}] {r[0]}" for r in res])
+    
+    await ctx.send(f"```\n{log_text}\n```")
 
 @bot.hybrid_command(name="clearadminlogs", description="Owner/Admin: Clear all admin logs.")
 @owner_or_bot_admin()
 async def clear_admin_logs(ctx):
+    count = db_query("SELECT COUNT(*) FROM admin_logs", fetch=True)[0][0]
     db_query("DELETE FROM admin_logs")
-    await ctx.send("🗑️ Admin logs cleared.")
+    await ctx.send(f"🗑️ **Admin logs cleared**\n**Removed:** {count} log entries")
 
 @bot.hybrid_command(name="searchlogs", description="Owner/Admin: Search interaction logs.")
 @owner_or_bot_admin()
@@ -746,11 +896,11 @@ async def search_logs(ctx, keyword: str):
     rows = db_query("SELECT * FROM interaction_logs WHERE prompt LIKE ? OR response LIKE ? ORDER BY timestamp DESC LIMIT 20", (f"%{keyword}%", f"%{keyword}%"), fetch=True)
 
     if not rows:
-        await ctx.send(f"❌ No results for `{keyword}`.")
+        await ctx.send(f"❌ **No results found for:** `{keyword}`")
         return
 
     text = "\n".join([f"[{r[3]}]: {r[5][:50]}..." for r in rows])
-    await ctx.send(f"```\n{text}\n```")
+    await ctx.send(f"🔍 **Search Results for `{keyword}`**\n```\n{text}\n```")
 
 # Bot Admin Management Commands (Owner Only)
 @bot.command(name="add-admin", description="Owner: Add a bot admin.")
@@ -758,49 +908,90 @@ async def search_logs(ctx, keyword: str):
 async def add_admin(ctx, user: discord.User):
     """Add a user as bot admin"""
     if user.id == OWNER_ID:
-        await ctx.send("❌ Owner is already a permanent admin.")
+        await ctx.send("❌ **Owner is already a permanent admin.**")
         return
     
     # Check if already admin
     existing = db_query("SELECT user_id FROM bot_admins WHERE user_id = ?", (str(user.id),), fetch=True)
     if existing:
-        await ctx.send(f"⚠️ {user.mention} is already a bot admin.")
+        await ctx.send(f"⚠️ **{user.mention} is already a bot admin.**")
         return
     
     # Add to database
     db_query("INSERT INTO bot_admins (user_id, added_by) VALUES (?, ?)", (str(user.id), str(ctx.author.id)))
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"User {user.id} ({user.name}) promoted to Bot Admin by {ctx.author.name}",))
     
-    # Send DM to new admin
-    dm_message = f"""🎉 **Congratulations!**
+    # Send DM to new admin with complete command list
+    dm_message = f"""🎉 **Congratulations, {user.name}!**
 
-You have been promoted to **Bot Admin** for FlexedAI Bot by {ctx.author.name}.
+You have been promoted to **Bot Admin** for FlexedAI Bot by {ctx.author.name}!
 
-As a Bot Admin, you now have access to advanced moderation and management commands including:
-• User moderation (blacklist, strikes)
-• Word filtering
-• Log management
-• Data exports
-• And more!
+As a Bot Admin, you now have access to the following commands:
 
-Use `/help` to see all available commands.
+**📊 Data & Export Commands (DM Only):**
+• `sync` — Sync slash commands globally
+• `allinteractions` — Export ALL interaction logs
+• `messages` — Export interaction logs from the last 24 hours
+• `clearlogs` — Wipe all interaction logs
+• `server-list` — Export list of all servers the bot is in
+• `data` — Export complete bot configuration data
+• `backup` — Trigger immediate manual backup
+
+**🛡️ Moderation Commands:**
+• `/blacklist` — View all blacklisted users
+• `/blacklist add <user_id> [reason]` — Add a user to the blacklist
+• `/blacklist remove <user_id> [reason]` — Remove a user from the blacklist
+• `/addstrike <user_id> [amount] [reason]` — Add strikes to a user
+• `/removestrike <user_id> [amount] [reason]` — Remove strikes from a user
+• `/strikelist` — View all users with strikes
+• `/clearstrike <user_id>` — Clear all strikes for a user
+
+**🔇 Word Filter Commands:**
+• `/bannedword` — List all currently banned words
+• `/bannedword add <word>` — Add a word to the filter
+• `/bannedword remove <word>` — Remove a word from the filter
+• `/listwords` — List all banned words
+
+**📋 Log Commands:**
+• `/logs` — View recent moderation logs
+• `/clearadminlogs` — Clear all admin logs
+• `/searchlogs <keyword>` — Search interaction logs by keyword
+
+**⚠️ Important Notes:**
+• Commands marked "(DM Only)" can ONLY be used in Direct Messages with the bot
+• You cannot bypass server admin permissions (you still need admin perms in servers for certain commands)
+• Users will receive DM notifications when you take moderation actions against them
+
+Use these powers responsibly! Type `/help` to see all available commands.
+
+Good luck! 🚀
 """
     dm_sent = await send_user_dm(str(user.id), dm_message)
     
-    await ctx.send(f"✅ {user.mention} has been promoted to **Bot Admin**!\n**DM Sent:** {'✅ Yes' if dm_sent else '❌ Failed'}")
+    embed = discord.Embed(
+        title="✅ Bot Admin Added",
+        description=f"{user.mention} has been promoted to **Bot Admin**!",
+        color=discord.Color.gold()
+    )
+    embed.add_field(name="User", value=f"{user.name} (`{user.id}`)", inline=False)
+    embed.add_field(name="Added By", value=ctx.author.name, inline=True)
+    embed.add_field(name="DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
+    embed.set_thumbnail(url=user.display_avatar.url)
+    
+    await ctx.send(embed=embed)
 
 @bot.command(name="remove-admin", description="Owner: Remove a bot admin.")
 @commands.is_owner()
 async def remove_admin(ctx, user: discord.User):
     """Remove a user from bot admins"""
     if user.id == OWNER_ID:
-        await ctx.send("❌ Cannot remove owner from admin privileges.")
+        await ctx.send("❌ **Cannot remove owner from admin privileges.**")
         return
     
     # Check if is admin
     existing = db_query("SELECT user_id FROM bot_admins WHERE user_id = ?", (str(user.id),), fetch=True)
     if not existing:
-        await ctx.send(f"⚠️ {user.mention} is not a bot admin.")
+        await ctx.send(f"⚠️ **{user.mention} is not a bot admin.**")
         return
     
     # Remove from database
@@ -812,13 +1003,29 @@ async def remove_admin(ctx, user: discord.User):
 
 Your **Bot Admin** privileges for FlexedAI Bot have been removed by {ctx.author.name}.
 
-You no longer have access to moderation and management commands.
+You no longer have access to the following:
+• Data export commands (messages, backup, data, etc.)
+• User moderation commands (blacklist, strikes)
+• Word filter management
+• Admin log access
 
-Thank you for your service!
+You can still use regular bot features and commands available to all users.
+
+Thank you for your service! 🙏
 """
     dm_sent = await send_user_dm(str(user.id), dm_message)
     
-    await ctx.send(f"✅ {user.mention} has been removed from **Bot Admin**.\n**DM Sent:** {'✅ Yes' if dm_sent else '❌ Failed'}")
+    embed = discord.Embed(
+        title="📋 Bot Admin Removed",
+        description=f"{user.mention} has been removed from **Bot Admin**.",
+        color=discord.Color.orange()
+    )
+    embed.add_field(name="User", value=f"{user.name} (`{user.id}`)", inline=False)
+    embed.add_field(name="Removed By", value=ctx.author.name, inline=True)
+    embed.add_field(name="DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
+    embed.set_thumbnail(url=user.display_avatar.url)
+    
+    await ctx.send(embed=embed)
 
 @bot.command(name="list-admins", description="Owner: List all bot admins.")
 @commands.is_owner()
@@ -826,20 +1033,19 @@ async def list_admins(ctx):
     """List all bot admins"""
     admins = db_query("SELECT user_id, added_by, added_at FROM bot_admins", fetch=True)
     
-    if not admins:
-        await ctx.send("📋 **Bot Admins:** None (only owner)")
-        return
-    
     embed = discord.Embed(title="👑 Bot Admin List", color=discord.Color.gold())
     embed.add_field(name="Owner", value=f"<@{OWNER_ID}> (Permanent)", inline=False)
     
-    admin_list = []
-    for admin in admins:
-        user_id, added_by, added_at = admin
-        admin_list.append(f"<@{user_id}> - Added by <@{added_by}> on {added_at}")
-    
-    if admin_list:
+    if admins:
+        admin_list = []
+        for admin in admins:
+            user_id, added_by, added_at = admin
+            admin_list.append(f"<@{user_id}> - Added by <@{added_by}> on {added_at}")
+        
         embed.add_field(name="Bot Admins", value="\n".join(admin_list), inline=False)
+        embed.set_footer(text=f"Total admins: {len(admins)}")
+    else:
+        embed.add_field(name="Bot Admins", value="None (only owner)", inline=False)
     
     await ctx.send(embed=embed)
 
@@ -852,76 +1058,114 @@ async def leave_server(ctx, server_id: str, *, reason: str = None):
     try:
         guild = bot.get_guild(int(server_id))
         if not guild:
-            await ctx.send(f"❌ Server with ID `{server_id}` not found.")
+            await ctx.send(f"❌ **Server not found**\nCannot find server with ID: `{server_id}`\n\nMake sure:\n• The bot is in that server\n• The ID is correct")
             return
         
         guild_name = guild.name
-        owner = guild.owner
+        guild_owner = guild.owner
+        owner_notified = False
         
         # Send message to server owner if reason provided
-        if reason and owner:
+        if guild_owner:
             try:
-                leave_message = f"""📢 **FlexedAI Bot Leaving Server**
+                if reason:
+                    leave_message = f"""📢 **FlexedAI Bot Leaving Server**
 
-Hello {owner.name},
+Hello {guild_owner.name},
 
 FlexedAI Bot is leaving **{guild_name}**.
 
 **Reason:** {reason}
 
-If you have any questions, please contact the bot owner.
+If you have any questions or would like to discuss this, please contact the bot owner.
 
 Thank you for using FlexedAI Bot!
 """
-                await owner.send(leave_message)
+                else:
+                    leave_message = f"""📢 **FlexedAI Bot Leaving Server**
+
+Hello {guild_owner.name},
+
+FlexedAI Bot is leaving **{guild_name}**.
+
+Thank you for using FlexedAI Bot!
+"""
+                await guild_owner.send(leave_message)
                 owner_notified = True
-            except:
+            except discord.Forbidden:
                 owner_notified = False
-        else:
-            owner_notified = False
+            except Exception as e:
+                print(f"Failed to notify owner: {e}")
+                owner_notified = False
+        
+        # Log the action BEFORE leaving
+        log_msg = f"Left server: {guild_name} (ID: {server_id}). Reason: {reason if reason else 'No reason provided'}"
+        db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
         
         # Leave the server
         await guild.leave()
         
-        # Log the action
-        log_msg = f"Left server: {guild_name} (ID: {server_id}). Reason: {reason if reason else 'No reason provided'}"
-        db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
-        
         # Confirm to owner
-        embed = discord.Embed(title="✅ Server Left", color=discord.Color.green())
+        embed = discord.Embed(
+            title="✅ Server Left Successfully", 
+            description=f"The bot has left **{guild_name}**",
+            color=discord.Color.green()
+        )
         embed.add_field(name="Server Name", value=guild_name, inline=False)
-        embed.add_field(name="Server ID", value=server_id, inline=False)
+        embed.add_field(name="Server ID", value=server_id, inline=True)
         embed.add_field(name="Reason", value=reason if reason else "No reason provided", inline=False)
-        embed.add_field(name="Owner Notified", value="✅ Yes" if owner_notified else "❌ No", inline=False)
+        embed.add_field(name="Owner Notified", value="✅ Yes" if owner_notified else "❌ No (DMs disabled or blocked)", inline=True)
         
         await ctx.send(embed=embed)
         
     except ValueError:
-        await ctx.send("❌ Invalid server ID. Please provide a valid numeric ID.")
+        await ctx.send("❌ **Invalid server ID**\nPlease provide a valid numeric server ID.")
+    except discord.Forbidden:
+        await ctx.send(f"❌ **Permission Error**\nI don't have permission to leave server `{server_id}`.")
     except Exception as e:
-        await ctx.send(f"❌ Error leaving server: {str(e)}")
+        await ctx.send(f"❌ **Error leaving server**\n```\n{str(e)}\n```")
 
 @bot.hybrid_command(name="start", description="Set bot to respond to all messages in this channel.")
 async def start_mode(ctx):
     # Check permissions
     if ctx.author.id != OWNER_ID:
         if not ctx.guild or not ctx.author.guild_permissions.administrator:
-            await ctx.send("❌ **Permission Denied**\nThis command requires: **Administrator** permissions.")
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions\n\nOnly server administrators can change response modes.")
             return
     
     db_query("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, 'start')", (str(ctx.channel.id),))
-    await ctx.send("✅ Bot will now respond to all messages in this channel.")
+    
+    embed = discord.Embed(
+        title="🟢 Start Mode Activated",
+        description="The bot will now respond to **all messages** in this channel.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Channel", value=ctx.channel.mention, inline=True)
+    embed.add_field(name="Mode", value="**START** (Respond to all)", inline=True)
+    embed.set_footer(text="Use /stop to return to normal mode")
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="stop", description="Set bot to respond only to pings/triggers.")
 async def stop_mode(ctx):
     # Check permissions
     if ctx.author.id != OWNER_ID:
         if not ctx.guild or not ctx.author.guild_permissions.administrator:
-            await ctx.send("❌ **Permission Denied**\nThis command requires: **Administrator** permissions.")
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions\n\nOnly server administrators can change response modes.")
             return
     
     db_query("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, 'stop')", (str(ctx.channel.id),))
-    await ctx.send("✅ Bot will only respond to pings, 'flexedai', or images.")
+    
+    embed = discord.Embed(
+        title="🔴 Stop Mode Activated",
+        description="The bot will now **only respond** to:\n• Direct mentions/pings\n• Messages containing 'flexedai'\n• Images/attachments",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="Channel", value=ctx.channel.mention, inline=True)
+    embed.add_field(name="Mode", value="**STOP** (Selective response)", inline=True)
+    embed.set_footer(text="Use /start to enable response to all messages")
+    
+    await ctx.send(embed=embed)
 
 # Slash command version with dropdown
 @bot.hybrid_command(name="lang", description="Set channel language (Admin only).")
@@ -929,29 +1173,38 @@ async def set_lang_slash(ctx, lang: str = None):
     # Check permissions (owner bypass)
     if ctx.author.id != OWNER_ID:
         if not ctx.guild or not ctx.author.guild_permissions.administrator:
-            await ctx.send("❌ **Permission Denied**\nThis command requires: **Administrator** permissions.")
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions\n\nOnly server administrators can change language settings.")
             return
     
     # If called as slash command without parameter, show dropdown
     if ctx.interaction and lang is None:
         view = LanguageSelectView(ctx.channel.id, ctx.author.id)
-        await ctx.send("🌐 Select a language:", view=view, ephemeral=True)
+        await ctx.send("🌐 **Select a language for this channel:**", view=view, ephemeral=True)
         return
     
     # If lang parameter provided (for slash command)
     if lang:
         if lang not in AVAILABLE_LANGUAGES:
-            await ctx.send(f"❌ Invalid language. Available: {', '.join(AVAILABLE_LANGUAGES)}", ephemeral=True)
+            await ctx.send(f"❌ **Invalid language**\n\n**Available languages:**\n{', '.join(AVAILABLE_LANGUAGES)}", ephemeral=True)
             return
         
         db_query("INSERT OR REPLACE INTO settings (id, language) VALUES (?, ?)", (str(ctx.channel.id), lang))
-        await ctx.send(f"🌐 Language set to **{lang}**.", ephemeral=True)
+        
+        embed = discord.Embed(
+            title="🌐 Language Changed",
+            description=f"Channel language set to **{lang}**",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Channel", value=ctx.channel.mention, inline=True)
+        embed.add_field(name="Language", value=lang, inline=True)
+        
+        await ctx.send(embed=embed, ephemeral=True)
         return
     
     # If called as prefix command (!lang), show buttons (admin/owner only)
     if not ctx.interaction:
         view = LanguageButtonView(ctx.channel.id, ctx.author.id, OWNER_ID)
-        await ctx.send(f"🌐 **Available Languages:** {', '.join(AVAILABLE_LANGUAGES)}\n\nClick a button below to select:", view=view)
+        await ctx.send(f"🌐 **Select Language for this Channel**\n\n**Available:** {', '.join(AVAILABLE_LANGUAGES)}\n\nClick a button below:", view=view)
 
 # Autocomplete for slash command
 @set_lang_slash.autocomplete('lang')
@@ -966,28 +1219,61 @@ async def set_prefix(ctx, new_prefix: str):
     # Check permissions (owner bypass)
     if ctx.author.id != OWNER_ID:
         if not ctx.guild or not ctx.author.guild_permissions.administrator:
-            await ctx.send("❌ **Permission Denied**\nThis command requires: **Administrator** permissions.")
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions\n\nOnly server administrators can change the command prefix.")
             return
     
     guild_or_user_id = str(ctx.guild.id if ctx.guild else ctx.author.id)
     db_query("INSERT OR REPLACE INTO settings (id, prefix) VALUES (?, ?)", (guild_or_user_id, new_prefix))
-    await ctx.send(f"⚙️ Prefix updated to `{new_prefix}`")
+    
+    embed = discord.Embed(
+        title="⚙️ Prefix Changed",
+        description=f"Command prefix updated to `{new_prefix}`",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="New Prefix", value=f"`{new_prefix}`", inline=True)
+    embed.add_field(name="Example", value=f"`{new_prefix}help`", inline=True)
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="help", description="Display command center.")
 async def help_cmd(ctx):
     is_admin = is_bot_admin(ctx.author.id)
     
-    embed = discord.Embed(title="📡 FlexedAI Command Center", color=discord.Color.blue())
+    embed = discord.Embed(
+        title="📡 FlexedAI Command Center",
+        description="Here are all the commands you have access to:",
+        color=discord.Color.blue()
+    )
     
     if ctx.author.id == OWNER_ID:
-        embed.add_field(name="👑 Owner Only", value="`add-admin`, `remove-admin`, `list-admins`, `leave` (DM only)", inline=False)
+        embed.add_field(
+            name="👑 Owner Only Commands", 
+            value="`add-admin`, `remove-admin`, `list-admins`, `leave` (DM only)", 
+            inline=False
+        )
     
     if is_admin:
-        embed.add_field(name="🛡️ Owner/Admin Commands", value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions` (DM only)", inline=False)
-        embed.add_field(name="🔨 Moderation", value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/logs`, `/searchlogs`", inline=False)
+        embed.add_field(
+            name="🛡️ Owner/Admin Commands (DM Only)", 
+            value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", 
+            inline=False
+        )
+        embed.add_field(
+            name="🔨 Moderation Commands", 
+            value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/logs`, `/searchlogs`, `/clearadminlogs`", 
+            inline=False
+        )
     
-    embed.add_field(name="⚙️ Settings", value="`/start`, `/stop`, `/lang`, `/prefix` (Admin required)", inline=False)
-    embed.add_field(name="📊 Utilities", value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`", inline=False)
+    embed.add_field(
+        name="⚙️ Settings (Admin Required)", 
+        value="`/start`, `/stop`, `/lang`, `/prefix`", 
+        inline=False
+    )
+    embed.add_field(
+        name="📊 Utility Commands", 
+        value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`", 
+        inline=False
+    )
     
     if is_admin:
         embed.set_footer(text="✨ You have Bot Admin privileges")
@@ -999,10 +1285,15 @@ async def whoami(ctx):
     user = ctx.author
     roles = ", ".join([r.name for r in user.roles[1:]]) if ctx.guild else "N/A"
     
-    embed = discord.Embed(title=f"👤 {user.name}", color=user.color)
+    embed = discord.Embed(
+        title=f"👤 {user.name}",
+        description=f"Here's your profile information:",
+        color=user.color
+    )
     embed.set_thumbnail(url=user.display_avatar.url)
-    embed.add_field(name="ID", value=user.id, inline=False)
-    embed.add_field(name="Roles", value=roles, inline=False)
+    embed.add_field(name="User ID", value=f"`{user.id}`", inline=False)
+    embed.add_field(name="Display Name", value=user.display_name, inline=True)
+    embed.add_field(name="Server Roles", value=roles if roles != "N/A" else "None", inline=False)
     
     # Show admin status
     if user.id == OWNER_ID:
@@ -1016,18 +1307,42 @@ async def whoami(ctx):
 async def stats(ctx):
     latency = round(bot.latency * 1000, 2)
     guild_count = len(bot.guilds)
-    await ctx.send(f"📊 **Latency:** {latency}ms | **Servers:** {guild_count}")
+    
+    embed = discord.Embed(
+        title="📊 Bot Statistics",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="🏓 Latency", value=f"{latency}ms", inline=True)
+    embed.add_field(name="🌐 Servers", value=guild_count, inline=True)
+    embed.add_field(name="👥 Users", value=sum(g.member_count for g in bot.guilds), inline=True)
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="ping", description="Check bot response time.")
 async def ping(ctx):
-    await ctx.send(f"🏓 Pong! `{round(bot.latency * 1000)}ms`")
+    latency = round(bot.latency * 1000)
+    
+    if latency < 100:
+        emoji = "🟢"
+        status = "Excellent"
+    elif latency < 200:
+        emoji = "🟡"
+        status = "Good"
+    else:
+        emoji = "🔴"
+        status = "Slow"
+    
+    await ctx.send(f"🏓 **Pong!** {emoji}\n**Latency:** {latency}ms ({status})")
 
 @bot.hybrid_command(name="forget", description="Clear AI memory for this conversation.")
 async def forget(ctx):
     tid = f"{ctx.channel.id}-{ctx.author.id}"
     if tid in bot.memory:
+        messages_cleared = len(bot.memory[tid])
         bot.memory[tid].clear()
-    await ctx.send("🧠 Memory cleared for this conversation.")
+        await ctx.send(f"🧠 **Memory cleared**\nRemoved {messages_cleared} message(s) from conversation history.")
+    else:
+        await ctx.send("🧠 **No memory to clear**\nThis conversation has no stored history.")
 
 @bot.event
 async def on_message(message):
@@ -1043,7 +1358,10 @@ async def on_message(message):
     if any(bw[0] in content_low for bw in banned):
         try:
             await message.delete()
-            await message.channel.send(f"⚠️ {message.author.mention}, your message contained a banned word.", delete_after=5)
+            warning = await message.channel.send(
+                f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.",
+                delete_after=5
+            )
         except:
             pass
         return
@@ -1071,6 +1389,9 @@ async def on_message(message):
 
     if not should_respond:
         return
+
+    # Get configured language for this channel
+    lang = get_channel_language(message.channel.id)
 
     # Check for verification question
     verification_keywords = [
@@ -1102,9 +1423,6 @@ If you'd like to know more about my features, use `/help`!
         bot.memory[tid] = deque(maxlen=6)
 
     async with message.channel.typing():
-        res_lang = db_query("SELECT language FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
-        lang = res_lang[0][0] if res_lang else "English"
-
         server_name = message.guild.name if message.guild else "DM"
         roles = ", ".join([r.name for r in message.author.roles[1:]]) if message.guild else "None"
 
@@ -1113,26 +1431,27 @@ If you'd like to know more about my features, use `/help`!
         
         system = f"""You are FlexedAI, a smart Discord bot. 
 Basic Info about configuration, user and server: 
-Language: {lang} (STRICT: You MUST respond in {lang} language ONLY. Do not switch languages unless the user explicitly uses the /lang or !lang command to change it.)
+Language: {lang} (CRITICAL: You MUST respond ONLY in {lang} language. This is the configured language for this channel. Do not switch languages under any circumstances unless the user explicitly changes it using the /lang or !lang command.)
 Server: {server_name}
 Username: {message.author.name}
 Roles: {roles}
 Display Name: {message.author.display_name}
 Profile Picture: {message.author.display_avatar.url}
-Current Channel: <#{ctx.channel.id}>
+Current Channel: <#{message.channel.id}>
 
 Bot's Info:
 Bot's Display Name: {bot.user.display_name}
 Bot's Username: {bot.user.name}
 Bot ID: {bot.user.id}
-Bot's Server Roles: {ctx.guild.me.roles if ctx.guild else 'N/A'}
+Bot's Server Roles: {message.guild.me.roles if message.guild else 'N/A'}
 Bot's Avatar: {bot.user.display_avatar.url}
 
 Match the user's tone and energy. Be helpful, casual, and engaging.
-Have shorter responses, No idiot talks.
-Just don't make silly mistakes. Try to be engaging not annoying.
-To make responses shorter start to do this: Do not ask questions at the end of response like *What else can I help you with?*, *What do you want me to know?* etc.
-Use a little bit of slang abbreviations to make responses shorter. (Only if the user loves it.)"""
+Have shorter responses. No unnecessary verbosity.
+Just don't make silly mistakes. Try to be engaging, not annoying.
+Do not ask questions at the end of responses like "What else can I help you with?" or "What do you want me to know?" etc.
+
+REMEMBER: Respond ONLY in {lang} language."""
 
         msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
 
@@ -1152,7 +1471,7 @@ Use a little bit of slang abbreviations to make responses shorter. (Only if the 
 
             db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", (time.time(), str(message.guild.id) if message.guild else "DM", str(message.channel.id), message.author.name, str(message.author.id), message.content[:1000], reply[:1000]))
         except Exception as e:
-            error_msg = f"❌ Error: {str(e)}"
+            error_msg = f"❌ **An error occurred**\n```\n{str(e)}\n```"
             await message.reply(error_msg)
 
 bot.run(DISCORD_TOKEN)
