@@ -1134,6 +1134,169 @@ async def bw_rem(ctx, word: str):
     
     await ctx.send(f"✅ **Word unbanned successfully**\n`{word}` has been removed from the filter.")
 
+@bot.hybrid_group(name="bypass", description="Owner/Admin: Manage word filter bypass.", invoke_without_command=True)
+@owner_or_bot_admin()
+async def bypass_group(ctx):
+    """List all users with word filter bypass"""
+    res = db_query("SELECT user_id, reason, added_by, added_at FROM word_filter_bypass ORDER BY added_at DESC", fetch=True)
+    
+    if not res:
+        await ctx.send("✅ **No bypass users**\nNo users currently have word filter bypass privileges.")
+        return
+    
+    embed = discord.Embed(
+        title="🔓 Word Filter Bypass List",
+        description="Users who can use banned words:",
+        color=discord.Color.blue()
+    )
+    
+    for user in res:
+        user_id, reason, added_by, added_at = user
+        embed.add_field(
+            name=f"👤 <@{user_id}>",
+            value=f"**ID:** `{user_id}`\n**Reason:** {reason}\n**Added By:** <@{added_by}>\n**Date:** {added_at}",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"Total: {len(res)} user(s) with bypass")
+    await ctx.send(embed=embed)
+
+@bypass_group.command(name="add")
+@owner_or_bot_admin()
+async def bypass_add(ctx, user_id: str, *, reason: str = "No reason provided"):
+    """Add a user to word filter bypass"""
+    # Check if already has bypass
+    existing = db_query("SELECT user_id FROM word_filter_bypass WHERE user_id = ?", (user_id,), fetch=True)
+    if existing:
+        await ctx.send(f"⚠️ **User `{user_id}` already has word filter bypass.**")
+        return
+    
+    # Add to database
+    db_query("INSERT INTO word_filter_bypass (user_id, added_by, reason) VALUES (?, ?, ?)", 
+             (user_id, str(ctx.author.id), reason))
+    
+    # Log the action
+    log_msg = f"Word filter bypass granted to {user_id} by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+    
+    # Send DM to user
+    dm_message = f"""🔓 **Word Filter Bypass Granted**
+
+You have been granted permission to bypass the word filter in FlexedAI Bot.
+
+**Reason:** {reason}
+**Granted By:** {ctx.author.name}
+
+**What this means:**
+• You can use banned words without being filtered
+• Your messages will not be automatically deleted
+• This privilege can be revoked at any time
+
+**Important:**
+• Use this privilege responsibly
+• Don't abuse this permission
+• Follow all other server and bot rules
+
+*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+"""
+    dm_sent = await send_user_dm(user_id, dm_message)
+    
+    # Log to banned words channel (since it's filter-related)
+    log_embed = discord.Embed(
+        title="🔓 Word Filter Bypass Granted",
+        description="A user has been granted word filter bypass privileges.",
+        color=discord.Color.blue(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
+    log_embed.add_field(name="⚖️ Granted By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
+    log_embed.add_field(name="📝 Reason", value=reason, inline=False)
+    log_embed.add_field(name="📬 DM Sent", value="✅ Delivered" if dm_sent else "❌ Failed", inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    
+    await log_to_channel(bot, 'banned_words', log_embed)
+    
+    # Confirm to command user
+    embed = discord.Embed(
+        title="🔓 Word Filter Bypass Granted",
+        description=f"User `{user_id}` can now bypass the word filter.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="User ID", value=user_id, inline=True)
+    embed.add_field(name="Granted By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    embed.add_field(name="DM Notification", value="✅ Sent" if dm_sent else "❌ Failed", inline=True)
+    
+    await ctx.send(embed=embed)
+
+@bypass_group.command(name="remove")
+@owner_or_bot_admin()
+async def bypass_remove(ctx, user_id: str, *, reason: str = "No reason provided"):
+    """Remove a user from word filter bypass"""
+    # Check if has bypass
+    existing = db_query("SELECT user_id FROM word_filter_bypass WHERE user_id = ?", (user_id,), fetch=True)
+    if not existing:
+        await ctx.send(f"⚠️ **User `{user_id}` does not have word filter bypass.**")
+        return
+    
+    # Remove from database
+    db_query("DELETE FROM word_filter_bypass WHERE user_id = ?", (user_id,))
+    
+    # Log the action
+    log_msg = f"Word filter bypass revoked from {user_id} by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+    
+    # Send DM to user
+    dm_message = f"""🔒 **Word Filter Bypass Revoked**
+
+Your word filter bypass privileges have been revoked.
+
+**Reason:** {reason}
+**Revoked By:** {ctx.author.name}
+
+**What this means:**
+• You can no longer use banned words
+• Your messages will be filtered like normal users
+• Using banned words will result in message deletion
+
+**Remember:**
+• Follow the word filter rules
+• Avoid using banned words
+• Repeated violations may result in strikes
+
+*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+"""
+    dm_sent = await send_user_dm(user_id, dm_message)
+    
+    # Log to banned words channel
+    log_embed = discord.Embed(
+        title="🔒 Word Filter Bypass Revoked",
+        description="Word filter bypass has been removed from a user.",
+        color=discord.Color.orange(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
+    log_embed.add_field(name="⚖️ Revoked By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
+    log_embed.add_field(name="📝 Reason", value=reason, inline=False)
+    log_embed.add_field(name="📬 DM Sent", value="✅ Delivered" if dm_sent else "❌ Failed", inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    
+    await log_to_channel(bot, 'banned_words', log_embed)
+    
+    # Confirm to command user
+    embed = discord.Embed(
+        title="🔒 Word Filter Bypass Revoked",
+        description=f"User `{user_id}` can no longer bypass the word filter.",
+        color=discord.Color.orange()
+    )
+    embed.add_field(name="User ID", value=user_id, inline=True)
+    embed.add_field(name="Revoked By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    embed.add_field(name="DM Notification", value="✅ Sent" if dm_sent else "❌ Failed", inline=True)
+    
+    await ctx.send(embed=embed)
+
+
 @bot.hybrid_command(name="listwords", description="Owner/Admin: List all banned words.")
 @owner_or_bot_admin()
 async def list_words(ctx):
