@@ -1176,7 +1176,7 @@ async def report_user(ctx, member: discord.Member, *, reason: str):
     """
     Report a user for misbehavior
     Usage: /report @user <reason>
-    Attach images/files to your message for proof
+    You can attach images/files as proof
     """
     if not ctx.guild:
         await ctx.send("❌ **This command can only be used in servers.**")
@@ -1196,9 +1196,15 @@ async def report_user(ctx, member: discord.Member, *, reason: str):
     proof_text = "No proof attached"
     attachments_list = []
     
-    if ctx.message.attachments:
+    # Handle attachments from both slash commands and prefix commands
+    if ctx.message and ctx.message.attachments:
         attachments_list = [att.url for att in ctx.message.attachments]
         proof_text = "\n".join(attachments_list)
+    elif hasattr(ctx, 'interaction') and ctx.interaction:
+        # For slash commands, check if there are any attachments
+        # Note: Discord slash commands don't support file uploads directly
+        # Users need to provide image URLs or use prefix commands
+        proof_text = "No proof attached (use prefix command to attach files)"
     
     # Store in database
     db_query(
@@ -1221,64 +1227,119 @@ async def report_user(ctx, member: discord.Member, *, reason: str):
         timestamp=datetime.datetime.utcnow()
     )
     
-    log_embed.add_field(name="👤 Reported User", value=f"{member.mention} (`{member.id}`)\n{member.name}", inline=True)
-    log_embed.add_field(name="🚨 Reported By", value=f"{ctx.author.mention} (`{ctx.author.id}`)\n{ctx.author.name}", inline=True)
+    log_embed.add_field(name="👤 Reported User", value=f"{member.mention} (`{member.id}`)\n**Username:** {member.name}\n**Display Name:** {member.display_name}", inline=True)
+    log_embed.add_field(name="🚨 Reported By", value=f"{ctx.author.mention} (`{ctx.author.id}`)\n**Username:** {ctx.author.name}", inline=True)
     log_embed.add_field(name="🆔 Report ID", value=f"`#{report_id}`", inline=True)
     
-    log_embed.add_field(name="🏠 Server", value=f"{ctx.guild.name}\n`{ctx.guild.id}`", inline=True)
-    log_embed.add_field(name="📍 Channel", value=f"{ctx.channel.mention}\n`{ctx.channel.id}`", inline=True)
+    log_embed.add_field(name="🏠 Server", value=f"**Name:** {ctx.guild.name}\n**ID:** `{ctx.guild.id}`", inline=True)
+    log_embed.add_field(name="📍 Channel", value=f"{ctx.channel.mention}\n**ID:** `{ctx.channel.id}`", inline=True)
     log_embed.add_field(name="📅 Report Date", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
     
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     
-    # Add proof section
+    # Add proof section with better formatting
     if attachments_list:
-        proof_links = "\n".join([f"[Attachment {i+1}]({url})" for i, url in enumerate(attachments_list)])
-        log_embed.add_field(name="📎 Proof Attached", value=proof_links, inline=False)
+        # Create clickable links for each attachment
+        proof_display = []
+        for i, url in enumerate(attachments_list, 1):
+            # Determine file type from URL
+            file_ext = url.split('.')[-1].split('?')[0].lower()
+            if file_ext in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
+                file_type = "🖼️ Image"
+            elif file_ext in ['mp4', 'mov', 'avi', 'webm']:
+                file_type = "🎥 Video"
+            elif file_ext in ['pdf', 'txt', 'doc', 'docx']:
+                file_type = "📄 Document"
+            else:
+                file_type = "📎 File"
+            
+            proof_display.append(f"{file_type} {i}: [View Attachment]({url})")
+        
+        log_embed.add_field(name="📎 Proof Attached", value="\n".join(proof_display), inline=False)
+        
+        # Set the first image as thumbnail if available
+        first_attachment = attachments_list[0]
+        if first_attachment.split('.')[-1].split('?')[0].lower() in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
+            log_embed.set_image(url=first_attachment)
     else:
-        log_embed.add_field(name="📎 Proof", value="No attachments provided", inline=False)
+        log_embed.add_field(name="📎 Proof", value="❌ No attachments provided\n\n*Tip: Use the prefix command (e.g., `!report @user reason`) and attach files to include proof.*", inline=False)
     
     # Add reported user's account info
-    log_embed.add_field(name="ℹ️ Account Info", 
-                       value=f"**Created:** {member.created_at.strftime('%Y-%m-%d')}\n**Joined Server:** {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'}", 
-                       inline=True)
+    account_age = (datetime.datetime.utcnow() - member.created_at).days
+    join_age = (datetime.datetime.utcnow() - member.joined_at).days if member.joined_at else 0
+    
+    log_embed.add_field(
+        name="ℹ️ Account Information", 
+        value=f"**Account Created:** {member.created_at.strftime('%Y-%m-%d')} ({account_age} days ago)\n**Joined Server:** {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'} ({join_age} days ago)\n**Roles:** {len(member.roles)-1} roles", 
+        inline=True
+    )
     
     # Check if reported user has existing strikes
     existing_strikes = db_query("SELECT strikes, blacklisted FROM users WHERE user_id = ?", (str(member.id),), fetch=True)
     if existing_strikes and existing_strikes[0]:
         strikes, blacklisted = existing_strikes[0]
-        status = "🚫 Blacklisted" if blacklisted else f"⚡ {strikes}/3 Strikes"
-        log_embed.add_field(name="📊 Current Status", value=status, inline=True)
+        if blacklisted:
+            status = "🚫 **BLACKLISTED**"
+            status_color = "This user is currently banned from the bot"
+        elif strikes >= 2:
+            status = f"⚠️ **{strikes}/3 Strikes** (High Risk)"
+            status_color = "User is close to automatic blacklist"
+        elif strikes >= 1:
+            status = f"⚡ **{strikes}/3 Strikes**"
+            status_color = "User has previous violations"
+        else:
+            status = "✅ Clean Record"
+            status_color = "No previous violations"
+        
+        log_embed.add_field(name="📊 User Status", value=f"{status}\n*{status_color}*", inline=True)
     else:
-        log_embed.add_field(name="📊 Current Status", value="✅ Clean Record", inline=True)
+        log_embed.add_field(name="📊 User Status", value="✅ **Clean Record**\n*No previous violations*", inline=True)
+    
+    # Add reporter's credibility info
+    reporter_reports = db_query("SELECT COUNT(*) FROM reports WHERE reporter_id = ?", (str(ctx.author.id),), fetch=True)
+    report_count = reporter_reports[0][0] if reporter_reports else 0
+    
+    log_embed.add_field(
+        name="📊 Reporter Info",
+        value=f"**Total Reports Filed:** {report_count}\n**Account Age:** {(datetime.datetime.utcnow() - ctx.author.created_at).days} days",
+        inline=False
+    )
     
     log_embed.set_thumbnail(url=member.display_avatar.url)
-    log_embed.set_footer(text=f"Report ID: {report_id} | Reported by: {ctx.author.name}")
+    log_embed.set_footer(text=f"Report ID: {report_id} | Reported by: {ctx.author.name} ({ctx.author.id})")
     
     # Send to reports/admin logs channel
     await log_to_channel(bot, 'admin_logs', log_embed)
     
     # Confirm to reporter (ephemeral if possible)
     confirm_embed = discord.Embed(
-        title="✅ Report Submitted",
-        description=f"Your report has been successfully submitted to the bot administrators.",
+        title="✅ Report Submitted Successfully",
+        description=f"Your report has been forwarded to the bot administrators for review.",
         color=discord.Color.green()
     )
-    confirm_embed.add_field(name="Report ID", value=f"`#{report_id}`", inline=True)
-    confirm_embed.add_field(name="Reported User", value=member.mention, inline=True)
-    confirm_embed.add_field(name="Status", value="Pending Review", inline=True)
-    confirm_embed.add_field(name="What Happens Next?", 
-                           value="• Bot administrators will review your report\n• They may take action if warranted\n• You will not receive direct updates\n• False reports may result in consequences", 
-                           inline=False)
-    confirm_embed.set_footer(text="Thank you for helping keep the community safe!")
+    confirm_embed.add_field(name="🆔 Report ID", value=f"`#{report_id}`", inline=True)
+    confirm_embed.add_field(name="👤 Reported User", value=member.mention, inline=True)
+    confirm_embed.add_field(name="📌 Status", value="Pending Review", inline=True)
+    
+    if attachments_list:
+        confirm_embed.add_field(name="📎 Proof", value=f"✅ {len(attachments_list)} attachment(s) included", inline=False)
+    else:
+        confirm_embed.add_field(name="📎 Proof", value="⚠️ No attachments included\n*Consider adding proof for stronger reports*", inline=False)
+    
+    confirm_embed.add_field(
+        name="⏭️ What Happens Next?", 
+        value="• Bot administrators will review your report\n• Appropriate action may be taken if warranted\n• You will not receive direct updates on the report status\n• **Warning:** Filing false reports may result in consequences", 
+        inline=False
+    )
+    confirm_embed.set_footer(text="Thank you for helping maintain a safe community!")
     
     if ctx.interaction:
         await ctx.send(embed=confirm_embed, ephemeral=True)
     else:
         await ctx.send(embed=confirm_embed)
-        # Try to delete the command message for privacy
+        # Try to delete the command message after 10 seconds for privacy
         try:
-            await ctx.message.delete(delay=5)
+            await ctx.message.delete(delay=10)
         except:
             pass
 
