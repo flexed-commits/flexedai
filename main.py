@@ -20,7 +20,7 @@ LOG_CHANNELS = {
     'blacklist': 1460868307602378814,
     'banned_words': 1460868341345419275,
     'admin_logs': 1460868388695052442,
-    'reports': 1460868388695052442  # Using admin logs channel for reports
+    'reports': 1460868441878691922 # Using admin logs channel for reports
 }
 
 # Discord message limits
