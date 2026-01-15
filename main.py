@@ -1504,7 +1504,6 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     """
     Report a user for misbehavior
     Usage: /report @user <proof_url_or_text> <reason>
-    You can provide image URLs or text as proof
     """
     if not ctx.guild:
         await ctx.send("❌ **This command can only be used in servers.**")
@@ -1548,7 +1547,7 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
         title=f"📢 New User Report - #{report_id}",
         description="A user has been reported for misbehavior.",
         color=discord.Color.red(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=discord.utils.utcnow()
     )
     
     log_embed.add_field(name="👤 Reported User", value=f"{member.mention} (`{member.id}`)\n**Username:** {member.name}\n**Display Name:** {member.display_name}", inline=True)
@@ -1557,7 +1556,7 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     
     log_embed.add_field(name="🏠 Server", value=f"**Name:** {ctx.guild.name}\n**ID:** `{ctx.guild.id}`", inline=True)
     log_embed.add_field(name="📍 Channel", value=f"{ctx.channel.mention}\n**ID:** `{ctx.channel.id}`", inline=True)
-    log_embed.add_field(name="📅 Report Date", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="📅 Report Date", value=discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
     
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     
@@ -1567,11 +1566,9 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     
     for line in proof_lines:
         if line.startswith('http://') or line.startswith('https://'):
-            # Determine file type from URL
             file_ext = line.split('.')[-1].split('?')[0].lower()
             if file_ext in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
                 file_type = "🖼️ Image"
-                # Set first image as embed image
                 if len(proof_display) == 0:
                     log_embed.set_image(url=line)
             elif file_ext in ['mp4', 'mov', 'avi', 'webm']:
@@ -1586,13 +1583,11 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     
     log_embed.add_field(name="📎 Proof", value="\n".join(proof_display) if proof_display else "No proof provided", inline=False)
     
-    # Add reported user's account info
-# Use discord.utils.utcnow() for compatibility
-now = discord.utils.utcnow()
-
-account_age = (now - member.created_at).days
-join_age = (now - member.joined_at).days if member.joined_at else 0
-
+    # --- FIX START: Timezone-aware datetime subtraction ---
+    now = discord.utils.utcnow()
+    account_age = (now - member.created_at).days
+    join_age = (now - member.joined_at).days if member.joined_at else 0
+    # --- FIX END ---
     
     log_embed.add_field(
         name="ℹ️ Account Information", 
@@ -1627,7 +1622,7 @@ join_age = (now - member.joined_at).days if member.joined_at else 0
     
     log_embed.add_field(
         name="📊 Reporter Info",
-        value=f"**Total Reports Filed:** {report_count}\n**Account Age:** {(datetime.datetime.utcnow() - ctx.author.created_at).days} days",
+        value=f"**Total Reports Filed:** {report_count}\n**Account Age:** {(now - ctx.author.created_at).days} days",
         inline=False
     )
     
@@ -1640,7 +1635,7 @@ join_age = (now - member.joined_at).days if member.joined_at else 0
         view = ReportActionView(report_id, member.id, member.name)
         await channel.send(embed=log_embed, view=view)
     
-    # Confirm to reporter (ephemeral if possible)
+    # Confirm to reporter
     confirm_embed = discord.Embed(
         title="✅ Report Submitted Successfully",
         description=f"Your report has been forwarded to the bot administrators for review.",
@@ -1649,24 +1644,17 @@ join_age = (now - member.joined_at).days if member.joined_at else 0
     confirm_embed.add_field(name="🆔 Report ID", value=f"`#{report_id}`", inline=True)
     confirm_embed.add_field(name="👤 Reported User", value=member.mention, inline=True)
     confirm_embed.add_field(name="📌 Status", value="Pending Review", inline=True)
-    confirm_embed.add_field(name="📎 Proof", value="✅ Provided", inline=True)
-    
-    confirm_embed.add_field(
-        name="⏭️ What Happens Next?", 
-        value="• Bot administrators will review your report\n• Appropriate action may be taken if warranted\n• You will not receive direct updates on the report status\n• **Warning:** Filing false reports may result in consequences", 
-        inline=False
-    )
     confirm_embed.set_footer(text="Thank you for helping maintain a safe community!")
     
     if ctx.interaction:
         await ctx.send(embed=confirm_embed, ephemeral=True)
     else:
         await ctx.send(embed=confirm_embed)
-        # Try to delete the command message after 10 seconds for privacy
         try:
             await ctx.message.delete(delay=10)
         except:
             pass
+
 @bot.hybrid_command(name="reports", description="Owner/Admin: View recent reports.")
 @owner_or_bot_admin()
 async def view_reports(ctx, status: str = "pending"):
