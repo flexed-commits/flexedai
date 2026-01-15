@@ -1743,6 +1743,103 @@ async def view_report_detail(ctx, report_id: int):
     
     await ctx.send(embed=embed)
 
+
+@bot.hybrid_command(name="reportclear", description="Owner/Admin: Clear all reports for a user.")
+@owner_or_bot_admin()
+async def report_clear(ctx, user_id: str, *, reason: str = "No reason provided"):
+    """Clear all reports for a specific user"""
+    # Check how many reports exist for this user
+    reports = db_query("SELECT COUNT(*) FROM reports WHERE reported_user_id = ?", (user_id,), fetch=True)
+    count = reports[0][0] if reports else 0
+    
+    if count == 0:
+        await ctx.send(f"⚠️ **No reports found for user `{user_id}`.**")
+        return
+    
+    # Delete all reports for this user
+    db_query("DELETE FROM reports WHERE reported_user_id = ?", (user_id,))
+    
+    # Log the action
+    log_msg = f"All reports cleared for user {user_id} by {ctx.author.name} ({ctx.author.id}). Reason: {reason}. Reports cleared: {count}"
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+    
+    # Log to admin logs channel
+    log_embed = discord.Embed(
+        title="🗑️ Reports Cleared for User",
+        description=f"All reports have been cleared for a user.",
+        color=discord.Color.blue(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
+    log_embed.add_field(name="📊 Reports Cleared", value=str(count), inline=True)
+    log_embed.add_field(name="⚖️ Cleared By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
+    log_embed.add_field(name="📝 Reason", value=reason, inline=False)
+    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    
+    await log_to_channel(bot, 'admin_logs', log_embed)
+    
+    # Confirm to command user
+    embed = discord.Embed(
+        title="✅ Reports Cleared",
+        description=f"All reports for user `{user_id}` have been cleared.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="User ID", value=user_id, inline=True)
+    embed.add_field(name="Reports Cleared", value=str(count), inline=True)
+    embed.add_field(name="Cleared By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="reportremove", description="Owner/Admin: Remove a specific report.")
+@owner_or_bot_admin()
+async def report_remove(ctx, report_id: int, *, reason: str = "No reason provided"):
+    """Remove a specific report by ID"""
+    # Check if report exists
+    report = db_query("SELECT reported_user_id, reported_user_name, reporter_id, reporter_name, reason FROM reports WHERE report_id = ?", (report_id,), fetch=True)
+    
+    if not report:
+        await ctx.send(f"❌ **Report #{report_id} not found.**")
+        return
+    
+    reported_user_id, reported_user_name, reporter_id, reporter_name, report_reason = report[0]
+    
+    # Delete the report
+    db_query("DELETE FROM reports WHERE report_id = ?", (report_id,))
+    
+    # Log the action
+    log_msg = f"Report #{report_id} removed by {ctx.author.name} ({ctx.author.id}). Reported user: {reported_user_id}. Reason: {reason}"
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+    
+    # Log to admin logs channel
+    log_embed = discord.Embed(
+        title=f"🗑️ Report #{report_id} Removed",
+        description=f"A report has been removed from the system.",
+        color=discord.Color.orange(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    log_embed.add_field(name="🆔 Report ID", value=f"`#{report_id}`", inline=True)
+    log_embed.add_field(name="👤 Reported User", value=f"<@{reported_user_id}> (`{reported_user_id}`)\n{reported_user_name}", inline=True)
+    log_embed.add_field(name="🚨 Reporter", value=f"<@{reporter_id}>\n{reporter_name}", inline=True)
+    log_embed.add_field(name="📝 Original Reason", value=report_reason, inline=False)
+    log_embed.add_field(name="🗑️ Removal Reason", value=reason, inline=False)
+    log_embed.add_field(name="⚖️ Removed By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    
+    await log_to_channel(bot, 'admin_logs', log_embed)
+    
+    # Confirm to command user
+    embed = discord.Embed(
+        title="✅ Report Removed",
+        description=f"Report #{report_id} has been removed from the system.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Report ID", value=f"`#{report_id}`", inline=True)
+    embed.add_field(name="Reported User", value=f"<@{reported_user_id}>", inline=True)
+    embed.add_field(name="Removed By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    
+    await ctx.send(embed=embed)
 # Bot Admin Management Commands (Owner Only)
 @bot.command(name="add-admin", description="Owner: Add a bot admin.")
 @commands.is_owner()
