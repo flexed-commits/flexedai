@@ -188,6 +188,13 @@ def get_channel_language(channel_id):
     res = db_query("SELECT language FROM settings WHERE id = ?", (str(channel_id),), fetch=True)
     return res[0][0] if res and res[0][0] else "English"
 
+def is_bypass_user(user_id):
+    """Check if user has word filter bypass"""
+    if user_id == OWNER_ID:
+        return True
+    res = db_query("SELECT user_id FROM word_filter_bypass WHERE user_id = ?", (str(user_id),), fetch=True)
+    return bool(res)
+
 def export_db_to_json():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
