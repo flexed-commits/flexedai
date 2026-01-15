@@ -1963,31 +1963,37 @@ async def help_cmd(ctx):
         color=discord.Color.blue()
     )
     
+    # 1. OWNER SECTION
     if ctx.author.id == OWNER_ID:
         embed.add_field(
             name="👑 Owner Only Commands", 
             value="`add-admin`, `remove-admin`, `list-admins`, `leave` (DM only)", 
             inline=False
         )
-# Line 1972: Changed 'If' to 'if'
-if is_admin:
-    # Line 1973: Ensure this is indented by 4 spaces
-    embed.add_field(
-        name="🛡️ Owner/Admin Commands (DM Only)", 
-        value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", 
-        inline=False
-    )
-    embed.add_field(
-        name="🔨 Moderation Commands", 
-        value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/bypass`, `/logs`, `/searchlogs`, `/clearadminlogs`, `/reports`, `/reportview`", 
-        inline=False
-    )
-    
-    embed.add_field(
-        name="⚙️ Settings (Admin Required)", 
-        value="`/start`, `/stop`, `/lang`, `/prefix`", 
-        inline=False
-    )
+
+    # 2. ADMIN/MODERATOR SECTION
+    if is_admin:
+        embed.add_field(
+            name="🛡️ Owner/Admin Commands (DM Only)", 
+            value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", 
+            inline=False
+        )
+        embed.add_field(
+            name="🔨 Moderation Commands", 
+            value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/bypass`, `/logs`, `/searchlogs`, `/clearadminlogs`, `/reports`, `/reportview`", 
+            inline=False
+        )
+        embed.add_field(
+            name="⚙️ Settings (Admin Required)", 
+            value="`/start`, `/stop`, `/lang`, `/prefix`", 
+            inline=False
+        )
+        embed.set_footer(text="✨ You have Bot Admin privileges")
+    else:
+        # 3. REGULAR USER SECTION (Added for non-admins)
+        embed.set_footer(text="Use /report to flag misbehavior to admins")
+
+    # 4. GENERAL UTILITY SECTION (Available to everyone)
     embed.add_field(
         name="📊 Utility Commands", 
         value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`, `/report`", 
@@ -2000,10 +2006,8 @@ if is_admin:
         inline=False
     )
     
-    embed.set_footer(text="✨ You have Bot Admin privileges")
-    
+    # Send the final built embed
     await ctx.send(embed=embed)
-
 
 @bot.hybrid_command(name="whoami", description="Show your Discord profile.")
 async def whoami(ctx):
