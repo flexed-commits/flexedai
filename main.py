@@ -1969,7 +1969,9 @@ async def help_cmd(ctx):
             value="`add-admin`, `remove-admin`, `list-admins`, `leave` (DM only)", 
             inline=False
         )
-    if is_admin:
+# Line 1972: Changed 'If' to 'if'
+if is_admin:
+    # Line 1973: Ensure this is indented by 4 spaces
     embed.add_field(
         name="🛡️ Owner/Admin Commands (DM Only)", 
         value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", 
@@ -1998,7 +2000,6 @@ async def help_cmd(ctx):
         inline=False
     )
     
-    # Mistake fixed: Removed the redundant 'if is_admin' check here
     embed.set_footer(text="✨ You have Bot Admin privileges")
     
     await ctx.send(embed=embed)
