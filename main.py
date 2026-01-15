@@ -1898,17 +1898,17 @@ async def help_cmd(ctx):
             inline=False
         )
     
-    if is_admin:
-        embed.add_field(
-            name="🛡️ Owner/Admin Commands (DM Only)", 
-            value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", 
-            inline=False
-        )
-        embed.add_field(
-            name="🔨 Moderation Commands", 
-            value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/logs`, `/searchlogs`, `/clearadminlogs`, `/reports`, `/reportview`", 
-            inline=False
-        )
+if is_admin:
+    embed.add_field(
+        name="🛡️ Owner/Admin Commands (DM Only)", 
+        value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", 
+        inline=False
+    )
+    embed.add_field(
+        name="🔨 Moderation Commands", 
+        value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/bypass`, `/logs`, `/searchlogs`, `/clearadminlogs`, `/reports`, `/reportview`", 
+        inline=False
+    )
     
     embed.add_field(
         name="⚙️ Settings (Admin Required)", 
