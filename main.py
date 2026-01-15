@@ -1,3 +1,5 @@
+# Feel free to use my code; Just make sure to edit the hardcoded ids.
+
 import discord
 from discord.ext import commands, tasks
 import os, time, datetime, json, sqlite3, asyncio
