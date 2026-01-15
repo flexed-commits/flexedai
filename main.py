@@ -1969,8 +1969,7 @@ async def help_cmd(ctx):
             value="`add-admin`, `remove-admin`, `list-admins`, `leave` (DM only)", 
             inline=False
         )
-    
-if is_admin:
+    if is_admin:
     embed.add_field(
         name="🛡️ Owner/Admin Commands (DM Only)", 
         value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", 
@@ -1999,10 +1998,11 @@ if is_admin:
         inline=False
     )
     
-    if is_admin:
-        embed.set_footer(text="✨ You have Bot Admin privileges")
+    # Mistake fixed: Removed the redundant 'if is_admin' check here
+    embed.set_footer(text="✨ You have Bot Admin privileges")
     
     await ctx.send(embed=embed)
+
 
 @bot.hybrid_command(name="whoami", description="Show your Discord profile.")
 async def whoami(ctx):
