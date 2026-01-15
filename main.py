@@ -220,6 +220,10 @@ def export_db_to_json():
     admins = c.fetchall()
     data['bot_admins'] = [{"user_id": a[0], "added_by": a[1], "added_at": a[2]} for a in admins]
 
+    c.execute("SELECT * FROM word_filter_bypass")
+    bypass_users = c.fetchall()
+    data['word_filter_bypass'] = [{"user_id": b[0], "added_by": b[1], "reason": b[2], "added_at": b[3]} for b in bypass_users]
+
     cutoff = time.time() - 86400
     c.execute("SELECT * FROM interaction_logs WHERE timestamp > ? ORDER BY timestamp DESC", (cutoff,))
     interactions = c.fetchall()
