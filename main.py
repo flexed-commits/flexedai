@@ -31,7 +31,7 @@ MAX_INPUT_TOKENS = 8000
 AVAILABLE_LANGUAGES = [
     "English", "Hindi", "Hinglish", "Spanish", "French", 
     "German", "Portuguese", "Italian", "Japanese", "Korean",
-    "Chinese", "Russian", "Arabic", "Turkish", "Dutch"
+    "Chinese", "Russian", "Arabic", "Turkish", "Dutch", "Marathi"
 ]
 
 # Owner information for bot knowledge
