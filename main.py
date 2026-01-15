@@ -36,9 +36,9 @@ AVAILABLE_LANGUAGES = [
 
 # Owner information for bot knowledge
 OWNER_INFO = {
-    'name': 'FlexedAI Owner',
+    'name': 'Ψ.1nOnly.Ψ',
     'id': OWNER_ID,
-    'bio': 'Creator and maintainer of FlexedAI Discord Bot'
+    'bio': 'Creator and maintainer of flexedAI Discord Bot'
 }
 
 # --- DATABASE SETUP ---
