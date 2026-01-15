@@ -1552,3 +1552,362 @@ async def start_mode(ctx):
             return
     
     db_query("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, 'start')", (str(ctx.channel.id),))
+    embed = discord.Embed(
+        title="🟢 Start Mode Activated",
+        description="The bot will now respond to **all messages** in this channel.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Channel", value=ctx.channel.mention, inline=True)
+    embed.add_field(name="Mode", value="**START** (Respond to all)", inline=True)
+    embed.set_footer(text="Use /stop to return to normal mode")
+    
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="stop", description="Set bot to respond only to pings/triggers.")
+async def stop_mode(ctx):
+    if ctx.author.id != OWNER_ID:
+        if not ctx.guild or not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions")
+            return
+    
+    db_query("INSERT OR REPLACE INTO settings (id, mode) VALUES (?, 'stop')", (str(ctx.channel.id),))
+    
+    embed = discord.Embed(
+        title="🔴 Stop Mode Activated",
+        description="The bot will now **only respond** to:\n• Direct mentions/pings\n• Messages containing 'flexedai'\n• Images/attachments",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="Channel", value=ctx.channel.mention, inline=True)
+    embed.add_field(name="Mode", value="**STOP** (Selective response)", inline=True)
+    embed.set_footer(text="Use /start to enable response to all messages")
+    
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="lang", description="Set channel language (Admin only).")
+async def set_lang_slash(ctx, lang: str = None):
+    if ctx.author.id != OWNER_ID:
+        if not ctx.guild or not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions")
+            return
+    
+    if ctx.interaction and lang is None:
+        view = LanguageSelectView(ctx.channel.id, ctx.author.id)
+        await ctx.send("🌐 **Select a language for this channel:**", view=view, ephemeral=True)
+        return
+    
+    if lang:
+        if lang not in AVAILABLE_LANGUAGES:
+            await ctx.send(f"❌ **Invalid language**\n\n**Available languages:**\n{', '.join(AVAILABLE_LANGUAGES)}", ephemeral=True)
+            return
+        
+        db_query("INSERT OR REPLACE INTO settings (id, language) VALUES (?, ?)", (str(ctx.channel.id), lang))
+        
+        embed = discord.Embed(
+            title="🌐 Language Changed",
+            description=f"Channel language set to **{lang}**",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Channel", value=ctx.channel.mention, inline=True)
+        embed.add_field(name="Language", value=lang, inline=True)
+        
+        await ctx.send(embed=embed, ephemeral=True)
+        return
+    
+    if not ctx.interaction:
+        view = LanguageButtonView(ctx.channel.id, ctx.author.id, OWNER_ID)
+        await ctx.send(f"🌐 **Select Language for this Channel**\n\n**Available:** {', '.join(AVAILABLE_LANGUAGES)}\n\nClick a button below:", view=view)
+
+@set_lang_slash.autocomplete('lang')
+async def lang_autocomplete(interaction: discord.Interaction, current: str):
+    return [
+        discord.app_commands.Choice(name=lang, value=lang)
+        for lang in AVAILABLE_LANGUAGES if current.lower() in lang.lower()
+    ][:25]
+
+@bot.hybrid_command(name="prefix", description="Change command prefix.")
+async def set_prefix(ctx, new_prefix: str):
+    if ctx.author.id != OWNER_ID:
+        if not ctx.guild or not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions")
+            return
+    
+    guild_or_user_id = str(ctx.guild.id if ctx.guild else ctx.author.id)
+    db_query("INSERT OR REPLACE INTO settings (id, prefix) VALUES (?, ?)", (guild_or_user_id, new_prefix))
+    
+    embed = discord.Embed(
+        title="⚙️ Prefix Changed",
+        description=f"Command prefix updated to `{new_prefix}`",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="New Prefix", value=f"`{new_prefix}`", inline=True)
+    embed.add_field(name="Example", value=f"`{new_prefix}help`", inline=True)
+    
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="help", description="Display command center.")
+async def help_cmd(ctx):
+    is_admin = is_bot_admin(ctx.author.id)
+    
+    embed = discord.Embed(
+        title="📡 FlexedAI Command Center",
+        description="Here are all the commands you have access to:",
+        color=discord.Color.blue()
+    )
+    
+    if ctx.author.id == OWNER_ID:
+        embed.add_field(
+            name="👑 Owner Only Commands", 
+            value="`add-admin`, `remove-admin`, `list-admins`, `leave` (DM only)", 
+            inline=False
+        )
+    
+    if is_admin:
+        embed.add_field(
+            name="🛡️ Owner/Admin Commands (DM Only)", 
+            value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", 
+            inline=False
+        )
+        embed.add_field(
+            name="🔨 Moderation Commands", 
+            value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/logs`, `/searchlogs`, `/clearadminlogs`, `/reports`, `/reportview`", 
+            inline=False
+        )
+    
+    embed.add_field(
+        name="⚙️ Settings (Admin Required)", 
+        value="`/start`, `/stop`, `/lang`, `/prefix`", 
+        inline=False
+    )
+    embed.add_field(
+        name="📊 Utility Commands", 
+        value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`, `/report`", 
+        inline=False
+    )
+    
+    embed.add_field(
+        name="ℹ️ About the Owner",
+        value=f"Bot created and maintained by <@{OWNER_ID}>",
+        inline=False
+    )
+    
+    if is_admin:
+        embed.set_footer(text="✨ You have Bot Admin privileges")
+    
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="whoami", description="Show your Discord profile.")
+async def whoami(ctx):
+    user = ctx.author
+    roles = ", ".join([r.name for r in user.roles[1:]]) if ctx.guild else "N/A"
+    
+    embed = discord.Embed(
+        title=f"👤 {user.name}",
+        description=f"Here's your profile information:",
+        color=user.color
+    )
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.add_field(name="User ID", value=f"`{user.id}`", inline=False)
+    embed.add_field(name="Display Name", value=user.display_name, inline=True)
+    embed.add_field(name="Server Roles", value=roles if roles != "N/A" else "None", inline=False)
+    
+    if user.id == OWNER_ID:
+        embed.add_field(name="Bot Status", value="👑 **Bot Owner**", inline=False)
+    elif is_bot_admin(user.id):
+        embed.add_field(name="Bot Status", value="✨ **Bot Admin**", inline=False)
+    
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="stats", description="Check bot statistics.")
+async def stats(ctx):
+    latency = round(bot.latency * 1000, 2)
+    guild_count = len(bot.guilds)
+    
+    embed = discord.Embed(
+        title="📊 Bot Statistics",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="🏓 Latency", value=f"{latency}ms", inline=True)
+    embed.add_field(name="🌐 Servers", value=guild_count, inline=True)
+    embed.add_field(name="👥 Users", value=sum(g.member_count for g in bot.guilds), inline=True)
+    
+    await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="ping", description="Check bot response time.")
+async def ping(ctx):
+    latency = round(bot.latency * 1000)
+    
+    if latency < 100:
+        emoji = "🟢"
+        status = "Excellent"
+    elif latency < 200:
+        emoji = "🟡"
+        status = "Good"
+    else:
+        emoji = "🔴"
+        status = "Slow"
+    
+    await ctx.send(f"🏓 **Pong!** {emoji}\n**Latency:** {latency}ms ({status})")
+
+@bot.hybrid_command(name="forget", description="Clear AI memory for this conversation.")
+async def forget(ctx):
+    tid = f"{ctx.channel.id}-{ctx.author.id}"
+    if tid in bot.memory:
+        messages_cleared = len(bot.memory[tid])
+        bot.memory[tid].clear()
+        await ctx.send(f"🧠 **Memory cleared**\nRemoved {messages_cleared} message(s) from conversation history.")
+    else:
+        await ctx.send("🧠 **No memory to clear**\nThis conversation has no stored history.")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    user_check = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(message.author.id),), fetch=True)
+    if user_check and user_check[0][0] == 1:
+        return
+
+    content_low = message.content.lower()
+    banned = db_query("SELECT word FROM banned_words", fetch=True)
+    if any(bw[0] in content_low for bw in banned):
+        try:
+            await message.delete()
+            warning = await message.channel.send(
+                f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.\n\n**Warning:** Repeated violations may result in strikes or blacklisting.",
+                delete_after=10
+            )
+        except:
+            pass
+        return
+
+    await bot.process_commands(message)
+    ctx = await bot.get_context(message)
+    if ctx.valid:
+        return
+
+    mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
+    mode = mode_check[0][0] if mode_check else "stop"
+
+    should_respond = False
+
+    if mode == "start":
+        should_respond = True
+    elif bot.user.mentioned_in(message) or (message.reference and message.reference.resolved and message.reference.resolved.author == bot.user):
+        should_respond = True
+    elif "flexedai" in content_low:
+        should_respond = True
+    elif not message.guild:
+        should_respond = True
+    elif message.attachments:
+        should_respond = True
+
+    if not should_respond:
+        return
+
+    lang = get_channel_language(message.channel.id)
+
+    # Check for owner-related questions
+    owner_keywords = [
+        "who created you", "who made you", "who is your owner", "who owns you",
+        "your creator", "your owner", "who built you", "who developed you"
+    ]
+    
+    if any(keyword in content_low for keyword in owner_keywords):
+        owner_response = f"""👑 **About My Owner**
+
+I was created and am maintained by <@{OWNER_ID}>!
+
+**Owner Information:**
+• **Name:** {OWNER_INFO['name']}
+• **User ID:** `{OWNER_ID}`
+• **Role:** Bot Creator & Primary Developer
+
+My owner built me to be a helpful, intelligent AI assistant for Discord communities. They continue to maintain and improve my features to serve users better.
+
+If you have any questions, feedback, or issues, you can contact them directly!
+"""
+        await message.reply(owner_response)
+        return
+
+    # Check for verification question
+    verification_keywords = [
+        "are you verified", "are you a verified bot", "is this bot verified",
+        "verified bot", "discord verified", "are you official",
+        "official bot", "verified badge"
+    ]
+    
+    if any(keyword in content_low for keyword in verification_keywords):
+        verification_response = f"""✅ **Verification Status**
+
+**Discord Bot Verification** is a badge that indicates a bot has been verified by Discord. To qualify for verification, a bot must meet these requirements:
+
+🔹 **Be in 75+ servers** (I'm currently in {len(bot.guilds)} servers)
+🔹 **Properly use Discord's API**
+🔹 **Follow Discord's Terms of Service**
+🔹 **Have a clear purpose and functionality**
+
+Verified bots display a ✓ checkmark badge next to their name. Verification helps users trust that the bot is legitimate and maintained by its developers.
+
+If you'd like to know more about my features, use `/help`!
+"""
+        await message.reply(verification_response)
+        return
+
+    tid = f"{message.channel.id}-{message.author.id}"
+    if tid not in bot.memory:
+        bot.memory[tid] = deque(maxlen=6)
+
+    async with message.channel.typing():
+        server_name = message.guild.name if message.guild else "DM"
+        roles = ", ".join([r.name for r in message.author.roles[1:]]) if message.guild else "None"
+
+        user_content, was_truncated = truncate_message(message.content)
+        
+        system = f"""You are FlexedAI, a smart Discord bot created by {OWNER_INFO['name']} (ID: {OWNER_ID}).
+
+Basic Info about configuration, user and server: 
+Language: {lang} (CRITICAL: You MUST respond ONLY in {lang} language. This is the configured language for this channel. Do not switch languages under any circumstances unless the user explicitly changes it using the /lang or !lang command.)
+Server: {server_name}
+Username: {message.author.name}
+Roles: {roles}
+Display Name: {message.author.display_name}
+Profile Picture: {message.author.display_avatar.url}
+Current Channel: <#{message.channel.id}>
+
+Bot's Info:
+Bot's Display Name: {bot.user.display_name}
+Bot's Username: {bot.user.name}
+Bot ID: {bot.user.id}
+Bot's Server Roles: {message.guild.me.roles if message.guild else 'N/A'}
+Bot's Avatar: {bot.user.display_avatar.url}
+Bot Owner: {OWNER_INFO['name']} (ID: {OWNER_ID})
+
+Match the user's tone and energy. Be helpful, casual, and engaging.
+Have shorter responses. No unnecessary verbosity.
+Just don't make silly mistakes. Try to be engaging, not annoying.
+Do not ask questions at the end of responses like "What else can I help you with?" or "What do you want me to know?" etc.
+
+If asked about your creator or owner, mention that you were created by {OWNER_INFO['name']} (User ID: {OWNER_ID}).
+
+REMEMBER: Respond ONLY in {lang} language."""
+
+        msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
+
+        try:
+            res = await bot.groq_client.chat.completions.create(model=MODEL_NAME, messages=msgs, max_tokens=1500)
+            reply = res.choices[0].message.content
+            
+            if was_truncated:
+                reply = "⚠️ *Your message was very long and had to be shortened.*\n\n" + reply
+            
+            await split_and_send(message, reply)
+
+            bot.memory[tid].append({"role": "user", "content": user_content})
+            bot.memory[tid].append({"role": "assistant", "content": reply})
+
+            db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", (time.time(), str(message.guild.id) if message.guild else "DM", str(message.channel.id), message.author.name, str(message.author.id), message.content[:1000], reply[:1000]))
+        except Exception as e:
+            error_msg = f"❌ **An error occurred**\n```\n{str(e)}\n```\nPlease try again or contact <@{OWNER_ID}> if the issue persists."
+            await message.reply(error_msg)
+
+bot.run(DISCORD_TOKEN)
