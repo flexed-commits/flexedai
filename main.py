@@ -2081,9 +2081,11 @@ async def on_message(message):
     if user_check and user_check[0][0] == 1:
         return
 
-# Word filter check (with bypass)
+    # Define content_low early so it's available for all checks
+    content_low = message.content.lower()
+
+    # Word filter check (with bypass)
     if not is_bypass_user(message.author.id):
-        content_low = message.content.lower()
         banned = db_query("SELECT word FROM banned_words", fetch=True)
         if any(bw[0] in content_low for bw in banned):
             try:
