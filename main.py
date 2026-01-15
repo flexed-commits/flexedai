@@ -1353,11 +1353,11 @@ async def search_logs(ctx, keyword: str):
 
 # --- REPORT COMMAND ---
 @bot.hybrid_command(name="report", description="Report a user for misbehavior.")
-async def report_user(ctx, member: discord.Member, *, reason: str):
+async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     """
     Report a user for misbehavior
-    Usage: /report @user <reason>
-    You can attach images/files as proof
+    Usage: /report @user <proof_url_or_text> <reason>
+    You can provide image URLs or text as proof
     """
     if not ctx.guild:
         await ctx.send("❌ **This command can only be used in servers.**")
@@ -1373,24 +1373,20 @@ async def report_user(ctx, member: discord.Member, *, reason: str):
         await ctx.send("❌ **You cannot report bots.**")
         return
     
-    # Collect proof (attachments)
-    proof_text = "No proof attached"
+    # Collect proof from attachments if available
     attachments_list = []
-    
-    # Handle attachments from both slash commands and prefix commands
     if ctx.message and ctx.message.attachments:
         attachments_list = [att.url for att in ctx.message.attachments]
-        proof_text = "\n".join(attachments_list)
-    elif hasattr(ctx, 'interaction') and ctx.interaction:
-        # For slash commands, check if there are any attachments
-        # Note: Discord slash commands don't support file uploads directly
-        # Users need to provide image URLs or use prefix commands
-        proof_text = "No proof attached (use prefix command to attach files)"
+    
+    # Combine proof text and attachments
+    full_proof = proof
+    if attachments_list:
+        full_proof += "\n" + "\n".join(attachments_list)
     
     # Store in database
     db_query(
         "INSERT INTO reports (reporter_id, reporter_name, reported_user_id, reported_user_name, guild_id, guild_name, reason, proof) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (str(ctx.author.id), ctx.author.name, str(member.id), member.name, str(ctx.guild.id), ctx.guild.name, reason, proof_text)
+        (str(ctx.author.id), ctx.author.name, str(member.id), member.name, str(ctx.guild.id), ctx.guild.name, reason, full_proof)
     )
     
     # Get report ID
@@ -1419,31 +1415,29 @@ async def report_user(ctx, member: discord.Member, *, reason: str):
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     
     # Add proof section with better formatting
-    if attachments_list:
-        # Create clickable links for each attachment
-        proof_display = []
-        for i, url in enumerate(attachments_list, 1):
+    proof_lines = full_proof.split('\n')
+    proof_display = []
+    
+    for line in proof_lines:
+        if line.startswith('http://') or line.startswith('https://'):
             # Determine file type from URL
-            file_ext = url.split('.')[-1].split('?')[0].lower()
+            file_ext = line.split('.')[-1].split('?')[0].lower()
             if file_ext in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
                 file_type = "🖼️ Image"
+                # Set first image as embed image
+                if len(proof_display) == 0:
+                    log_embed.set_image(url=line)
             elif file_ext in ['mp4', 'mov', 'avi', 'webm']:
                 file_type = "🎥 Video"
             elif file_ext in ['pdf', 'txt', 'doc', 'docx']:
                 file_type = "📄 Document"
             else:
                 file_type = "📎 File"
-            
-            proof_display.append(f"{file_type} {i}: [View Attachment]({url})")
-        
-        log_embed.add_field(name="📎 Proof Attached", value="\n".join(proof_display), inline=False)
-        
-        # Set the first image as thumbnail if available
-        first_attachment = attachments_list[0]
-        if first_attachment.split('.')[-1].split('?')[0].lower() in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
-            log_embed.set_image(url=first_attachment)
-    else:
-        log_embed.add_field(name="📎 Proof", value="❌ No attachments provided\n\n*Tip: Use the prefix command (e.g., `!report @user reason`) and attach files to include proof.*", inline=False)
+            proof_display.append(f"{file_type}: [View]({line})")
+        else:
+            proof_display.append(f"📝 {line}")
+    
+    log_embed.add_field(name="📎 Proof", value="\n".join(proof_display) if proof_display else "No proof provided", inline=False)
     
     # Add reported user's account info
     account_age = (datetime.datetime.utcnow() - member.created_at).days
@@ -1487,10 +1481,13 @@ async def report_user(ctx, member: discord.Member, *, reason: str):
     )
     
     log_embed.set_thumbnail(url=member.display_avatar.url)
-    log_embed.set_footer(text=f"Report ID: {report_id} | Reported by: {ctx.author.name} ({ctx.author.id})")
+    log_embed.set_footer(text=f"Report ID: {report_id} | Status: PENDING | Reported by: {ctx.author.name}")
     
-    # Send to reports/admin logs channel
-    await log_to_channel(bot, 'admin_logs', log_embed)
+    # Send to reports/admin logs channel with action buttons
+    channel = bot.get_channel(LOG_CHANNELS['admin_logs'])
+    if channel:
+        view = ReportActionView(report_id, member.id, member.name)
+        await channel.send(embed=log_embed, view=view)
     
     # Confirm to reporter (ephemeral if possible)
     confirm_embed = discord.Embed(
@@ -1501,11 +1498,7 @@ async def report_user(ctx, member: discord.Member, *, reason: str):
     confirm_embed.add_field(name="🆔 Report ID", value=f"`#{report_id}`", inline=True)
     confirm_embed.add_field(name="👤 Reported User", value=member.mention, inline=True)
     confirm_embed.add_field(name="📌 Status", value="Pending Review", inline=True)
-    
-    if attachments_list:
-        confirm_embed.add_field(name="📎 Proof", value=f"✅ {len(attachments_list)} attachment(s) included", inline=False)
-    else:
-        confirm_embed.add_field(name="📎 Proof", value="⚠️ No attachments included\n*Consider adding proof for stronger reports*", inline=False)
+    confirm_embed.add_field(name="📎 Proof", value="✅ Provided", inline=True)
     
     confirm_embed.add_field(
         name="⏭️ What Happens Next?", 
@@ -1523,7 +1516,6 @@ async def report_user(ctx, member: discord.Member, *, reason: str):
             await ctx.message.delete(delay=10)
         except:
             pass
-
 @bot.hybrid_command(name="reports", description="Owner/Admin: View recent reports.")
 @owner_or_bot_admin()
 async def view_reports(ctx, status: str = "pending"):
