@@ -2181,7 +2181,7 @@ If you'd like to know more about my features, use `/help`!
 
         user_content, was_truncated = truncate_message(message.content)
         
-        system = f"""You are FlexedAI, a smart Discord bot created by {OWNER_INFO['name']} (ID: {OWNER_ID}).
+        system = f"""You are flexedAI, a smart Discord bot created by {OWNER_INFO['name']} (ID: {OWNER_ID}).
 
 Basic Info about configuration, user and server: 
 Language: {lang} (CRITICAL: You MUST respond ONLY in {lang} language. This is the configured language for this channel. Do not switch languages under any circumstances unless the user explicitly changes it using the /lang or !lang command.)
@@ -2206,7 +2206,7 @@ Just don't make silly mistakes. Try to be engaging, not annoying.
 Do not ask questions at the end of responses like "What else can I help you with?" or "What do you want me to know?" etc.
 
 If asked about your creator or owner, mention that you were created by {OWNER_INFO['name']} (User ID: {OWNER_ID}).
-
+Take use of emojis too, accordingly.
 REMEMBER: Respond ONLY in {lang} language."""
 
         msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
