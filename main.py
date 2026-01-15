@@ -83,6 +83,13 @@ def init_db():
         added_by TEXT,
         added_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
+    # New table for word filter bypass
+    c.execute('''CREATE TABLE IF NOT EXISTS word_filter_bypass (
+        user_id TEXT PRIMARY KEY,
+        added_by TEXT,
+        reason TEXT,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
 
     # New table for reports
     c.execute('''CREATE TABLE IF NOT EXISTS reports (
