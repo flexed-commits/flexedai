@@ -2311,6 +2311,9 @@ async def on_message(message):
 
     # Define content_low early so it's available for all checks
     content_low = message.content.lower()
+    
+    # Track if the message was deleted to avoid "404 Not Found" on replies
+    was_deleted = False
 
     # Word filter check (with bypass)
     if not is_bypass_user(message.author.id):
@@ -2318,13 +2321,14 @@ async def on_message(message):
         if any(bw[0] in content_low for bw in banned):
             try:
                 await message.delete()
+                was_deleted = True
                 warning = await message.channel.send(
                     f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.\n\n**Warning:** Repeated violations may result in strikes or blacklisting.",
                     delete_after=10
                 )
             except:
                 pass
-            return
+            # Note: We continue here so it can still trigger AI/Owner responses even if deleted
 
     await bot.process_commands(message)
     ctx = await bot.get_context(message)
@@ -2372,7 +2376,10 @@ My owner built me to be a helpful, intelligent AI assistant for Discord communit
 
 If you have any questions, feedback, or issues, you can contact them directly!
 """
-        await message.reply(owner_response)
+        if was_deleted:
+            await message.channel.send(owner_response)
+        else:
+            await message.reply(owner_response)
         return
 
     # Check for verification question
@@ -2396,7 +2403,10 @@ Verified bots display a ✓ checkmark badge next to their name. Verification hel
 
 If you'd like to know more about my features, use `/help`!
 """
-        await message.reply(verification_response)
+        if was_deleted:
+            await message.channel.send(verification_response)
+        else:
+            await message.reply(verification_response)
         return
 
     tid = f"{message.channel.id}-{message.author.id}"
@@ -2446,7 +2456,14 @@ REMEMBER: Respond ONLY in {lang} language."""
             if was_truncated:
                 reply = "⚠️ *Your message was very long and had to be shortened.*\n\n" + reply
             
-            await split_and_send(message, reply)
+            # Logic to handle sending the response even if the original message is deleted
+            if was_deleted:
+                # Prepend mention since we can't 'reply' to a ghost message
+                final_reply = f"{message.author.mention} {reply}"
+                # Use simple send instead of split_and_send which relies on message reference
+                await message.channel.send(final_reply)
+            else:
+                await split_and_send(message, reply)
 
             bot.memory[tid].append({"role": "user", "content": user_content})
             bot.memory[tid].append({"role": "assistant", "content": reply})
@@ -2454,6 +2471,9 @@ REMEMBER: Respond ONLY in {lang} language."""
             db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", (time.time(), str(message.guild.id) if message.guild else "DM", str(message.channel.id), message.author.name, str(message.author.id), message.content[:1000], reply[:1000]))
         except Exception as e:
             error_msg = f"❌ **An error occurred**\n```\n{str(e)}\n```\nPlease try again or contact <@{OWNER_ID}> if the issue persists."
-            await message.reply(error_msg)
+            if was_deleted:
+                await message.channel.send(error_msg)
+            else:
+                await message.reply(error_msg)
 
 bot.run(DISCORD_TOKEN)
