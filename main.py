@@ -1587,8 +1587,12 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     log_embed.add_field(name="📎 Proof", value="\n".join(proof_display) if proof_display else "No proof provided", inline=False)
     
     # Add reported user's account info
-    account_age = (datetime.datetime.utcnow() - member.created_at).days
-    join_age = (datetime.datetime.utcnow() - member.joined_at).days if member.joined_at else 0
+# Use discord.utils.utcnow() for compatibility
+now = discord.utils.utcnow()
+
+account_age = (now - member.created_at).days
+join_age = (now - member.joined_at).days if member.joined_at else 0
+
     
     log_embed.add_field(
         name="ℹ️ Account Information", 
