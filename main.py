@@ -519,7 +519,6 @@ def owner_or_bot_admin():
     return commands.check(predicate)
 # Part 3: Moderation Commands with Enhanced Logging
 
-```python
 @bot.hybrid_command(name="sync", description="Owner/Admin: Sync slash commands.")
 @owner_or_bot_admin()
 async def sync(ctx):
