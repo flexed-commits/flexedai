@@ -1841,18 +1841,20 @@ async def on_message(message):
     if user_check and user_check[0][0] == 1:
         return
 
-    content_low = message.content.lower()
-    banned = db_query("SELECT word FROM banned_words", fetch=True)
-    if any(bw[0] in content_low for bw in banned):
-        try:
-            await message.delete()
-            warning = await message.channel.send(
-                f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.\n\n**Warning:** Repeated violations may result in strikes or blacklisting.",
-                delete_after=10
-            )
-        except:
-            pass
-        return
+# Word filter check (with bypass)
+    if not is_bypass_user(message.author.id):
+        content_low = message.content.lower()
+        banned = db_query("SELECT word FROM banned_words", fetch=True)
+        if any(bw[0] in content_low for bw in banned):
+            try:
+                await message.delete()
+                warning = await message.channel.send(
+                    f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.\n\n**Warning:** Repeated violations may result in strikes or blacklisting.",
+                    delete_after=10
+                )
+            except:
+                pass
+            return
 
     await bot.process_commands(message)
     ctx = await bot.get_context(message)
