@@ -1930,15 +1930,15 @@ async def remove_admin(ctx, user: discord.User):
         await ctx.send("❌ **Cannot remove owner from admin privileges.**")
         return
     
-    existing = db_query("SELECT user_id, added_by, added_at FROM word_filter_bypass WHERE user_id = ?", (str(user.id),), fetch=True)
+    # FIX: Changed table check from word_filter_bypass to bot_admins
+    existing = db_query("SELECT added_by, added_at FROM bot_admins WHERE user_id = ?", (str(user.id),), fetch=True)
+    
     if not existing:
         await ctx.send(f"⚠️ **{user.mention} is not a bot admin.**")
         return
     
-    # Get admin info before deletion
-    admin_info = db_query("SELECT added_by, added_at FROM bot_admins WHERE user_id = ?", (str(user.id),), fetch=True)
-    added_by = admin_info[0][0] if admin_info and admin_info[0] else "Unknown"
-    added_at = admin_info[0][1] if admin_info and admin_info[0] else "Unknown"
+    # Extract info for the log/DM
+    added_by, added_at = existing[0]
     
     # Remove from database
     db_query("DELETE FROM bot_admins WHERE user_id = ?", (str(user.id),))
@@ -1981,7 +1981,6 @@ Thank you for your service! 🙏
     log_embed.add_field(name="📅 Removal Date", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
     log_embed.add_field(name="📜 Admin History", value=f"**Originally Added:** {added_at}\n**Added By:** <@{added_by}>", inline=True)
     log_embed.add_field(name="📬 DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
-    log_embed.add_field(name="🔓 Permissions Revoked", value="• User moderation access\n• Word filter management\n• Report review\n• Data export capabilities\n• Admin log access", inline=False)
     
     log_embed.set_thumbnail(url=user.display_avatar.url)
     log_embed.set_footer(text=f"Admin ID: {user.id} | Removed by: {ctx.author.name}")
@@ -1996,10 +1995,9 @@ Thank you for your service! 🙏
     )
     embed.add_field(name="User", value=f"{user.name} (`{user.id}`)", inline=False)
     embed.add_field(name="Removed By", value=ctx.author.name, inline=True)
-    embed.add_field(name="DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
-    embed.set_thumbnail(url=user.display_avatar.url)
     
     await ctx.send(embed=embed)
+
 @bot.command(name="list-admins", description="Owner: List all bot admins.")
 @commands.is_owner()
 async def list_admins(ctx):
