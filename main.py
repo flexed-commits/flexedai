@@ -870,7 +870,7 @@ async def add_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No re
     # Send DM to user
     dm_message = f"⚡ **Strike Issued**\n\n**You have received {amount} strike(s)**\n\n**Reason:** {reason}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
     if is_banned:
-        dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from FlexedAI Bot.\n\n**What this means:**\n• You can no longer use the bot\n• All access has been revoked\n• This is a permanent suspension unless appealed\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>"
+        dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from FlexedAI Bot.\n\n**What this means:**\n• You can no longer use the bot\n• All access has been revoked\n• This is a permanent suspension unless appealed\n\n**Appeal Process:**\nContact the bot owner: <@!1081876265683927080>"
     else:
         strikes_remaining = 3 - new_strikes
         dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Avoid using banned words\n• Be respectful to others\n• Follow server and bot rules"
