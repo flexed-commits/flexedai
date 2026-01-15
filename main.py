@@ -1618,9 +1618,14 @@ async def add_admin(ctx, user: discord.User):
         await ctx.send(f"⚠️ **{user.mention} is already a bot admin.**")
         return
     
+    # Add to database
     db_query("INSERT INTO bot_admins (user_id, added_by) VALUES (?, ?)", (str(user.id), str(ctx.author.id)))
-    db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"User {user.id} ({user.name}) promoted to Bot Admin by {ctx.author.name}",))
     
+    # Log to database
+    log_msg = f"Bot Admin added: {user.name} ({user.id}) by {ctx.author.name} ({ctx.author.id})"
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+    
+    # Send DM to new admin
     dm_message = f"""🎉 **Congratulations, {user.name}!**
 
 You have been promoted to **Bot Admin** for FlexedAI Bot by {ctx.author.name}!
@@ -1643,9 +1648,31 @@ As a Bot Admin, you now have access to all moderation and management commands.
 Type `/help` to see all available commands.
 
 Welcome to the team! 🚀
+
+*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
     dm_sent = await send_user_dm(str(user.id), dm_message)
     
+    # Log to admin_logs channel
+    log_embed = discord.Embed(
+        title="✨ Bot Admin Added",
+        description="A new bot administrator has been appointed.",
+        color=discord.Color.gold(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    log_embed.add_field(name="👤 New Admin", value=f"{user.mention}\n**Username:** {user.name}\n**ID:** `{user.id}`", inline=True)
+    log_embed.add_field(name="👑 Appointed By", value=f"{ctx.author.mention}\n**Username:** {ctx.author.name}\n**ID:** `{ctx.author.id}`", inline=True)
+    log_embed.add_field(name="📅 Appointed Date", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="ℹ️ Account Info", value=f"**Account Created:** {user.created_at.strftime('%Y-%m-%d')}\n**Account Age:** {(datetime.datetime.utcnow() - user.created_at).days} days", inline=True)
+    log_embed.add_field(name="📬 DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
+    log_embed.add_field(name="🔑 Permissions Granted", value="• User moderation (strikes, blacklist)\n• Word filter management\n• Report review\n• Data exports\n• Admin log access", inline=False)
+    
+    log_embed.set_thumbnail(url=user.display_avatar.url)
+    log_embed.set_footer(text=f"Admin ID: {user.id} | Added by: {ctx.author.name}")
+    
+    await log_to_channel(bot, 'admin_logs', log_embed)
+    
+    # Confirm to owner
     embed = discord.Embed(
         title="✅ Bot Admin Added",
         description=f"{user.mention} has been promoted to **Bot Admin**!",
@@ -1658,6 +1685,7 @@ Welcome to the team! 🚀
     
     await ctx.send(embed=embed)
 
+
 @bot.command(name="remove-admin", description="Owner: Remove a bot admin.")
 @commands.is_owner()
 async def remove_admin(ctx, user: discord.User):
@@ -1666,24 +1694,65 @@ async def remove_admin(ctx, user: discord.User):
         await ctx.send("❌ **Cannot remove owner from admin privileges.**")
         return
     
-    existing = db_query("SELECT user_id FROM bot_admins WHERE user_id = ?", (str(user.id),), fetch=True)
+    existing = db_query("SELECT user_id, added_by, added_at FROM word_filter_bypass WHERE user_id = ?", (str(user.id),), fetch=True)
     if not existing:
         await ctx.send(f"⚠️ **{user.mention} is not a bot admin.**")
         return
     
-    db_query("DELETE FROM bot_admins WHERE user_id = ?", (str(user.id),))
-    db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"User {user.id} ({user.name}) removed from Bot Admin by {ctx.author.name}",))
+    # Get admin info before deletion
+    admin_info = db_query("SELECT added_by, added_at FROM bot_admins WHERE user_id = ?", (str(user.id),), fetch=True)
+    added_by = admin_info[0][0] if admin_info and admin_info[0] else "Unknown"
+    added_at = admin_info[0][1] if admin_info and admin_info[0] else "Unknown"
     
+    # Remove from database
+    db_query("DELETE FROM bot_admins WHERE user_id = ?", (str(user.id),))
+    
+    # Log to database
+    log_msg = f"Bot Admin removed: {user.name} ({user.id}) by {ctx.author.name} ({ctx.author.id})"
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+    
+    # Send DM to removed admin
     dm_message = f"""📋 **Bot Admin Status Update**
 
 Your **Bot Admin** privileges for FlexedAI Bot have been removed by {ctx.author.name}.
 
-You no longer have access to administrative commands.
+**What Changed:**
+• You no longer have access to administrative commands
+• You cannot manage user moderation (strikes, blacklist)
+• You cannot modify word filters or view admin logs
+• You can still use regular bot features
+
+**Your Service:**
+• **Originally Added:** {added_at}
+• **Added By:** <@{added_by}>
+• **Removed By:** {ctx.author.name}
 
 Thank you for your service! 🙏
+
+*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
     dm_sent = await send_user_dm(str(user.id), dm_message)
     
+    # Log to admin_logs channel
+    log_embed = discord.Embed(
+        title="📋 Bot Admin Removed",
+        description="A bot administrator has been removed from their position.",
+        color=discord.Color.orange(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    log_embed.add_field(name="👤 Removed Admin", value=f"{user.mention}\n**Username:** {user.name}\n**ID:** `{user.id}`", inline=True)
+    log_embed.add_field(name="⚖️ Removed By", value=f"{ctx.author.mention}\n**Username:** {ctx.author.name}\n**ID:** `{ctx.author.id}`", inline=True)
+    log_embed.add_field(name="📅 Removal Date", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="📜 Admin History", value=f"**Originally Added:** {added_at}\n**Added By:** <@{added_by}>", inline=True)
+    log_embed.add_field(name="📬 DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
+    log_embed.add_field(name="🔓 Permissions Revoked", value="• User moderation access\n• Word filter management\n• Report review\n• Data export capabilities\n• Admin log access", inline=False)
+    
+    log_embed.set_thumbnail(url=user.display_avatar.url)
+    log_embed.set_footer(text=f"Admin ID: {user.id} | Removed by: {ctx.author.name}")
+    
+    await log_to_channel(bot, 'admin_logs', log_embed)
+    
+    # Confirm to owner
     embed = discord.Embed(
         title="📋 Bot Admin Removed",
         description=f"{user.mention} has been removed from **Bot Admin**.",
@@ -1695,7 +1764,6 @@ Thank you for your service! 🙏
     embed.set_thumbnail(url=user.display_avatar.url)
     
     await ctx.send(embed=embed)
-
 @bot.command(name="list-admins", description="Owner: List all bot admins.")
 @commands.is_owner()
 async def list_admins(ctx):
