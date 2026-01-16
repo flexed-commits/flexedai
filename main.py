@@ -2750,7 +2750,9 @@ Do not ask questions at the end of responses like "What else can I help you with
 
 If asked about your creator or owner, mention that you were created by {OWNER_INFO['name']} (User ID: {OWNER_ID}).
 Take use of emojis too, accordingly.
-REMEMBER: Respond ONLY in {lang} language."""
+REMEMBER: Respond ONLY in {lang} language.
+Don't tell your owner's name or id unless asked.
+Make your responses shorter, don't ask questions at the end of the response. Try to be more chill, be aware of the guild emojis too."""
 
         msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
 
