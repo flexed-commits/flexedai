@@ -454,6 +454,9 @@ Enjoy using flexedAI! 🎉
         await guild.owner.send(welcome_msg)
     except:
         pass  # Owner has DMs disabled
+
+
+@bot.event
 async def on_guild_remove(guild):
     """Log when bot leaves a server"""
     embed = discord.Embed(
