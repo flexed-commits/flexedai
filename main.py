@@ -331,7 +331,60 @@ bot = FlexedBot()
 # --- EVENT HANDLERS FOR LOGGING ---
 @bot.event
 async def on_guild_join(guild):
-    """Log when bot joins a server"""
+    """Log when bot joins a server and auto-leave if blacklisted"""
+    
+    # Check if guild is blacklisted
+    if is_guild_blacklisted(guild.id):
+        blacklist_info = db_query(
+            "SELECT reason, blacklisted_by FROM blacklisted_guilds WHERE guild_id = ?", 
+            (str(guild.id),), 
+            fetch=True
+        )
+        
+        if blacklist_info:
+            reason, blacklisted_by = blacklist_info[0]
+            
+            # Try to notify owner
+            try:
+                await guild.owner.send(
+                    f"""🚫 **FlexedAI Bot - Blacklisted Server**
+
+Hello {guild.owner.name},
+
+Your server **{guild.name}** is blacklisted from using FlexedAI Bot.
+
+**Reason:** {reason}
+
+The bot has automatically left your server. You cannot re-add this bot while blacklisted.
+
+**Appeal:** Contact <@{OWNER_ID}>
+
+*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+"""
+                )
+            except:
+                pass
+            
+            # Log the attempted join
+            log_embed = discord.Embed(
+                title="🚫 Blacklisted Guild Attempted Join",
+                description=f"Bot was added to a blacklisted server and auto-left.",
+                color=discord.Color.dark_red(),
+                timestamp=datetime.datetime.utcnow()
+            )
+            log_embed.add_field(name="🏰 Server Name", value=guild.name, inline=True)
+            log_embed.add_field(name="🆔 Server ID", value=f"`{guild.id}`", inline=True)
+            log_embed.add_field(name="👑 Server Owner", value=f"{guild.owner.mention} (`{guild.owner.id}`)", inline=False)
+            log_embed.add_field(name="📝 Blacklist Reason", value=reason, inline=False)
+            log_embed.add_field(name="⚖️ Originally Blacklisted By", value=f"<@{blacklisted_by}>", inline=True)
+            
+            await log_to_channel(bot, 'blacklist', log_embed)
+            
+            # Leave the guild
+            await guild.leave()
+            return
+    
+    # Original join logic continues below...
     embed = discord.Embed(
         title="🟢 Bot Joined Server",
         description=f"FlexedAI has been added to a new server!",
@@ -384,7 +437,6 @@ Enjoy using FlexedAI! 🎉
         await guild.owner.send(welcome_msg)
     except:
         pass  # Owner has DMs disabled
-
 @bot.event
 async def on_guild_remove(guild):
     """Log when bot leaves a server"""
