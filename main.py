@@ -991,7 +991,19 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
     
     await log_to_channel(bot, 'blacklist', log_embed)
-
+    
+    # ADD THIS MISSING CONFIRMATION EMBED
+    embed = discord.Embed(
+        title="✅ User Unblacklisted",
+        description=f"User `{user_id}` has been successfully removed from the blacklist.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="User ID", value=user_id, inline=True)
+    embed.add_field(name="Actioned By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    embed.add_field(name="DM Notification", value="✅ Sent" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_group(name="blacklist-guild", description="Owner/Admin: Manage guild blacklist.", invoke_without_command=True)
 @owner_or_bot_admin()
