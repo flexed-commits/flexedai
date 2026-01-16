@@ -364,7 +364,7 @@ async def on_guild_join(guild):
 
 Hello {guild.owner.name},
 
-Your server **{guild.name}** is blacklisted from using FlexedAI Bot.
+Your server **{guild.name}** is blacklisted from using flexedAI Bot.
 
 **Reason:** {reason}
 
@@ -400,7 +400,7 @@ The bot has automatically left your server. You cannot re-add this bot while bla
     # Original join logic continues below...
     embed = discord.Embed(
         title="🟢 Bot Joined Server",
-        description=f"FlexedAI has been added to a new server!",
+        description=f"flexedAI has been added to a new server!",
         color=discord.Color.green(),
         timestamp=datetime.datetime.utcnow()
     )
@@ -426,7 +426,7 @@ The bot has automatically left your server. You cannot re-add this bot while bla
     try:
         welcome_msg = f"""👋 **Hello {guild.owner.name}!**
 
-Thank you for adding **FlexedAI Bot** to **{guild.name}**!
+Thank you for adding **flexedAI Bot** to **{guild.name}**!
 
 🚀 **Quick Start Guide:**
 • Use `/help` to see all available commands
@@ -444,7 +444,7 @@ Thank you for adding **FlexedAI Bot** to **{guild.name}**!
 
 💡 **Need Help?**
 Contact the bot owner: <@{OWNER_ID}>
-
+Join the Support Server: https://discord.gg/XMvPq7W5N4/
 Enjoy using FlexedAI! 🎉
 """
         await guild.owner.send(welcome_msg)
@@ -455,7 +455,7 @@ async def on_guild_remove(guild):
     """Log when bot leaves a server"""
     embed = discord.Embed(
         title="🔴 Bot Left Server",
-        description=f"FlexedAI has been removed from a server.",
+        description=f"flexedAI has been removed from a server.",
         color=discord.Color.red(),
         timestamp=datetime.datetime.utcnow()
     )
@@ -602,7 +602,7 @@ def owner_or_bot_admin():
         await ctx.send("❌ **Permission Denied**\n**Required:** Bot Owner or Bot Admin privileges\n\nThis command is restricted to authorized personnel only.")
         return False
     return commands.check(predicate)
-# Part 3: Moderation Commands with Enhanced Logging
+# Moderation Commands with Enhanced Logging
 
 @bot.hybrid_command(name="sync", description="Owner/Admin: Sync slash commands.")
 @owner_or_bot_admin()
