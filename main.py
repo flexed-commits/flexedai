@@ -371,7 +371,7 @@ Your server **{guild.name}** is blacklisted from using flexedAI Bot.
 The bot has automatically left your server. You cannot re-add this bot while blacklisted.
 
 **Appeal:** Contact <@{OWNER_ID}>
-
+**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
 *Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
                 )
@@ -927,7 +927,7 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
     )
     
     # Log to dedicated blacklist channel
