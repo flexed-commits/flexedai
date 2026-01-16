@@ -2607,6 +2607,80 @@ async def forget(ctx):
     else:
         await ctx.send("🧠 **No memory to clear**\nThis conversation has no stored history.")
 
+@bot.command(name="ids", description="Owner/Admin: List all slash command IDs.")
+@owner_or_bot_admin()
+async def command_ids(ctx):
+    """Display all slash commands with their IDs"""
+    
+    try:
+        synced_commands = await bot.tree.fetch_commands()
+        
+        if not synced_commands:
+            await ctx.send("❌ **No slash commands found**\nTry running `/sync` first.")
+            return
+        
+        embed = discord.Embed(
+            title="🆔 Slash Command IDs",
+            description="All registered slash commands and their Discord IDs",
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.utcnow()
+        )
+        
+        # Sort commands alphabetically
+        sorted_commands = sorted(synced_commands, key=lambda x: x.name)
+        
+        # Build command list
+        command_list = []
+        for cmd in sorted_commands:
+            command_list.append(f"**/{cmd.name}** → `{cmd.id}`")
+        
+        # Split into chunks if too long
+        command_text = "\n".join(command_list)
+        
+        if len(command_text) > 1024:
+            # Split into multiple fields
+            chunks = []
+            current_chunk = []
+            current_length = 0
+            
+            for line in command_list:
+                if current_length + len(line) + 1 > 1024:
+                    chunks.append("\n".join(current_chunk))
+                    current_chunk = [line]
+                    current_length = len(line)
+                else:
+                    current_chunk.append(line)
+                    current_length += len(line) + 1
+            
+            if current_chunk:
+                chunks.append("\n".join(current_chunk))
+            
+            for i, chunk in enumerate(chunks, 1):
+                embed.add_field(
+                    name=f"Commands (Part {i}/{len(chunks)})",
+                    value=chunk,
+                    inline=False
+                )
+        else:
+            embed.add_field(
+                name="Commands",
+                value=command_text,
+                inline=False
+            )
+        
+        embed.add_field(
+            name="📊 Total Commands",
+            value=f"**{len(sorted_commands)}** slash commands registered",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Requested by {ctx.author.name} | Use format: </command:id> to mention commands")
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        await ctx.send(f"❌ **Error fetching command IDs:**\n```\n{str(e)}\n```")
+        
 @bot.event
 async def on_message(message):
     if message.author.bot:
