@@ -2179,7 +2179,7 @@ As a Bot Admin, you now have access to all moderation and management commands.
 • All actions are logged
 • Users receive notifications for moderation actions
 • Contact <@{OWNER_ID}> for questions
-
+• **Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
 Type `/help` to see all available commands.
 
 Welcome to the team! 🚀
@@ -2853,7 +2853,7 @@ Make your responses shorter, don't ask questions at the end of the response. Try
 
             db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", (time.time(), str(message.guild.id) if message.guild else "DM", str(message.channel.id), message.author.name, str(message.author.id), message.content[:1000], reply[:1000]))
         except Exception as e:
-            error_msg = f"❌ **An error occurred**\n```\n{str(e)}\n```\nPlease try again or contact <@{OWNER_ID}> if the issue persists."
+            error_msg = f"❌ **An error occurred**\n```\n{str(e)}\n```\nPlease try again or [report it in the support server](<https://discord.com/invite/XMvPq7W5N4>) if the issue persists."
             if was_deleted:
                 await message.channel.send(error_msg)
             else:
