@@ -374,6 +374,7 @@ The bot has automatically left your server. You cannot re-add this bot while bla
 
 **Appeal:** Contact <@{OWNER_ID}>
 **Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
+
 *Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
                 )
@@ -447,12 +448,12 @@ Thank you for adding **flexedAI Bot** to **{guild.name}**!
 💡 **Need Help?**
 Contact the bot owner: <@{OWNER_ID}>
 Join the Support Server: https://discord.com/invite/XMvPq7W5N4
+
 Enjoy using flexedAI! 🎉
 """
         await guild.owner.send(welcome_msg)
     except:
         pass  # Owner has DMs disabled
-@bot.event
 async def on_guild_remove(guild):
     """Log when bot leaves a server"""
     embed = discord.Embed(
