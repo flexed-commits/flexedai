@@ -2345,7 +2345,9 @@ flexedAI Bot is leaving **{guild_name}**.
 
 **Reason:** {reason}
 
-If you have questions, contact: <@{OWNER_ID}>
+If you have questions, 
+Contact: <@{OWNER_ID}> or
+Support Server: https://discord.com/invite/XMvPq7W5N4
 
 Thank you for using flexedAI Bot!
 """
