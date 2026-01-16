@@ -444,7 +444,7 @@ Thank you for adding **flexedAI Bot** to **{guild.name}**!
 
 💡 **Need Help?**
 Contact the bot owner: <@{OWNER_ID}>
-Join the Support Server: https://discord.gg/XMvPq7W5N4/
+Join the Support Server: https://discord.com/invite/XMvPq7W5N4
 Enjoy using flexedAI! 🎉
 """
         await guild.owner.send(welcome_msg)
