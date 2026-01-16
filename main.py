@@ -2488,7 +2488,7 @@ async def set_prefix(ctx, new_prefix: str):
     
     await ctx.send(embed=embed)
 
-@bot.hybrid_command(name="help", description="Display command center.")
+@bot.hybrid_command(name="help", description="Display flexedAI command center.")
 async def help_cmd(ctx):
     is_admin = is_bot_admin(ctx.author.id)
     
@@ -2498,51 +2498,21 @@ async def help_cmd(ctx):
         color=discord.Color.blue()
     )
     
-    # 1. OWNER SECTION
     if ctx.author.id == OWNER_ID:
-        embed.add_field(
-            name="👑 Owner Only Commands", 
-            value="`add-admin`, `remove-admin`, `list-admins`, `leave` (DM only)", 
-            inline=False
-        )
+        embed.add_field(name="👑 Owner Only", value="`add-admin`, `remove-admin`, `list-admins`, `leave`", inline=False)
 
-    # 2. ADMIN/MODERATOR SECTION
     if is_admin:
-        embed.add_field(
-            name="🛡️ Owner/Admin Commands (DM Only)", 
-            value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `allinteractions`", 
-            inline=False
-        )
-        embed.add_field(
-            name="🔨 Moderation Commands", 
-            value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/clearstrike`, `/bannedword`, `/bypass`, `/logs`, `/searchlogs`, `/clearadminlogs`, `/reports`, `/reportview`", 
-            inline=False
-        )
-        embed.add_field(
-            name="⚙️ Settings (Admin Required)", 
-            value="`/start`, `/stop`, `/lang`, `/prefix`", 
-            inline=False
-        )
-        embed.set_footer(text="✨ You have Bot Admin privileges")
-    else:
-        # 3. REGULAR USER SECTION (Added for non-admins)
-        embed.set_footer(text="Use /report to flag misbehavior to admins")
+        embed.add_field(name="🛡️ Admin Utility", value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`", inline=False)
+        embed.add_field(name="🔨 Moderation", value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/bannedword`, `/reports`", inline=False)
+        embed.add_field(name="⚙️ Settings", value="`/start`, `/stop`, `/lang`, `/prefix`", inline=False)
 
-    # 4. GENERAL UTILITY SECTION (Available to everyone)
-    embed.add_field(
-        name="📊 Utility Commands", 
-        value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`, `/report`", 
-        inline=False
-    )
+    embed.add_field(name="📊 Utility", value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`, `/report`, `/invite`", inline=False)
     
-    embed.add_field(
-        name="ℹ️ About the Owner",
-        value=f"Bot created and maintained by <@{OWNER_ID}>",
-        inline=False
-    )
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="Support Server", url="https://discord.com/invite/XMvPq7W5N4", style=discord.ButtonStyle.link))
     
-    # Send the final built embed
-    await ctx.send(embed=embed)
+    embed.set_footer(text="flexedAI • Created by Ψ.1nOnly.Ψ")
+    await ctx.send(embed=embed, view=view)
 
 @bot.hybrid_command(name="whoami", description="Show your Discord profile.")
 async def whoami(ctx):
@@ -2596,6 +2566,23 @@ async def ping(ctx):
         status = "Slow"
     
     await ctx.send(f"🏓 **Pong!** {emoji}\n**Latency:** {latency}ms ({status})")
+
+@bot.hybrid_command(name="invite", description="Add flexedAI to your own server!")
+async def invite(ctx):
+    invite_url = "https://discord.com/oauth2/authorize?client_id=1379152032358858762&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands"
+    
+    embed = discord.Embed(
+        title="🔗 Invite flexedAI",
+        description="Want to bring flexedAI to your community? Click the button below to authorize the bot!",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=bot.user.display_avatar.url)
+    
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="Add to Server", url=invite_url, style=discord.ButtonStyle.link, emoji="🤖"))
+    
+    await ctx.send(embed=embed, view=view)
+
 
 @bot.hybrid_command(name="forget", description="Clear AI memory for this conversation.")
 async def forget(ctx):
