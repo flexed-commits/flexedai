@@ -1779,7 +1779,7 @@ class ReportActionView(discord.ui.View):
         db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
         
         # Send DM
-        dm_message = f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        dm_message = f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
         dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
         
         # Log to blacklist channel
