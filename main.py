@@ -107,6 +107,14 @@ def init_db():
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         status TEXT DEFAULT 'pending'
     )''')
+    # New Table for blacklisted guilds
+    c.execute('''CREATE TABLE IF NOT EXISTS blacklisted_guilds (
+    guild_id TEXT PRIMARY KEY,
+    guild_name TEXT,
+    blacklisted_by TEXT,
+    reason TEXT,
+    blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
 
     conn.commit()
     conn.close()
@@ -197,6 +205,11 @@ def is_bypass_user(user_id):
     res = db_query("SELECT user_id FROM word_filter_bypass WHERE user_id = ?", (str(user_id),), fetch=True)
     return bool(res)
 
+def is_guild_blacklisted(guild_id):
+    """Check if a guild is blacklisted"""
+    res = db_query("SELECT guild_id FROM blacklisted_guilds WHERE guild_id = ?", (str(guild_id),), fetch=True)
+    return bool(res)
+    
 def export_db_to_json():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -678,17 +691,21 @@ async def bot_data(ctx):
         },
         "banned_words": [],
         "bot_admins": [],
+        "word_filter_bypass": [],
+        "blacklisted_guilds": [],
         "server_configurations": {},
         "channel_configurations": {},
         "statistics": {
             "total_strikes_issued": 0,
             "total_blacklists": 0,
             "total_banned_words": 0,
+            "total_blacklisted_guilds": 0,
             "channels_in_start_mode": 0,
             "channels_in_stop_mode": 0
         }
     }
 
+    # Users data
     c.execute("SELECT user_id, strikes, blacklisted FROM users")
     users = c.fetchall()
     data['bot_info']['total_users_tracked'] = len(users)
@@ -712,15 +729,44 @@ async def bot_data(ctx):
             })
             data['statistics']['total_strikes_issued'] += user[1]
 
+    # Banned words
     c.execute("SELECT word FROM banned_words")
     banned = c.fetchall()
     data['banned_words'] = [w[0] for w in banned]
     data['statistics']['total_banned_words'] = len(data['banned_words'])
 
+    # Bot admins
     c.execute("SELECT user_id, added_by, added_at FROM bot_admins")
     admins = c.fetchall()
     data['bot_admins'] = [{"user_id": a[0], "added_by": a[1], "added_at": a[2]} for a in admins]
 
+    # Word filter bypass users
+    c.execute("SELECT user_id, added_by, reason, added_at FROM word_filter_bypass")
+    bypass_users = c.fetchall()
+    data['word_filter_bypass'] = [
+        {
+            "user_id": b[0],
+            "added_by": b[1],
+            "reason": b[2],
+            "added_at": b[3]
+        } for b in bypass_users
+    ]
+
+    # Blacklisted guilds
+    c.execute("SELECT guild_id, guild_name, blacklisted_by, reason, blacklisted_at FROM blacklisted_guilds")
+    guild_blacklist = c.fetchall()
+    data['blacklisted_guilds'] = [
+        {
+            "guild_id": g[0],
+            "guild_name": g[1],
+            "blacklisted_by": g[2],
+            "reason": g[3],
+            "blacklisted_at": g[4]
+        } for g in guild_blacklist
+    ]
+    data['statistics']['total_blacklisted_guilds'] = len(data['blacklisted_guilds'])
+
+    # Server and channel configurations
     c.execute("SELECT id, prefix, language, mode FROM settings")
     settings = c.fetchall()
 
@@ -763,13 +809,29 @@ async def bot_data(ctx):
         except:
             pass
 
+    # Interaction logs count
     c.execute("SELECT COUNT(*) FROM interaction_logs")
     interaction_count = c.fetchone()[0]
     data['bot_info']['total_interactions_logged'] = interaction_count
 
+    # Recent admin logs
     c.execute("SELECT log, timestamp FROM admin_logs ORDER BY timestamp DESC LIMIT 100")
     logs = c.fetchall()
     data['admin_logs_recent'] = [{"log": l[0], "timestamp": l[1]} for l in logs]
+
+    # Recent reports
+    c.execute("SELECT report_id, reporter_id, reported_user_id, reason, status, timestamp FROM reports ORDER BY timestamp DESC LIMIT 50")
+    reports = c.fetchall()
+    data['recent_reports'] = [
+        {
+            "report_id": r[0],
+            "reporter_id": r[1],
+            "reported_user_id": r[2],
+            "reason": r[3],
+            "status": r[4],
+            "timestamp": r[5]
+        } for r in reports
+    ]
 
     conn.close()
 
@@ -785,23 +847,37 @@ async def bot_data(ctx):
         color=discord.Color.purple()
     )
 
+    # Bot statistics
     embed.add_field(name="📊 Servers", value=data['bot_info']['total_servers'], inline=True)
     embed.add_field(name="👥 Users Tracked", value=data['bot_info']['total_users_tracked'], inline=True)
     embed.add_field(name="💬 Total Interactions", value=data['bot_info']['total_interactions_logged'], inline=True)
 
+    # Moderation statistics
     embed.add_field(name="🚫 Blacklisted Users", value=data['statistics']['total_blacklists'], inline=True)
     embed.add_field(name="⚡ Total Strikes", value=data['statistics']['total_strikes_issued'], inline=True)
     embed.add_field(name="🔇 Banned Words", value=data['statistics']['total_banned_words'], inline=True)
 
+    # Guild blacklist statistic
+    embed.add_field(name="🏰 Blacklisted Guilds", value=data['statistics']['total_blacklisted_guilds'], inline=True)
+    embed.add_field(name="🔓 Filter Bypass Users", value=len(data['word_filter_bypass']), inline=True)
+    embed.add_field(name="✨ Bot Admins", value=len(data['bot_admins']), inline=True)
+
+    # Channel statistics
     embed.add_field(name="🟢 Channels (Start Mode)", value=data['statistics']['channels_in_start_mode'], inline=True)
     embed.add_field(name="🔴 Channels (Stop Mode)", value=data['statistics']['channels_in_stop_mode'], inline=True)
     embed.add_field(name="⚙️ Server Configs", value=len(data['server_configurations']), inline=True)
+
+    # Additional info
+    embed.add_field(name="📋 Recent Reports", value=len(data['recent_reports']), inline=True)
+    embed.add_field(name="📝 Recent Logs", value=len(data['admin_logs_recent']), inline=True)
+    embed.add_field(name="📦 Export Size", value=f"{os.path.getsize(filename) / 1024:.2f} KB", inline=True)
+
+    embed.set_footer(text=f"Complete data export • File: {filename}")
 
     await ctx.send(embed=embed, file=discord.File(filename))
     os.remove(filename)
 
     print(f"✅ Complete data export sent to owner at {datetime.datetime.now()}")
-
 @bot.hybrid_command(name="backup", description="Owner/Admin: Trigger immediate backup.")
 @owner_or_bot_admin()
 @commands.dm_only()
@@ -909,7 +985,184 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
     
     await log_to_channel(bot, 'blacklist', log_embed)
+
+
+@bot.hybrid_group(name="blacklist-guild", description="Owner/Admin: Manage guild blacklist.", invoke_without_command=True)
+@owner_or_bot_admin()
+async def blacklist_guild_group(ctx):
+    """List all blacklisted guilds"""
+    res = db_query("SELECT guild_id, guild_name, reason, blacklisted_by, blacklisted_at FROM blacklisted_guilds ORDER BY blacklisted_at DESC", fetch=True)
     
+    if not res:
+        await ctx.send("✅ **No blacklisted guilds**\nThe guild blacklist is currently empty.")
+        return
+    
+    embed = discord.Embed(
+        title="🚫 Blacklisted Guilds",
+        description="Servers that are banned from using this bot:",
+        color=discord.Color.dark_red()
+    )
+    
+    for guild in res:
+        guild_id, guild_name, reason, blacklisted_by, blacklisted_at = guild
+        embed.add_field(
+            name=f"🏰 {guild_name}",
+            value=f"**ID:** `{guild_id}`\n**Reason:** {reason}\n**By:** <@{blacklisted_by}>\n**Date:** {blacklisted_at}",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"Total: {len(res)} blacklisted guild(s)")
+    await ctx.send(embed=embed)
+
+@blacklist_guild_group.command(name="add")
+@owner_or_bot_admin()
+async def blacklist_guild_add(ctx, guild_id: str, *, reason: str = "No reason provided"):
+    """Blacklist a guild and force bot to leave"""
+    try:
+        guild = bot.get_guild(int(guild_id))
+        
+        # Check if already blacklisted
+        existing = db_query("SELECT guild_id FROM blacklisted_guilds WHERE guild_id = ?", (guild_id,), fetch=True)
+        if existing:
+            await ctx.send(f"⚠️ **Guild `{guild_id}` is already blacklisted.**")
+            return
+        
+        guild_name = guild.name if guild else "Unknown Server"
+        
+        # Add to blacklist database
+        db_query(
+            "INSERT INTO blacklisted_guilds (guild_id, guild_name, blacklisted_by, reason) VALUES (?, ?, ?, ?)",
+            (guild_id, guild_name, str(ctx.author.id), reason)
+        )
+        
+        # Log the action
+        log_msg = f"Guild {guild_name} ({guild_id}) BLACKLISTED by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
+        db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+        
+        # Try to notify guild owner before leaving
+        owner_notified = False
+        if guild and guild.owner:
+            try:
+                dm_message = f"""🚫 **FlexedAI Bot - Server Blacklisted**
+
+Hello {guild.owner.name},
+
+Your server **{guild_name}** has been blacklisted from using FlexedAI Bot.
+
+**Reason:** {reason}
+
+**What this means:**
+• The bot will leave your server immediately
+• Your server cannot re-add the bot
+• This is a permanent restriction
+
+**Appeal Process:**
+If you believe this is a mistake, contact: <@{OWNER_ID}>
+
+*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+"""
+                await guild.owner.send(dm_message)
+                owner_notified = True
+            except:
+                pass
+        
+        # Leave the guild if bot is in it
+        left_guild = False
+        if guild:
+            try:
+                await guild.leave()
+                left_guild = True
+            except Exception as e:
+                left_guild = False
+        
+        # Log to blacklist channel
+        log_embed = discord.Embed(
+            title="🚫 Guild Blacklisted",
+            description=f"A server has been permanently blacklisted.",
+            color=discord.Color.dark_red(),
+            timestamp=datetime.datetime.utcnow()
+        )
+        log_embed.add_field(name="🏰 Server Name", value=guild_name, inline=True)
+        log_embed.add_field(name="🆔 Server ID", value=f"`{guild_id}`", inline=True)
+        log_embed.add_field(name="⚖️ Blacklisted By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
+        
+        if guild:
+            log_embed.add_field(name="👑 Server Owner", value=f"<@{guild.owner.id}> (`{guild.owner.id}`)", inline=True)
+            log_embed.add_field(name="👥 Member Count", value=str(guild.member_count), inline=True)
+        
+        log_embed.add_field(name="📝 Reason", value=reason, inline=False)
+        log_embed.add_field(name="📬 Owner Notified", value="✅ Yes" if owner_notified else "❌ No", inline=True)
+        log_embed.add_field(name="🚪 Bot Left Server", value="✅ Yes" if left_guild else "❌ Not in server", inline=True)
+        
+        await log_to_channel(bot, 'blacklist', log_embed)
+        
+        # Confirm to command user
+        embed = discord.Embed(
+            title="🚫 Guild Blacklisted",
+            description=f"Server has been permanently blacklisted.",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="Server Name", value=guild_name, inline=True)
+        embed.add_field(name="Server ID", value=guild_id, inline=True)
+        embed.add_field(name="Blacklisted By", value=ctx.author.mention, inline=True)
+        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.add_field(name="Owner Notified", value="✅ Yes" if owner_notified else "❌ No", inline=True)
+        embed.add_field(name="Bot Left", value="✅ Yes" if left_guild else "❌ Not in server", inline=True)
+        
+        await ctx.send(embed=embed)
+        
+    except ValueError:
+        await ctx.send("❌ **Invalid guild ID**\nPlease provide a valid numeric guild ID.")
+    except Exception as e:
+        await ctx.send(f"❌ **Error:** {str(e)}")
+
+@blacklist_guild_group.command(name="remove")
+@owner_or_bot_admin()
+async def blacklist_guild_remove(ctx, guild_id: str, *, reason: str = "No reason provided"):
+    """Remove a guild from the blacklist"""
+    # Check if blacklisted
+    existing = db_query("SELECT guild_name, blacklisted_by, blacklisted_at FROM blacklisted_guilds WHERE guild_id = ?", (guild_id,), fetch=True)
+    
+    if not existing:
+        await ctx.send(f"⚠️ **Guild `{guild_id}` is not blacklisted.**")
+        return
+    
+    guild_name, blacklisted_by, blacklisted_at = existing[0]
+    
+    # Remove from blacklist
+    db_query("DELETE FROM blacklisted_guilds WHERE guild_id = ?", (guild_id,))
+    
+    # Log the action
+    log_msg = f"Guild {guild_name} ({guild_id}) removed from blacklist by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+    
+    # Log to blacklist channel
+    log_embed = discord.Embed(
+        title="✅ Guild Unblacklisted",
+        description=f"A server has been removed from the blacklist.",
+        color=discord.Color.green(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    log_embed.add_field(name="🏰 Server Name", value=guild_name, inline=True)
+    log_embed.add_field(name="🆔 Server ID", value=f"`{guild_id}`", inline=True)
+    log_embed.add_field(name="⚖️ Removed By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
+    log_embed.add_field(name="📜 Originally Blacklisted", value=f"**By:** <@{blacklisted_by}>\n**Date:** {blacklisted_at}", inline=False)
+    log_embed.add_field(name="📝 Removal Reason", value=reason, inline=False)
+    
+    await log_to_channel(bot, 'blacklist', log_embed)
+    
+    # Confirm to command user
+    embed = discord.Embed(
+        title="✅ Guild Unblacklisted",
+        description=f"Server has been removed from the blacklist and can now re-add the bot.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Server Name", value=guild_name, inline=True)
+    embed.add_field(name="Server ID", value=guild_id, inline=True)
+    embed.add_field(name="Removed By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    
+    await ctx.send(embed=embed)
     # Confirm to command user
     embed = discord.Embed(
         title="✅ User Unblacklisted",
