@@ -1062,6 +1062,7 @@ Your server **{guild_name}** has been blacklisted from using flexedAI Bot.
 **Appeal Process:**
 If you believe this is a mistake, contact: <@{OWNER_ID}>
 **Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
+
 *Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
                 await guild.owner.send(dm_message)
@@ -1166,18 +1167,7 @@ async def blacklist_guild_remove(ctx, guild_id: str, *, reason: str = "No reason
     embed.add_field(name="Reason", value=reason, inline=False)
     
     await ctx.send(embed=embed)
-    # Confirm to command user
-    embed = discord.Embed(
-        title="✅ User Unblacklisted",
-        description=f"User `{user_id}` has been removed from the blacklist.",
-        color=discord.Color.green()
-    )
-    embed.add_field(name="User ID", value=user_id, inline=True)
-    embed.add_field(name="Actioned By", value=ctx.author.mention, inline=True)
-    embed.add_field(name="Reason", value=reason, inline=False)
-    embed.add_field(name="DM Notification", value="✅ Sent" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
-    
-    await ctx.send(embed=embed)
+
 
 @bot.hybrid_command(name="addstrike", description="Owner/Admin: Add strikes to a user.")
 @owner_or_bot_admin()
@@ -2670,6 +2660,54 @@ async def command_ids(ctx):
         
     except Exception as e:
         await ctx.send(f"❌ **Error fetching command IDs:**\n```\n{str(e)}\n```")
+
+async def add_smart_reaction(message, user_message: str, bot_response: str):
+    """Let AI decide if and which emoji reactions to add"""
+    if random.random() > bot.reaction_chance:
+        return  # Skip adding reactions 90% of the time
+    
+    try:
+        # Ask AI to analyze the conversation and suggest emojis
+        reaction_prompt = f"""Analyze this Discord conversation and suggest 1-2 emoji reactions that would be appropriate and natural.
+
+User message: "{user_message[:200]}"
+Bot response: "{bot_response[:200]}"
+
+Consider the message tone, content, and context. Suggest Discord-compatible emoji reactions.
+Respond with ONLY emoji characters separated by spaces, or "none" if no reaction is appropriate.
+Examples of good responses: "👍", "😂 👍", "🎉", "❤️", "🤔", "none"
+
+Your response:"""
+
+        reaction_msgs = [{"role": "user", "content": reaction_prompt}]
+        reaction_res = await bot.groq_client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=reaction_msgs,
+            max_tokens=50,
+            temperature=0.7
+        )
+        
+        suggested_reactions = reaction_res.choices[0].message.content.strip()
+        
+        if suggested_reactions.lower() == "none":
+            return
+        
+        # Extract emojis from response
+        emojis = [e.strip() for e in suggested_reactions.split() if e.strip()]
+        
+        # Add reactions (max 2)
+        for emoji in emojis[:2]:
+            try:
+                await message.add_reaction(emoji)
+                await asyncio.sleep(0.3)  # Small delay between reactions
+            except discord.HTTPException:
+                # Invalid emoji, skip it
+                continue
+                
+    except Exception as e:
+        # Silently fail if reaction system has issues
+        print(f"⚠️ Reaction system error: {e}")
+        pass
         
 @bot.event
 async def on_message(message):
@@ -2680,10 +2718,7 @@ async def on_message(message):
     if user_check and user_check[0][0] == 1:
         return
 
-    # Define content_low early so it's available for all checks
     content_low = message.content.lower()
-    
-    # Track if the message was deleted to avoid "404 Not Found" on replies
     was_deleted = False
 
     # Word filter check (with bypass)
@@ -2699,7 +2734,6 @@ async def on_message(message):
                 )
             except:
                 pass
-            # Note: We continue here so it can still trigger AI/Owner responses even if deleted
 
     await bot.process_commands(message)
     ctx = await bot.get_context(message)
@@ -2715,7 +2749,7 @@ async def on_message(message):
         should_respond = True
     elif bot.user.mentioned_in(message) or (message.reference and message.reference.resolved and message.reference.resolved.author == bot.user):
         should_respond = True
-    elif "flexedAI" in content_low:
+    elif "flexedai" in content_low:  # Changed from "flexedAI" to lowercase
         should_respond = True
     elif not message.guild:
         should_respond = True
@@ -2829,14 +2863,15 @@ Make your responses shorter, don't ask questions at the end of the response. Try
             if was_truncated:
                 reply = "⚠️ *Your message was very long and had to be shortened.*\n\n" + reply
             
-            # Logic to handle sending the response even if the original message is deleted
+            # Send response
             if was_deleted:
-                # Prepend mention since we can't 'reply' to a ghost message
                 final_reply = f"{message.author.mention} {reply}"
-                # Use simple send instead of split_and_send which relies on message reference
                 await message.channel.send(final_reply)
             else:
                 await split_and_send(message, reply)
+
+            # Add smart AI reactions (10% chance)
+            await add_smart_reaction(message, user_content, reply)
 
             bot.memory[tid].append({"role": "user", "content": user_content})
             bot.memory[tid].append({"role": "assistant", "content": reply})
