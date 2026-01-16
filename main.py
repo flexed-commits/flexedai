@@ -2726,87 +2726,151 @@ Your response:"""
         
 @bot.event
 async def on_message(message):
+    print(f"\n{'='*50}")
+    print(f"📨 MESSAGE RECEIVED")
+    print(f"Author: {message.author.name} (ID: {message.author.id})")
+    print(f"Bot: {message.author.bot}")
+    print(f"Content: '{message.content}'")
+    print(f"Channel: {message.channel.id}")
+    print(f"Guild: {message.guild.name if message.guild else 'DM'}")
+    print(f"{'='*50}\n")
+    
     # Ignore bot messages
     if message.author.bot:
+        print("❌ SKIP: Message is from a bot")
         return
 
     # Check if user is blacklisted
-    user_check = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(message.author.id),), fetch=True)
-    if user_check and user_check[0][0] == 1:
-        return
+    try:
+        user_check = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(message.author.id),), fetch=True)
+        print(f"🔍 Blacklist check: {user_check}")
+        if user_check and user_check[0][0] == 1:
+            print("❌ SKIP: User is blacklisted")
+            return
+    except Exception as e:
+        print(f"⚠️ Error checking blacklist: {e}")
 
     # Get message content
     content_low = message.content.lower()
     was_deleted = False
 
     # Word filter check (with bypass)
-    if not is_bypass_user(message.author.id):
-        banned = db_query("SELECT word FROM banned_words", fetch=True)
-        if banned and any(bw[0] in content_low for bw in banned):
-            try:
-                await message.delete()
-                was_deleted = True
-                warning = await message.channel.send(
-                    f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.\n\n**Warning:** Repeated violations may result in strikes or blacklisting.",
-                    delete_after=10
-                )
-            except:
-                pass
+    try:
+        if not is_bypass_user(message.author.id):
+            banned = db_query("SELECT word FROM banned_words", fetch=True)
+            print(f"🔍 Banned words in DB: {len(banned) if banned else 0}")
+            if banned and any(bw[0] in content_low for bw in banned):
+                try:
+                    await message.delete()
+                    was_deleted = True
+                    print("🗑️ Message deleted - contained banned word")
+                    warning = await message.channel.send(
+                        f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.\n\n**Warning:** Repeated violations may result in strikes or blacklisting.",
+                        delete_after=10
+                    )
+                except Exception as e:
+                    print(f"⚠️ Error deleting message: {e}")
+        else:
+            print("✅ User has word filter bypass")
+    except Exception as e:
+        print(f"⚠️ Error in word filter: {e}")
 
     # Process commands first
-    await bot.process_commands(message)
-    ctx = await bot.get_context(message)
-    if ctx.valid:
-        return
+    print("🔧 Processing commands...")
+    try:
+        await bot.process_commands(message)
+        ctx = await bot.get_context(message)
+        if ctx.valid:
+            print("✅ Valid command detected - skipping AI response")
+            return
+        print("ℹ️ Not a valid command")
+    except Exception as e:
+        print(f"⚠️ Error processing commands: {e}")
 
     # Get channel mode
-    mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
-    mode = mode_check[0][0] if mode_check else "stop"
+    try:
+        mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
+        mode = mode_check[0][0] if mode_check and mode_check[0] else "stop"
+        print(f"⚙️ Channel mode: {mode}")
+    except Exception as e:
+        print(f"⚠️ Error getting mode: {e}")
+        mode = "stop"
 
     should_respond = False
+    reason = ""
 
     # Check if bot should respond
+    print("\n🔍 CHECKING RESPONSE CONDITIONS:")
+    
     # 1. Start mode - respond to everything
     if mode == "start":
         should_respond = True
-        print(f"🟢 START MODE: Responding to message from {message.author.name}")
+        reason = "START MODE"
+        print(f"✅ {reason}")
     
     # 2. Bot is mentioned
-    elif bot.user.mentioned_in(message):
+    if bot.user.mentioned_in(message):
         should_respond = True
-        print(f"📌 MENTION: Bot mentioned by {message.author.name}")
+        reason = "BOT MENTIONED"
+        print(f"✅ {reason}")
     
     # 3. Reply to bot's message
-    elif message.reference and message.reference.resolved and message.reference.resolved.author == bot.user:
-        should_respond = True
-        print(f"💬 REPLY: Reply to bot from {message.author.name}")
+    if message.reference:
+        print(f"ℹ️ Message is a reply")
+        if message.reference.resolved:
+            print(f"ℹ️ Reply to: {message.reference.resolved.author.name}")
+            if message.reference.resolved.author == bot.user:
+                should_respond = True
+                reason = "REPLY TO BOT"
+                print(f"✅ {reason}")
     
     # 4. Contains "flexedai" keyword (case-insensitive)
-    elif "flexedai" in content_low:
+    if "flexedai" in content_low:
         should_respond = True
-        print(f"🔑 KEYWORD: 'flexedai' detected from {message.author.name}")
+        reason = "KEYWORD 'flexedai'"
+        print(f"✅ {reason}")
     
     # 5. DM messages
-    elif not message.guild:
+    if not message.guild:
         should_respond = True
-        print(f"📨 DM: Direct message from {message.author.name}")
+        reason = "DM MESSAGE"
+        print(f"✅ {reason}")
     
     # 6. Has attachments
-    elif message.attachments:
+    if message.attachments:
         should_respond = True
-        print(f"📎 ATTACHMENT: Message with attachment from {message.author.name}")
+        reason = f"HAS ATTACHMENTS ({len(message.attachments)})"
+        print(f"✅ {reason}")
 
-    # Debug print
+    print(f"\n{'='*50}")
+    if should_respond:
+        print(f"✅ WILL RESPOND - Reason: {reason}")
+    else:
+        print(f"❌ WILL NOT RESPOND")
+        print(f"   Mode: {mode}")
+        print(f"   Bot mentioned: {bot.user.mentioned_in(message)}")
+        print(f"   Is reply: {message.reference is not None}")
+        print(f"   Has 'flexedai': {'flexedai' in content_low}")
+        print(f"   Is DM: {not message.guild}")
+        print(f"   Has attachments: {bool(message.attachments)}")
+    print(f"{'='*50}\n")
+
     if not should_respond:
-        print(f"❌ NOT RESPONDING: Mode={mode}, Channel={message.channel.id}, User={message.author.name}, Content='{message.content[:50]}'")
         return
 
     # Don't respond to empty messages
     if not message.content and not message.attachments:
-        print(f"⚠️ EMPTY MESSAGE: Skipping empty message from {message.author.name}")
+        print("❌ SKIP: Empty message (no content or attachments)")
         return
 
-    lang = get_channel_language(message.channel.id)
+    print("🤖 GENERATING AI RESPONSE...")
+
+    try:
+        lang = get_channel_language(message.channel.id)
+        print(f"🌐 Language: {lang}")
+    except Exception as e:
+        print(f"⚠️ Error getting language: {e}")
+        lang = "English"
 
     # Check for owner-related questions
     owner_keywords = [
@@ -2815,6 +2879,7 @@ async def on_message(message):
     ]
     
     if any(keyword in content_low for keyword in owner_keywords):
+        print("ℹ️ Owner question detected")
         owner_response = f"""👑 **About My Owner**
 
 I was created and am maintained by <@{OWNER_ID}>!
@@ -2828,10 +2893,14 @@ My owner built me to be a helpful, intelligent AI assistant for Discord communit
 
 If you have any questions, feedback, or issues, you can contact them directly!
 """
-        if was_deleted:
-            await message.channel.send(owner_response)
-        else:
-            await message.reply(owner_response)
+        try:
+            if was_deleted:
+                await message.channel.send(owner_response)
+            else:
+                await message.reply(owner_response)
+            print("✅ Sent owner info response")
+        except Exception as e:
+            print(f"❌ Error sending owner response: {e}")
         return
 
     # Check for verification question
@@ -2842,6 +2911,7 @@ If you have any questions, feedback, or issues, you can contact them directly!
     ]
     
     if any(keyword in content_low for keyword in verification_keywords):
+        print("ℹ️ Verification question detected")
         verification_response = f"""✅ **Verification Status**
 
 **Discord Bot Verification** is a badge that indicates a bot has been verified by Discord. To qualify for verification, a bot must meet these requirements:
@@ -2855,15 +2925,22 @@ Verified bots display a ✓ checkmark badge next to their name. Verification hel
 
 If you'd like to know more about my features, use `/help`!
 """
-        if was_deleted:
-            await message.channel.send(verification_response)
-        else:
-            await message.reply(verification_response)
+        try:
+            if was_deleted:
+                await message.channel.send(verification_response)
+            else:
+                await message.reply(verification_response)
+            print("✅ Sent verification info response")
+        except Exception as e:
+            print(f"❌ Error sending verification response: {e}")
         return
 
     tid = f"{message.channel.id}-{message.author.id}"
     if tid not in bot.memory:
         bot.memory[tid] = deque(maxlen=6)
+        print(f"🧠 Created new memory for thread: {tid}")
+    else:
+        print(f"🧠 Using existing memory (length: {len(bot.memory[tid])})")
 
     async with message.channel.typing():
         try:
@@ -2871,6 +2948,9 @@ If you'd like to know more about my features, use `/help`!
             roles = ", ".join([r.name for r in message.author.roles[1:]]) if message.guild else "None"
 
             user_content, was_truncated = truncate_message(message.content if message.content else "[Image/Attachment]")
+            
+            print(f"📝 User content length: {len(user_content)} chars")
+            print(f"✂️ Was truncated: {was_truncated}")
             
             system = f"""You are flexedAI, a smart Discord bot created by {OWNER_INFO['name']} (ID: {OWNER_ID}).
 
@@ -2904,38 +2984,67 @@ Make your responses shorter, don't ask questions at the end of the response. Try
 
             msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
 
-            res = await bot.groq_client.chat.completions.create(model=MODEL_NAME, messages=msgs, max_tokens=1500)
+            print(f"🔄 Calling Groq API with {len(msgs)} messages...")
+            print(f"🔑 API Key exists: {bool(GROQ_API_KEY)}")
+            print(f"🤖 Model: {MODEL_NAME}")
+            
+            res = await bot.groq_client.chat.completions.create(
+                model=MODEL_NAME, 
+                messages=msgs, 
+                max_tokens=1500
+            )
+            
             reply = res.choices[0].message.content
+            print(f"✅ Got AI response ({len(reply)} chars)")
             
             if was_truncated:
                 reply = "⚠️ *Your message was very long and had to be shortened.*\n\n" + reply
             
-            print(f"✅ RESPONDING: Sent reply to {message.author.name}")
-            
             # Send response
             if was_deleted:
                 final_reply = f"{message.author.mention} {reply}"
+                print(f"📤 Sending response to channel (deleted message)")
                 await message.channel.send(final_reply)
             else:
+                print(f"📤 Sending response as reply")
                 await split_and_send(message, reply)
 
+            print("✅ Response sent successfully")
+
             # Add smart AI reactions (10% chance)
-            await add_smart_reaction(message, user_content, reply)
+            try:
+                await add_smart_reaction(message, user_content, reply)
+            except Exception as e:
+                print(f"⚠️ Error adding reactions: {e}")
 
             bot.memory[tid].append({"role": "user", "content": user_content})
             bot.memory[tid].append({"role": "assistant", "content": reply})
+            print(f"🧠 Updated memory (now {len(bot.memory[tid])} messages)")
 
-            db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", (time.time(), str(message.guild.id) if message.guild else "DM", str(message.channel.id), message.author.name, str(message.author.id), message.content[:1000] if message.content else "[Attachment]", reply[:1000]))
+            try:
+                db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                        (time.time(), str(message.guild.id) if message.guild else "DM", 
+                         str(message.channel.id), message.author.name, str(message.author.id), 
+                         message.content[:1000] if message.content else "[Attachment]", reply[:1000]))
+                print("✅ Logged interaction to database")
+            except Exception as e:
+                print(f"⚠️ Error logging interaction: {e}")
         
         except Exception as e:
-            print(f"❌ ERROR in on_message: {str(e)}")
+            print(f"❌ ERROR in AI response generation:")
+            print(f"   Error type: {type(e).__name__}")
+            print(f"   Error message: {str(e)}")
             import traceback
             traceback.print_exc()
             
             error_msg = f"❌ **An error occurred**\n```\n{str(e)}\n```\nPlease try again or [report it in the support server](<https://discord.com/invite/XMvPq7W5N4>) if the issue persists."
-            if was_deleted:
-                await message.channel.send(error_msg)
-            else:
-                await message.reply(error_msg)
+            try:
+                if was_deleted:
+                    await message.channel.send(error_msg)
+                else:
+                    await message.reply(error_msg)
+                print("✅ Sent error message to user")
+            except Exception as send_error:
+                print(f"❌ Error sending error message: {send_error}")
 
 bot.run(DISCORD_TOKEN)
