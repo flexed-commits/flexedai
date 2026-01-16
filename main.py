@@ -1729,7 +1729,7 @@ class ReportActionView(discord.ui.View):
         # Send DM to reported user
         dm_message = f"⚡ **Strike Issued**\n\n**You have received 1 strike**\n\n**Reason:** Action taken from user report #{self.report_id}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
         if is_banned:
-            dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>"
+            dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4"
         else:
             strikes_remaining = 3 - new_strikes
             dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Be respectful to others\n• Follow server and bot rules"
