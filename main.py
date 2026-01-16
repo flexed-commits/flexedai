@@ -5,6 +5,7 @@ from discord.ext import commands, tasks
 import os, time, datetime, json, sqlite3, asyncio
 from groq import AsyncGroq 
 from collections import deque
+import random
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
