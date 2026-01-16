@@ -1058,7 +1058,7 @@ Your server **{guild_name}** has been blacklisted from using flexedAI Bot.
 
 **Appeal Process:**
 If you believe this is a mistake, contact: <@{OWNER_ID}>
-
+**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
 *Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
                 await guild.owner.send(dm_message)
