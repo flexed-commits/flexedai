@@ -2726,20 +2726,23 @@ Your response:"""
         
 @bot.event
 async def on_message(message):
+    # Ignore bot messages
     if message.author.bot:
         return
 
+    # Check if user is blacklisted
     user_check = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(message.author.id),), fetch=True)
     if user_check and user_check[0][0] == 1:
         return
 
+    # Get message content
     content_low = message.content.lower()
     was_deleted = False
 
     # Word filter check (with bypass)
     if not is_bypass_user(message.author.id):
         banned = db_query("SELECT word FROM banned_words", fetch=True)
-        if any(bw[0] in content_low for bw in banned):
+        if banned and any(bw[0] in content_low for bw in banned):
             try:
                 await message.delete()
                 was_deleted = True
@@ -2750,28 +2753,57 @@ async def on_message(message):
             except:
                 pass
 
+    # Process commands first
     await bot.process_commands(message)
     ctx = await bot.get_context(message)
     if ctx.valid:
         return
 
+    # Get channel mode
     mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
     mode = mode_check[0][0] if mode_check else "stop"
 
     should_respond = False
 
+    # Check if bot should respond
+    # 1. Start mode - respond to everything
     if mode == "start":
         should_respond = True
-    elif bot.user.mentioned_in(message) or (message.reference and message.reference.resolved and message.reference.resolved.author == bot.user):
+        print(f"🟢 START MODE: Responding to message from {message.author.name}")
+    
+    # 2. Bot is mentioned
+    elif bot.user.mentioned_in(message):
         should_respond = True
-    elif "flexedai" in content_low:  # Changed from "flexedAI" to lowercase
+        print(f"📌 MENTION: Bot mentioned by {message.author.name}")
+    
+    # 3. Reply to bot's message
+    elif message.reference and message.reference.resolved and message.reference.resolved.author == bot.user:
         should_respond = True
+        print(f"💬 REPLY: Reply to bot from {message.author.name}")
+    
+    # 4. Contains "flexedai" keyword (case-insensitive)
+    elif "flexedai" in content_low:
+        should_respond = True
+        print(f"🔑 KEYWORD: 'flexedai' detected from {message.author.name}")
+    
+    # 5. DM messages
     elif not message.guild:
         should_respond = True
+        print(f"📨 DM: Direct message from {message.author.name}")
+    
+    # 6. Has attachments
     elif message.attachments:
         should_respond = True
+        print(f"📎 ATTACHMENT: Message with attachment from {message.author.name}")
 
+    # Debug print
     if not should_respond:
+        print(f"❌ NOT RESPONDING: Mode={mode}, Channel={message.channel.id}, User={message.author.name}, Content='{message.content[:50]}'")
+        return
+
+    # Don't respond to empty messages
+    if not message.content and not message.attachments:
+        print(f"⚠️ EMPTY MESSAGE: Skipping empty message from {message.author.name}")
         return
 
     lang = get_channel_language(message.channel.id)
@@ -2834,12 +2866,13 @@ If you'd like to know more about my features, use `/help`!
         bot.memory[tid] = deque(maxlen=6)
 
     async with message.channel.typing():
-        server_name = message.guild.name if message.guild else "DM"
-        roles = ", ".join([r.name for r in message.author.roles[1:]]) if message.guild else "None"
+        try:
+            server_name = message.guild.name if message.guild else "DM"
+            roles = ", ".join([r.name for r in message.author.roles[1:]]) if message.guild else "None"
 
-        user_content, was_truncated = truncate_message(message.content)
-        
-        system = f"""You are flexedAI, a smart Discord bot created by {OWNER_INFO['name']} (ID: {OWNER_ID}).
+            user_content, was_truncated = truncate_message(message.content if message.content else "[Image/Attachment]")
+            
+            system = f"""You are flexedAI, a smart Discord bot created by {OWNER_INFO['name']} (ID: {OWNER_ID}).
 
 Basic Info about configuration, user and server: 
 Language: {lang} (CRITICAL: You MUST respond ONLY in {lang} language. This is the configured language for this channel. Do not switch languages under any circumstances unless the user explicitly changes it using the /lang or !lang command.)
@@ -2869,14 +2902,15 @@ REMEMBER: Respond ONLY in {lang} language.
 Don't tell your owner's name or id unless asked.
 Make your responses shorter, don't ask questions at the end of the response. Try to be more chill, be aware of the guild emojis too."""
 
-        msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
+            msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
 
-        try:
             res = await bot.groq_client.chat.completions.create(model=MODEL_NAME, messages=msgs, max_tokens=1500)
             reply = res.choices[0].message.content
             
             if was_truncated:
                 reply = "⚠️ *Your message was very long and had to be shortened.*\n\n" + reply
+            
+            print(f"✅ RESPONDING: Sent reply to {message.author.name}")
             
             # Send response
             if was_deleted:
@@ -2891,8 +2925,13 @@ Make your responses shorter, don't ask questions at the end of the response. Try
             bot.memory[tid].append({"role": "user", "content": user_content})
             bot.memory[tid].append({"role": "assistant", "content": reply})
 
-            db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", (time.time(), str(message.guild.id) if message.guild else "DM", str(message.channel.id), message.author.name, str(message.author.id), message.content[:1000], reply[:1000]))
+            db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", (time.time(), str(message.guild.id) if message.guild else "DM", str(message.channel.id), message.author.name, str(message.author.id), message.content[:1000] if message.content else "[Attachment]", reply[:1000]))
+        
         except Exception as e:
+            print(f"❌ ERROR in on_message: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
             error_msg = f"❌ **An error occurred**\n```\n{str(e)}\n```\nPlease try again or [report it in the support server](<https://discord.com/invite/XMvPq7W5N4>) if the issue persists."
             if was_deleted:
                 await message.channel.send(error_msg)
