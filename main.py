@@ -360,7 +360,7 @@ async def on_guild_join(guild):
             # Try to notify owner
             try:
                 await guild.owner.send(
-                    f"""🚫 **FlexedAI Bot - Blacklisted Server**
+                    f"""🚫 **flexedAI Bot - Blacklisted Server**
 
 Hello {guild.owner.name},
 
@@ -445,7 +445,7 @@ Thank you for adding **flexedAI Bot** to **{guild.name}**!
 💡 **Need Help?**
 Contact the bot owner: <@{OWNER_ID}>
 Join the Support Server: https://discord.gg/XMvPq7W5N4/
-Enjoy using FlexedAI! 🎉
+Enjoy using flexedAI! 🎉
 """
         await guild.owner.send(welcome_msg)
     except:
@@ -927,7 +927,7 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"🚫 **You have been blacklisted from FlexedAI Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
     )
     
     # Log to dedicated blacklist channel
@@ -1043,11 +1043,11 @@ async def blacklist_guild_add(ctx, guild_id: str, *, reason: str = "No reason pr
         owner_notified = False
         if guild and guild.owner:
             try:
-                dm_message = f"""🚫 **FlexedAI Bot - Server Blacklisted**
+                dm_message = f"""🚫 **flexedAI Bot - Server Blacklisted**
 
 Hello {guild.owner.name},
 
-Your server **{guild_name}** has been blacklisted from using FlexedAI Bot.
+Your server **{guild_name}** has been blacklisted from using flexedAI Bot.
 
 **Reason:** {reason}
 
@@ -1195,7 +1195,7 @@ async def add_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No re
     # Send DM to user
     dm_message = f"⚡ **Strike Issued**\n\n**You have received {amount} strike(s)**\n\n**Reason:** {reason}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
     if is_banned:
-        dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from FlexedAI Bot.\n\n**What this means:**\n• You can no longer use the bot\n• All access has been revoked\n• This is a permanent suspension unless appealed\n\n**Appeal Process:**\nContact the bot owner: <@!1081876265683927080>"
+        dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**What this means:**\n• You can no longer use the bot\n• All access has been revoked\n• This is a permanent suspension unless appealed\n\n**Appeal Process:**\nContact the bot owner: <@!1081876265683927080>"
     else:
         strikes_remaining = 3 - new_strikes
         dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Avoid using banned words\n• Be respectful to others\n• Follow server and bot rules"
@@ -1262,7 +1262,7 @@ async def remove_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No
     # Send DM to user
     dm_message = f"✅ **Strike(s) Removed**\n\n**{amount} strike(s) have been removed from your account**\n\n**Reason:** {reason}\n**Previous Strikes:** {current_strikes}/3\n**Current Strikes:** {new_strikes}/3\n**Reviewed By:** Administrator\n\n"
     if was_unbanned:
-        dm_message += "🎉 **ACCOUNT RESTORED**\n\nYour blacklist has been lifted! You can now use FlexedAI Bot again.\n\n**Remember:**\n• Follow community guidelines\n• Avoid accumulating more strikes\n• Be respectful and follow the rules\n\nWelcome back!"
+        dm_message += "🎉 **ACCOUNT RESTORED**\n\nYour blacklist has been lifted! You can now use flexedAI Bot again.\n\n**Remember:**\n• Follow community guidelines\n• Avoid accumulating more strikes\n• Be respectful and follow the rules\n\nWelcome back!"
     else:
         dm_message += "**Status:** Your account is in good standing. Keep following the rules to avoid future strikes."
     
@@ -1493,7 +1493,7 @@ async def bypass_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_message = f"""🔓 **Word Filter Bypass Granted**
 
-You have been granted permission to bypass the word filter in FlexedAI Bot.
+You have been granted permission to bypass the word filter in flexedAI Bot.
 
 **Reason:** {reason}
 **Granted By:** {ctx.author.name}
@@ -1729,7 +1729,7 @@ class ReportActionView(discord.ui.View):
         # Send DM to reported user
         dm_message = f"⚡ **Strike Issued**\n\n**You have received 1 strike**\n\n**Reason:** Action taken from user report #{self.report_id}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
         if is_banned:
-            dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from FlexedAI Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>"
+            dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>"
         else:
             strikes_remaining = 3 - new_strikes
             dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Be respectful to others\n• Follow server and bot rules"
@@ -1779,7 +1779,7 @@ class ReportActionView(discord.ui.View):
         db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
         
         # Send DM
-        dm_message = f"🚫 **You have been blacklisted from FlexedAI Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        dm_message = f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
         dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
         
         # Log to blacklist channel
@@ -2163,7 +2163,7 @@ async def add_admin(ctx, user: discord.User):
     # Send DM to new admin
     dm_message = f"""🎉 **Congratulations, {user.name}!**
 
-You have been promoted to **Bot Admin** for FlexedAI Bot by {ctx.author.name}!
+You have been promoted to **Bot Admin** for flexedAI Bot by {ctx.author.name}!
 
 As a Bot Admin, you now have access to all moderation and management commands.
 
@@ -2249,7 +2249,7 @@ async def remove_admin(ctx, user: discord.User):
     # Send DM to removed admin
     dm_message = f"""📋 **Bot Admin Status Update**
 
-Your **Bot Admin** privileges for FlexedAI Bot have been removed by {ctx.author.name}.
+Your **Bot Admin** privileges for flexedAI Bot have been removed by {ctx.author.name}.
 
 **What Changed:**
 • You no longer have access to administrative commands
@@ -2337,26 +2337,26 @@ async def leave_server(ctx, server_id: str, *, reason: str = None):
         if guild_owner:
             try:
                 if reason:
-                    leave_message = f"""📢 **FlexedAI Bot Leaving Server**
+                    leave_message = f"""📢 **flexedAI Bot Leaving Server**
 
 Hello {guild_owner.name},
 
-FlexedAI Bot is leaving **{guild_name}**.
+flexedAI Bot is leaving **{guild_name}**.
 
 **Reason:** {reason}
 
 If you have questions, contact: <@{OWNER_ID}>
 
-Thank you for using FlexedAI Bot!
+Thank you for using flexedAI Bot!
 """
                 else:
-                    leave_message = f"""📢 **FlexedAI Bot Leaving Server**
+                    leave_message = f"""📢 **flexedAI Bot Leaving Server**
 
 Hello {guild_owner.name},
 
-FlexedAI Bot is leaving **{guild_name}**.
+flexedAI Bot is leaving **{guild_name}**.
 
-Thank you for using FlexedAI Bot!
+Thank you for using flexedAI Bot!
 """
                 await guild_owner.send(leave_message)
                 owner_notified = True
@@ -2416,7 +2416,7 @@ async def stop_mode(ctx):
     
     embed = discord.Embed(
         title="🔴 Stop Mode Activated",
-        description="The bot will now **only respond** to:\n• Direct mentions/pings\n• Messages containing 'flexedai'\n• Images/attachments",
+        description="The bot will now **only respond** to:\n• Direct mentions/pings\n• Messages containing 'flexedAI'\n• Images/attachments",
         color=discord.Color.red()
     )
     embed.add_field(name="Channel", value=ctx.channel.mention, inline=True)
@@ -2491,7 +2491,7 @@ async def help_cmd(ctx):
     is_admin = is_bot_admin(ctx.author.id)
     
     embed = discord.Embed(
-        title="📡 FlexedAI Command Center",
+        title="📡 flexedAI Command Center",
         description="Here are all the commands you have access to:",
         color=discord.Color.blue()
     )
@@ -2649,7 +2649,7 @@ async def on_message(message):
         should_respond = True
     elif bot.user.mentioned_in(message) or (message.reference and message.reference.resolved and message.reference.resolved.author == bot.user):
         should_respond = True
-    elif "flexedai" in content_low:
+    elif "flexedAI" in content_low:
         should_respond = True
     elif not message.guild:
         should_respond = True
