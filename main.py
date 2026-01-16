@@ -334,6 +334,7 @@ class FlexedBot(commands.Bot):
         super().__init__(command_prefix=get_prefix, intents=discord.Intents.all(), help_command=None)
         self.groq_client = AsyncGroq(api_key=GROQ_API_KEY)
         self.memory = {}
+        self.reaction_chance = 0.10  # 10% chance to add reactions
 
     async def setup_hook(self):
         self.daily_backup.start()
