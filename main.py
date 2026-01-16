@@ -2620,7 +2620,7 @@ async def command_ids(ctx):
             return
         
         embed = discord.Embed(
-            title="🆔 Slash Command IDs",
+            title="Slash Command IDs",
             description="All registered slash commands and their Discord IDs",
             color=discord.Color.blue(),
             timestamp=datetime.datetime.utcnow()
