@@ -2173,61 +2173,144 @@ async def add_admin(ctx, user: discord.User):
 
 You have been promoted to **Bot Admin** for flexedAI Bot by {ctx.author.name}!
 
-As a Bot Admin, you now have access to all moderation and management commands.
+**📊 Your New Permissions:**
+✅ User Moderation (strikes, blacklist)
+✅ Word Filter Management
+✅ Report Review & Actions
+✅ Data & Log Exports
+✅ Server Configuration
 
-**📊 Key Responsibilities:**
-• Manage user strikes and blacklists
-• Monitor and moderate banned words
-• Review user reports
-• Export data and logs
-• Maintain bot integrity
+**🔑 Admin Commands You Can Now Use:**
+• `/sync` - Sync slash commands
+• `/blacklist add/remove` - Manage blacklisted users
+• `/addstrike` / `/removestrike` - Manage user strikes
+• `/bannedword add/remove` - Manage word filter
+• `/bypass add/remove` - Manage word filter bypass
+• `/reports` / `/reportview` - Review user reports
+• `/messages` / `/backup` / `/data` - Export logs & data
+• All other admin commands - Type `/help` to see full list
 
-**⚠️ Important:**
-• Use your powers responsibly
-• All actions are logged
-• Users receive notifications for moderation actions
-• Contact <@{OWNER_ID}> for questions
-• **Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
-Type `/help` to see all available commands.
+**⚠️ Important Reminders:**
+• All your actions are logged and monitored
+• Users receive DM notifications for moderation actions
+• Use your powers responsibly and fairly
+• If unsure about something, contact the owner
 
-Welcome to the team! 🚀
+**📞 Need Help?**
+• Contact Owner: <@{OWNER_ID}>
+• Support Server: https://discord.com/invite/XMvPq7W5N4
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+**Welcome to the admin team! 🚀**
+
+*Granted: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
+    
     dm_sent = await send_user_dm(str(user.id), dm_message)
     
-    # Log to admin_logs channel
+    # Log to admin_logs channel with rich embed
     log_embed = discord.Embed(
-        title="✨ Bot Admin Added",
-        description="A new bot administrator has been appointed.",
+        title="✨ New Bot Admin Appointed",
+        description="A new administrator has been added to the bot team.",
         color=discord.Color.gold(),
         timestamp=datetime.datetime.utcnow()
     )
-    log_embed.add_field(name="👤 New Admin", value=f"{user.mention}\n**Username:** {user.name}\n**ID:** `{user.id}`", inline=True)
-    log_embed.add_field(name="👑 Appointed By", value=f"{ctx.author.mention}\n**Username:** {ctx.author.name}\n**ID:** `{ctx.author.id}`", inline=True)
-    log_embed.add_field(name="📅 Appointed Date", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
-    log_embed.add_field(name="ℹ️ Account Info", value=f"**Account Created:** {user.created_at.strftime('%Y-%m-%d')}\n**Account Age:** {(datetime.datetime.utcnow() - user.created_at).days} days", inline=True)
-    log_embed.add_field(name="📬 DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
-    log_embed.add_field(name="🔑 Permissions Granted", value="• User moderation (strikes, blacklist)\n• Word filter management\n• Report review\n• Data exports\n• Admin log access", inline=False)
+    
+    # User information
+    log_embed.add_field(
+        name="👤 New Admin",
+        value=f"{user.mention}\n**Username:** {user.name}\n**ID:** `{user.id}`",
+        inline=True
+    )
+    
+    # Appointer information
+    log_embed.add_field(
+        name="👑 Appointed By",
+        value=f"{ctx.author.mention}\n**Username:** {ctx.author.name}\n**ID:** `{ctx.author.id}`",
+        inline=True
+    )
+    
+    # Timestamp
+    log_embed.add_field(
+        name="📅 Appointment Date",
+        value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'),
+        inline=True
+    )
+    
+    # Account info
+    account_age = (datetime.datetime.utcnow() - user.created_at).days
+    log_embed.add_field(
+        name="ℹ️ Account Information",
+        value=f"**Created:** {user.created_at.strftime('%Y-%m-%d')}\n**Age:** {account_age} days old",
+        inline=True
+    )
+    
+    # Notification status
+    log_embed.add_field(
+        name="📬 DM Notification",
+        value="✅ Delivered successfully" if dm_sent else "❌ Failed (DMs disabled)",
+        inline=True
+    )
+    
+    # Current admin count
+    total_admins = len(db_query("SELECT user_id FROM bot_admins", fetch=True))
+    log_embed.add_field(
+        name="📊 Total Admins",
+        value=f"**{total_admins}** bot admin(s)",
+        inline=True
+    )
+    
+    # Permissions granted
+    log_embed.add_field(
+        name="🔑 Permissions Granted",
+        value="```\n• User Moderation (strikes/blacklist)\n• Word Filter Management\n• Report Review & Actions\n• Data & Log Exports\n• Server Configuration\n• All Admin Commands```",
+        inline=False
+    )
     
     log_embed.set_thumbnail(url=user.display_avatar.url)
-    log_embed.set_footer(text=f"Admin ID: {user.id} | Added by: {ctx.author.name}")
+    log_embed.set_footer(text=f"Admin ID: {user.id} • Appointed by: {ctx.author.name}")
     
-    await log_to_channel(bot, 'admin_logs', log_embed)
+    # Send to admin logs channel
+    log_sent = await log_to_channel(bot, 'admin_logs', log_embed)
     
-    # Confirm to owner
-    embed = discord.Embed(
-        title="✅ Bot Admin Added",
+    # Confirm to owner with detailed embed
+    confirm_embed = discord.Embed(
+        title="✅ Bot Admin Added Successfully",
         description=f"{user.mention} has been promoted to **Bot Admin**!",
-        color=discord.Color.gold()
+        color=discord.Color.green()
     )
-    embed.add_field(name="User", value=f"{user.name} (`{user.id}`)", inline=False)
-    embed.add_field(name="Added By", value=ctx.author.name, inline=True)
-    embed.add_field(name="DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
-    embed.set_thumbnail(url=user.display_avatar.url)
     
-    await ctx.send(embed=embed)
-
+    confirm_embed.add_field(
+        name="👤 New Admin",
+        value=f"**Name:** {user.name}\n**ID:** `{user.id}`",
+        inline=True
+    )
+    
+    confirm_embed.add_field(
+        name="📊 Status",
+        value=f"**Total Admins:** {total_admins}\n**Appointed By:** {ctx.author.name}",
+        inline=True
+    )
+    
+    confirm_embed.add_field(
+        name="📬 Notifications",
+        value=f"**DM to User:** {'✅ Sent' if dm_sent else '❌ Failed'}\n**Admin Log:** {'✅ Logged' if log_sent else '❌ Failed'}",
+        inline=False
+    )
+    
+    confirm_embed.set_thumbnail(url=user.display_avatar.url)
+    confirm_embed.set_footer(text="The new admin has been notified of their permissions")
+    
+    await ctx.send(embed=confirm_embed)
+    
+    # Also send a follow-up message with next steps
+    await ctx.send(
+        f"💡 **Next Steps:**\n"
+        f"• {user.mention} can now use `/help` to see all admin commands\n"
+        f"• They should join the support server if not already there\n"
+        f"• Review admin guidelines and best practices\n"
+        f"• Test permissions in a controlled environment first",
+        delete_after=30
+    )
 
 @bot.command(name="remove-admin", description="Owner: Remove a bot admin.")
 @commands.is_owner()
