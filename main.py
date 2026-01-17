@@ -2871,55 +2871,6 @@ async def on_message(message):
 
     lang = get_channel_language(message.channel.id)
 
-    # Check for owner-related questions
-    owner_keywords = [
-        "who created you", "who made you", "who is your owner", "who owns you",
-        "your creator", "your owner", "who built you", "who developed you"
-    ]
-    
-    if any(keyword in content_low for keyword in owner_keywords):
-        owner_response = f"""👑 **About My Owner**
-
-I was created and am maintained by <@{OWNER_ID}>!
-
-**Owner Information:**
-• **Name:** {OWNER_INFO['name']}
-• **User ID:** `{OWNER_ID}`
-• **Role:** Bot Creator & Primary Developer
-
-My owner built me to be a helpful, intelligent AI assistant for Discord communities. They continue to maintain and improve my features to serve users better.
-
-If you have any questions, feedback, or issues, you can contact them directly!
-"""
-        # Always send to channel when message was deleted
-        await message.channel.send(owner_response)
-        return
-
-    # Check for verification question
-    verification_keywords = [
-        "are you verified", "are you a verified bot", "is this bot verified",
-        "verified bot", "discord verified", "are you official",
-        "official bot", "verified badge"
-    ]
-    
-    if any(keyword in content_low for keyword in verification_keywords):
-        verification_response = f"""✅ **Verification Status**
-
-**Discord Bot Verification** is a badge that indicates a bot has been verified by Discord. To qualify for verification, a bot must meet these requirements:
-
-🔹 **Be in 75+ servers** (I'm currently in {len(bot.guilds)} servers)
-🔹 **Properly use Discord's API**
-🔹 **Follow Discord's Terms of Service**
-🔹 **Have a clear purpose and functionality**
-
-Verified bots display a ✓ checkmark badge next to their name. Verification helps users trust that the bot is legitimate and maintained by its developers.
-
-If you'd like to know more about my features, use `/help`!
-"""
-        # Always send to channel when message was deleted
-        await message.channel.send(verification_response)
-        return
-
     tid = f"{message.channel.id}-{message.author.id}"
     if tid not in bot.memory:
         bot.memory[tid] = deque(maxlen=6)
@@ -2949,16 +2900,32 @@ Bot's Server Roles: {message.guild.me.roles if message.guild else 'N/A'}
 Bot's Avatar: {bot.user.display_avatar.url}
 Bot Owner: {OWNER_INFO['name']} (ID: {OWNER_ID})
 
-Match the user's tone and energy. Be helpful, casual, and engaging.
-Have shorter responses. No unnecessary verbosity.
-Just don't make silly mistakes. Try to be engaging, not annoying.
-Do not ask questions at the end of responses like "What else can I help you with?" or "What do you want me to know?" etc.
+Discord Bot Verification Info:
+Discord Bot Verification is a badge (✓ checkmark) that indicates a bot has been verified by Discord.
+Requirements for verification:
+- Be in 75+ servers (currently in {len(bot.guilds)} servers)
+- Properly use Discord's API
+- Follow Discord's Terms of Service
+- Have a clear purpose and functionality
 
-If asked about your creator or owner, mention that you were created by {OWNER_INFO['name']} (User ID: {OWNER_ID}).
-Take use of emojis too, accordingly.
-REMEMBER: Respond ONLY in {lang} language.
-Don't tell your owner's name or id unless asked.
-Make your responses shorter, don't ask questions at the end of the response. Try to be more chill, be aware of the guild emojis too."""
+Instructions:
+- Match the user's tone and energy. Be helpful, casual, and engaging.
+- Keep responses concise and natural. No unnecessary verbosity.
+- Don't make silly mistakes. Be engaging, not annoying.
+- Do NOT ask follow-up questions at the end like "What else can I help you with?" unless contextually appropriate.
+- Use emojis appropriately to match the conversation tone.
+- REMEMBER: Respond ONLY in {lang} language.
+
+Owner/Creator Information:
+- Only mention your creator's name ({OWNER_INFO['name']}) and ID ({OWNER_ID}) when users SPECIFICALLY ask about who created you, who made you, who your owner is, or similar direct questions about your creator.
+- For casual mentions like "can I be your owner" or "I'm your owner now" - respond naturally/playfully without revealing owner information.
+- Use context to determine if they're genuinely asking for information or just making a casual statement.
+
+Verification Status:
+- Only provide detailed verification information when users SPECIFICALLY ask if you're verified, about your verification status, or about Discord bot verification.
+- Don't bring up verification status unprompted or for casual mentions.
+
+Be aware of server emojis and use them when appropriate."""
 
         msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
 
