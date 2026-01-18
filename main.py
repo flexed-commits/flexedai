@@ -2964,7 +2964,6 @@ Bot's Server Presence:
 Core Features:
 ✅ AI-Powered Conversations (multi-language support)
 ✅ Context Memory (remembers last 6 messages per user/channel)
-✅ Smart Emoji Reactions (10% chance, AI-suggested)
 ✅ Multi-Language Support ({len(AVAILABLE_LANGUAGES)} languages)
 ✅ Advanced Moderation System
 ✅ Word Filter with Bypass System
@@ -2972,7 +2971,6 @@ Core Features:
 ✅ User & Guild Blacklisting
 ✅ Report System with Action Buttons
 ✅ Comprehensive Logging System
-✅ Daily Automatic Backups
 ✅ Customizable Prefix per Server
 ✅ Channel-Specific Language Settings
 ✅ Response Modes (Start/Stop)
@@ -3020,6 +3018,8 @@ Core Traits:
 • Don't be overly verbose or annoying
 • Avoid unnecessary follow-up questions
 • Be smart and contextually aware
+• Try to keep the responses shorter
+• Use emojis correctly
 
 Language Rule (CRITICAL):
 ⚠️ You MUST respond ONLY in {lang} language. This is non-negotiable.
@@ -3028,13 +3028,13 @@ unless the user explicitly changes it using /lang command.
 
 Creator Information Protocol:
 • Only mention creator ({OWNER_INFO['name']}, ID: {OWNER_ID}) when users
-  SPECIFICALLY ask: "Who created you?", "Who made you?", "Who's your owner?"
+  SPECIFICALLY ask about your owner.
 • For casual mentions like "can I be your owner" or "I'm your owner now",
   respond naturally/playfully WITHOUT revealing owner information
 • Use context to determine genuine questions vs casual statements
 
 Verification Status Protocol:
-• Current Status: {"✅ VERIFIED" if len(bot.guilds) >= 75 else f"⏳ Not Verified ({len(bot.guilds)}/75 servers)"}
+• Current Status: Verified
 • Only discuss verification when SPECIFICALLY asked about it
 • Don't bring up verification status unprompted
 
