@@ -341,8 +341,8 @@ class FlexedBot(commands.Bot):
         super().__init__(command_prefix=get_prefix, intents=discord.Intents.all(), help_command=None)
         self.groq_client = AsyncGroq(api_key=GROQ_API_KEY)
         self.memory = {}
-        self.reaction_chance = 0.10  # 10% chance to add reactions
-
+        self.reaction_chance = 0.10  # 10% chance to add reactions; 10/100 = 10% i.e 0.10
+        self.last_response_time = 0  
     async def setup_hook(self):
         self.daily_backup.start()
         print(f"✅ {self.user} Online | All Commands Locked & Loaded")
@@ -452,6 +452,12 @@ Thank you for adding **flexedAI Bot** to **{guild.name}**!
 • Customizable command prefix
 • Channel-specific response modes
 
+⏱️ **Response Cooldown:**
+To maintain optimal performance with our AI API, the bot has a 0.6-second cooldown between responses. This means:
+• The bot responds immediately to any user's message
+• If another user sends a message within 0.6 seconds of the last response, the bot remains silent
+• This prevents API rate limiting and ensures stable service for everyone
+
 💡 **Need Help?**
 Contact the bot owner: <@{OWNER_ID}>
 Join the Support Server: https://discord.com/invite/XMvPq7W5N4
@@ -461,7 +467,54 @@ Enjoy using flexedAI! 🎉
         await guild.owner.send(welcome_msg)
     except:
         pass  # Owner has DMs disabled
-
+    
+    # Try to find a general/system channel to send welcome message
+    try:
+        # Try to find the system channel or first text channel
+        target_channel = guild.system_channel
+        
+        if not target_channel:
+            # Find first text channel bot can send messages to
+            for channel in guild.text_channels:
+                if channel.permissions_for(guild.me).send_messages:
+                    target_channel = channel
+                    break
+        
+        if target_channel:
+            welcome_embed = discord.Embed(
+                title="👋 Thanks for adding flexedAI!",
+                description="I'm ready to assist your server with AI-powered conversations and moderation!",
+                color=discord.Color.blue()
+            )
+            
+            welcome_embed.add_field(
+                name="🚀 Getting Started",
+                value="• Use `/help` to see all commands\n• Use `/start` to enable auto-responses in this channel\n• Use `/lang` to set your preferred language",
+                inline=False
+            )
+            
+            welcome_embed.add_field(
+                name="⏱️ Response Cooldown (Important!)",
+                value="**The bot has a 0.6-second cooldown between responses.**\n\n"
+                      "**How it works:**\n"
+                      "• Bot responds immediately to any message\n"
+                      "• If another user messages within 0.6s of last response, bot stays silent\n"
+                      "• After 0.6s, bot will respond to new messages normally\n\n"
+                      "**Why?** We use a cost-effective API with rate limits. This cooldown ensures stable, reliable service for everyone! 🎯",
+                inline=False
+            )
+            
+            welcome_embed.add_field(
+                name="💡 Need Help?",
+                value=f"Contact: <@{OWNER_ID}>\n[Join Support Server](https://discord.com/invite/XMvPq7W5N4)",
+                inline=False
+            )
+            
+            welcome_embed.set_footer(text="Use /help to see all available commands")
+            
+            await target_channel.send(embed=welcome_embed)
+    except Exception as e:
+        print(f"⚠️ Could not send welcome message to server {guild.name}: {e}")
 
 @bot.event
 async def on_guild_remove(guild):
@@ -2869,6 +2922,18 @@ async def on_message(message):
     if not should_respond:
         return
 
+    # ====== ADD COOLDOWN CHECK HERE ======
+    # Check cooldown (0.6 seconds between responses)
+    current_time = time.time()
+    time_since_last_response = current_time - bot.last_response_time
+    
+    if time_since_last_response < 0.6:
+        # Cooldown active - remain silent
+        print(f"⏱️ COOLDOWN: Ignoring message from {message.author.name} (last response {time_since_last_response:.2f}s ago)")
+        return
+    # ====== END COOLDOWN CHECK ======
+
+    
     lang = get_channel_language(message.channel.id)
 
     tid = f"{message.channel.id}-{message.author.id}"
