@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://cdn.discordapp.com/avatars/1081876265683927080/2a551f08b87409f4d56f378c37120b8a.webp?" alt="Bot Icon" width="40" height="40" style="vertical-align:middle"> 
+  <img src="https://cdn.discordapp.com/avatars/1081876265683927080/5856bc32a1943714f38d3d2c3fa8489d.webp" alt="Bot Icon" width="40" height="40" style="vertical-align:middle"> 
   flexedAI Discord Bot
 </h1>
 
