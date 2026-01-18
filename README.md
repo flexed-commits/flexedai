@@ -256,6 +256,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
+---
+
+## ⚖️ License
+
+This project is licensed under the **MIT License**. For more information, please see the [LICENSE](LICENSE) file located in the root directory of this repository.
+
+---
+
 ## 📞 Support
 
 - **Support Server**: [Join Discord](https://discord.com/invite/XMvPq7W5N4)
