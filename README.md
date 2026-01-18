@@ -268,7 +268,7 @@ This project is licensed under the **MIT License**. For more information, please
 
 - **Support Server**: [Join Discord](https://discord.com/invite/XMvPq7W5N4)
 - **Creator**: Ψ.1nOnly.Ψ
-- **Report Issues**: Use the `/report` command or open a GitHub issue
+- **Report Issues**: Open a GitHub issue
 
 ---
 
