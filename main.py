@@ -3143,6 +3143,9 @@ and comprehensive moderation tools."""
             else:
                 print("📤 Sending response as reply")
                 await split_and_send(message, reply)
+            
+            # Update last response time after successful send
+            bot.last_response_time = time.time()
 
             # Add smart AI reactions (10% chance) - only if message wasn't deleted
             if not was_deleted:
