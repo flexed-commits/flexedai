@@ -6,11 +6,12 @@
 
 <div align="center">
 
-![Discord](https://img.shields.io/badge/Discord-Bot-5865F2?style=for-the-badge&logo=discord&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Groq](https://img.shields.io/badge/Groq-AI-FF6B00?style=for-the-badge)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
+  ![Discord](https://img.shields.io/badge/Discord-Bot-5865F2?style=for-the-badge&logo=discord&logoColor=white)
+  ![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+  ![discord.py](https://img.shields.io/badge/library-discord.py-blue?style=for-the-badge&logo=discord)
+  ![Groq](https://img.shields.io/badge/Groq-AI-FF6B00?style=for-the-badge)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+  
 **An advanced AI-powered Discord bot with comprehensive moderation and conversation capabilities**
 
 [Invite Bot](https://discord.com/oauth2/authorize?client_id=1379152032358858762&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands) • [Support Server](https://discord.com/invite/XMvPq7W5N4) • [Report Issues](#)
