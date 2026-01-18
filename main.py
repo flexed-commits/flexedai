@@ -2813,7 +2813,8 @@ Your response:"""
         # Silently fail if reaction system has issues
         print(f"⚠️ Reaction system error: {e}")
         pass
-        @bot.event
+        
+@bot.event
 async def on_message(message):
     if message.author.bot:
         print("❌ SKIP: Message is from a bot")
