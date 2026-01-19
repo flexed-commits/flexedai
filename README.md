@@ -10,9 +10,10 @@
   ![discord.py](https://img.shields.io/badge/library-discord.py-blue?style=for-the-badge&logo=discord)
   ![Groq](https://img.shields.io/badge/Groq-AI-FF6B00?style=for-the-badge)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-  ![Views](https://komarev.com/ghpvc/?username=flexed-commits&repo=flexedai&style=for-the-badge)
+  ![Views](https://komarev.com/ghpvc/?username=flexed-commits&repo=flexedai&label=Repository%20Views&style=for-the-badge&color=blue)
 
 </div>
+
 
 **An advanced AI-powered Discord bot with comprehensive moderation and conversation capabilities**
 
