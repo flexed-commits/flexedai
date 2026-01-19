@@ -2722,7 +2722,7 @@ async def invite(ctx):
     invite_url = f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands"
     
     embed = discord.Embed(
-        title="🔗 Invite flexedAI",
+        title=f"🔗 Invite {BOT_NAME}",
         description=f"Want to bring {BOT_NAME} to your community? Click the button below to authorize the bot!",
         color=discord.Color.blue()
     )
