@@ -39,11 +39,10 @@ AVAILABLE_LANGUAGES = [
 
 # Owner information for bot knowledge
 OWNER_INFO = {
-    'name': 'Ψ.1nOnly.Ψ',
-    'id': OWNER_ID,
-    'bio': 'Creator and maintainer of flexedAI Discord Bot'
+    'name': os.getenv('OWNER_NAME'),
+    'id': int(os.getenv('OWNER_ID')),
+    'bio': os.getenv('OWNER_BIO', 'Creator and core maintainer of flexedAI Discord Bot')
 }
-
 # --- DATABASE SETUP ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -334,7 +333,7 @@ migrate_interaction_logs()
 async def get_prefix(bot, message):
     guild_or_user_id = str(message.guild.id if message.guild else message.author.id)
     res = db_query("SELECT prefix FROM settings WHERE id = ?", (guild_or_user_id,), fetch=True)
-    return res[0][0] if res and res[0][0] else "!"
+    return res[0][0] if res and res[0][0] else "/"
 
 class FlexedBot(commands.Bot):
     def __init__(self):
