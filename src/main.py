@@ -2908,12 +2908,12 @@ async def on_message(message):
     mode = mode_check[0][0] if mode_check else "stop"
 
     should_respond = False
-
+    bot_trigger_name = BOT_NAME.lower()
     if mode == "start":
         should_respond = True
     elif bot.user.mentioned_in(message) or (message.reference and message.reference.resolved and message.reference.resolved.author == bot.user):
         should_respond = True
-    elif BOT_NAME in content_low:
+    elif bot_trigger_name in content_low:
         should_respond = True
     elif not message.guild:
         should_respond = True
