@@ -3169,7 +3169,7 @@ and comprehensive moderation tools."""
             print(f"❌ ERROR in AI response generation:")
             print(f"   Error type: {type(e).__name__}")
             print(f"   Error message: {e}")
-            error_msg = f"❌ **An error occurred**\n```\n{str(e)}\n```\nPlease try again or [report it in the support server](<https://discord.com/invite/XMvPq7W5N4>) if the issue persists."
+            error_msg = f"❌ **An error occurred**\n```\n{str(e)}\n```\nPlease try again or [report it in the support server](<{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}>) if the issue persists."
             try:
                 await message.channel.send(error_msg)
             except Exception as send_error:
