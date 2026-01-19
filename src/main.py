@@ -2823,24 +2823,39 @@ async def command_ids(ctx):
 
 def generate_encoding_map():
     """Generate a custom character mapping for encoding"""
-    # Use a fixed seed for consistency across bot restarts
-    random.seed(42069)  # Change this seed to create different encoding
+    random.seed(42069)  # Fixed seed for consistency
     
     # All characters to encode
-    chars = string.ascii_lowercase + string.ascii_uppercase + string.digits + ' .,!?-_'
+    chars = string.ascii_lowercase + string.ascii_uppercase + string.digits + ' .,!?-_\n\t'
     
-    # Available symbols for encoding (keyboard symbols only)
-    symbols = list('~`@#$%^&*()_+-=[]{}|;:<>,.?/')
+    # Available symbols for encoding
+    symbols = list('~`@#$%^&*()_+-=[]{}|;:<>,.?/\\')
     
-    # Create mapping
+    # Shuffle symbols for more randomness
+    shuffled = symbols.copy()
+    random.shuffle(shuffled)
+    
     encoding_map = {}
     decoding_map = {}
     
+    # Create unique 2-char codes for each character
+    code_index = 0
     for i, char in enumerate(chars):
-        # Create 2-character codes using symbols
-        code = symbols[i % len(symbols)] + symbols[(i * 7) % len(symbols)]
+        # Use two different symbols
+        first = shuffled[code_index % len(shuffled)]
+        second = shuffled[(code_index + 1) % len(shuffled)]
+        code = first + second
+        
+        # Ensure code is unique
+        while code in decoding_map:
+            code_index += 1
+            first = shuffled[code_index % len(shuffled)]
+            second = shuffled[(code_index + 1) % len(shuffled)]
+            code = first + second
+        
         encoding_map[char] = code
         decoding_map[code] = char
+        code_index += 2
     
     return encoding_map, decoding_map
 
@@ -2855,17 +2870,19 @@ def encode_text(text):
             result.append(ENCODE_MAP[char])
         else:
             # For emojis and special characters, use UTF-8 hex with marker
-            result.append(f"[{char.encode('utf-8').hex()}]")
+            hex_val = char.encode('utf-8').hex()
+            result.append(f"<{hex_val}>")
     return ''.join(result)
 
 def decode_text(text):
     """Decode text from custom encoding"""
     result = []
     i = 0
+    
     while i < len(text):
         # Check for UTF-8 encoded emoji/special char
-        if text[i] == '[':
-            end = text.find(']', i)
+        if i < len(text) and text[i] == '<':
+            end = text.find('>', i)
             if end != -1:
                 hex_code = text[i+1:end]
                 try:
@@ -2884,7 +2901,7 @@ def decode_text(text):
                 i += 2
                 continue
         
-        # If nothing matches, skip character
+        # Skip unknown character
         i += 1
     
     return ''.join(result)
@@ -2915,20 +2932,23 @@ async def encode_message(ctx, *, message: str):
         embed.add_field(name="📝 Original", value=f"```{original_display}```", inline=False)
         
         # Show encoded
-        encoded_display = encoded[:500] + "..." if len(encoded) > 500 else encoded
+        encoded_display = encoded[:1000] + "..." if len(encoded) > 1000 else encoded
         embed.add_field(name="🔒 Encoded", value=f"```{encoded_display}```", inline=False)
         
         # Stats
-        compression_ratio = (len(encoded) / len(message)) if len(message) > 0 else 0
-        embed.add_field(name="📊 Stats", value=f"Original: {len(message)} chars\nEncoded: {len(encoded)} chars\nRatio: {compression_ratio:.2f}x", inline=False)
+        embed.add_field(
+            name="📊 Stats", 
+            value=f"Original: {len(message)} chars\nEncoded: {len(encoded)} chars", 
+            inline=False
+        )
         
         embed.set_footer(text=f"Use /decode to decrypt • Encoded by {ctx.author.name}")
         
         await ctx.send(embed=embed)
         
-        # If encoded message is short enough, send it separately for easy copying
+        # Send copyable version
         if len(encoded) <= 1900:
-            await ctx.send(f"**Copy this to share:**\n```{encoded}```", ephemeral=True)
+            await ctx.send(f"**📋 Copy this to share:**\n```{encoded}```")
             
     except Exception as e:
         await ctx.send(f"❌ **Encoding failed**\n```{str(e)}```", ephemeral=True)
@@ -2939,7 +2959,7 @@ async def decode_message(ctx, *, encoded_message: str):
     
     try:
         # Clean up the encoded message (remove code blocks if present)
-        encoded_clean = encoded_message.strip().replace('`', '')
+        encoded_clean = encoded_message.strip().replace('`', '').strip()
         
         decoded = decode_text(encoded_clean)
         
@@ -2981,7 +3001,7 @@ async def decode_message(ctx, *, encoded_message: str):
         embed.add_field(name="🔒 Encoded", value=f"```{encoded_display}```", inline=False)
         
         # Show decoded
-        decoded_display = decoded[:500] + "..." if len(decoded) > 500 else decoded
+        decoded_display = decoded[:1000] + "..." if len(decoded) > 1000 else decoded
         embed.add_field(name="📝 Decoded", value=f"```{decoded_display}```", inline=False)
         
         embed.set_footer(text=f"Decoded by {ctx.author.name}")
@@ -2990,7 +3010,6 @@ async def decode_message(ctx, *, encoded_message: str):
         
     except Exception as e:
         await ctx.send(f"❌ **Decoding failed**\n```{str(e)}```\nMake sure the message was encoded with this bot.", ephemeral=True)
-
 async def add_smart_reaction(message, user_message: str, bot_response: str):
     """Let AI decide if and which emoji reactions to add"""
     if random.random() > bot.reaction_chance:
