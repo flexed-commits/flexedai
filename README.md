@@ -11,7 +11,7 @@
   ![discord.py](https://img.shields.io/badge/library-discord.py-blue?style=for-the-badge&logo=discord)
   ![Groq](https://img.shields.io/badge/Groq-AI-FF6B00?style=for-the-badge)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-  
+  <img src="https://komarev.com/ghpvc/?username=flexed-commits" alt="flexedAI" />
 **An advanced AI-powered Discord bot with comprehensive moderation and conversation capabilities**
 
 [Invite Bot](https://discord.com/oauth2/authorize?client_id=1379152032358858762&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands) • [Support Server](https://discord.com/invite/XMvPq7W5N4) • [Report Issues](#)
