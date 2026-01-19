@@ -6,6 +6,8 @@ import os, time, datetime, json, sqlite3, asyncio
 from groq import AsyncGroq 
 from collections import deque
 import random
+from dotenv import load_dotenv
+load_dotenv()
 
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
