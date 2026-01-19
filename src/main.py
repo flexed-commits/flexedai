@@ -16,7 +16,7 @@ OWNER_NAME = os.getenv('OWNER_NAME')
 DB_FILE = "bot_data.db"
 JSON_FILE = "bot_data.json"
 INTERACTION_JSON = "interaction_logs.json"
-
+BOT_NAME= os.getenv('BOT_NAME')
 # Logging Channels
 LOG_CHANNELS = {
     'server_join_leave': int(os.getenv('LOG_CHANNEL_SERVER_JOIN_LEAVE')),
