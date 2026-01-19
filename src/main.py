@@ -41,7 +41,7 @@ AVAILABLE_LANGUAGES = [
 OWNER_INFO = {
     'name': os.getenv('OWNER_NAME'),
     'id': int(os.getenv('OWNER_ID')),
-    'bio': os.getenv('OWNER_BIO', 'Creator and core maintainer of flexedAI Discord Bot')
+    'bio': os.getenv('OWNER_BIO', f'Creator and core maintainer of {BOT_NAME} Discord Bot')
 }
 # --- DATABASE SETUP ---
 def init_db():
@@ -335,7 +335,7 @@ async def get_prefix(bot, message):
     res = db_query("SELECT prefix FROM settings WHERE id = ?", (guild_or_user_id,), fetch=True)
     return res[0][0] if res and res[0][0] else "/"
 
-class FlexedBot(commands.Bot):
+class AIBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix=get_prefix, intents=discord.Intents.all(), help_command=None)
         self.groq_client = AsyncGroq(api_key=GROQ_API_KEY)
@@ -347,7 +347,7 @@ class FlexedBot(commands.Bot):
         print(f"✅ {self.user} Online | All Commands Locked & Loaded")
         print(f"🔄 Daily backup task started")
 
-bot = FlexedBot()
+bot = AIBot()
 
 # --- EVENT HANDLERS FOR LOGGING ---
 @bot.event
@@ -368,11 +368,11 @@ async def on_guild_join(guild):
             # Try to notify owner
             try:
                 await guild.owner.send(
-                    f"""🚫 **flexedAI Bot - Blacklisted Server**
+                    f"""🚫 **{BOT_NAME} Bot - Blacklisted Server**
 
 Hello {guild.owner.name},
 
-Your server **{guild.name}** is blacklisted from using flexedAI Bot.
+Your server **{guild.name}** is blacklisted from using {BOT_NAME} Bot.
 
 **Reason:** {reason}
 
@@ -409,7 +409,7 @@ The bot has automatically left your server. You cannot re-add this bot while bla
     # Original join logic continues below...
     embed = discord.Embed(
         title="🟢 Bot Joined Server",
-        description=f"flexedAI has been added to a new server!",
+        description=f"{BOT_NAME} has been added to a new server!",
         color=discord.Color.green(),
         timestamp=datetime.datetime.utcnow()
     )
@@ -435,7 +435,7 @@ The bot has automatically left your server. You cannot re-add this bot while bla
     try:
         welcome_msg = f"""👋 **Hello {guild.owner.name}!**
 
-Thank you for adding **flexedAI Bot** to **{guild.name}**!
+Thank you for adding **{BOT_NAME} Bot** to **{guild.name}**!
 
 🚀 **Quick Start Guide:**
 • Use `/help` to see all available commands
@@ -461,7 +461,7 @@ To maintain optimal performance with our AI API, the bot has a 0.6-second cooldo
 Contact the bot owner: <@{OWNER_ID}>
 Join the Support Server: {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
-Enjoy using flexedAI! 🎉
+Enjoy using {BOT_NAME}! 🎉
 """
         await guild.owner.send(welcome_msg)
     except:
@@ -481,7 +481,7 @@ Enjoy using flexedAI! 🎉
         
         if target_channel:
             welcome_embed = discord.Embed(
-                title="👋 Thanks for adding flexedAI!",
+                title="👋 Thanks for adding {BOT_NAME}!",
                 description="I'm ready to assist your server with AI-powered conversations and moderation!",
                 color=discord.Color.blue()
             )
@@ -520,7 +520,7 @@ async def on_guild_remove(guild):
     """Log when bot leaves a server"""
     embed = discord.Embed(
         title="🔴 Bot Left Server",
-        description=f"flexedAI has been removed from a server.",
+        description=f"{BOT_NAME} has been removed from a server.",
         color=discord.Color.red(),
         timestamp=datetime.datetime.utcnow()
     )
@@ -647,7 +647,7 @@ class LanguageButtonView(discord.ui.View):
                 item.disabled = True
             
             await interaction.response.edit_message(
-                content=f"🌐 Language set to **{lang}** by {interaction.user.mention}.",
+                content=f"🌐 Language set to **{lang}** by {interaction.user.mention}. {BOT_NAME} will now respond in {lang}",
                 view=self
             )
             
@@ -992,7 +992,7 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        f"🚫 **You have been blacklisted from {BOT_NAME} Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
     )
     
     # Log to dedicated blacklist channel
@@ -1120,7 +1120,7 @@ async def blacklist_guild_add(ctx, guild_id: str, *, reason: str = "No reason pr
         owner_notified = False
         if guild and guild.owner:
             try:
-                dm_message = f"""🚫 **flexedAI Bot - Server Blacklisted**
+                dm_message = f"""🚫 **{BOT_NAME} Bot - Server Blacklisted**
 
 Hello {guild.owner.name},
 
@@ -1262,7 +1262,7 @@ async def add_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No re
     # Send DM to user
     dm_message = f"⚡ **Strike Issued**\n\n**You have received {amount} strike(s)**\n\n**Reason:** {reason}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
     if is_banned:
-        dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**What this means:**\n• You can no longer use the bot\n• All access has been revoked\n• This is a permanent suspension unless appealed\n\n**Appeal Process:**\nContact the bot owner: <@!1081876265683927080>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}"
+        dm_message += f"🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from {BOT_NAME} Bot.\n\n**What this means:**\n• You can no longer use the bot\n• All access has been revoked\n• This is a permanent suspension unless appealed\n\n**Appeal Process:**\nContact the bot owner: <@!1081876265683927080>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}"
     else:
         strikes_remaining = 3 - new_strikes
         dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Avoid using banned words\n• Be respectful to others\n• Follow server and bot rules"
@@ -1329,7 +1329,7 @@ async def remove_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No
     # Send DM to user
     dm_message = f"✅ **Strike(s) Removed**\n\n**{amount} strike(s) have been removed from your account**\n\n**Reason:** {reason}\n**Previous Strikes:** {current_strikes}/3\n**Current Strikes:** {new_strikes}/3\n**Reviewed By:** Administrator\n\n"
     if was_unbanned:
-        dm_message += "🎉 **ACCOUNT RESTORED**\n\nYour blacklist has been lifted! You can now use flexedAI Bot again.\n\n**Remember:**\n• Follow community guidelines\n• Avoid accumulating more strikes\n• Be respectful and follow the rules\n\nWelcome back!"
+        dm_message += f"🎉 **ACCOUNT RESTORED**\n\nYour blacklist has been lifted! You can now use {BOT_NAME} Bot again.\n\n**Remember:**\n• Follow community guidelines\n• Avoid accumulating more strikes\n• Be respectful and follow the rules\n\nWelcome back!"
     else:
         dm_message += "**Status:** Your account is in good standing. Keep following the rules to avoid future strikes."
     
@@ -1560,7 +1560,7 @@ async def bypass_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_message = f"""🔓 **Word Filter Bypass Granted**
 
-You have been granted permission to bypass the word filter in flexedAI Bot.
+You have been granted permission to bypass the word filter in {BOT_NAME} Bot.
 
 **Reason:** {reason}
 **Granted By:** {ctx.author.name}
@@ -1796,7 +1796,7 @@ class ReportActionView(discord.ui.View):
         # Send DM to reported user
         dm_message = f"⚡ **Strike Issued**\n\n**You have received 1 strike**\n\n**Reason:** Action taken from user report #{self.report_id}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
         if is_banned:
-            dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}"
+            dm_message += f"🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from {BOT_NAME} Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}"
         else:
             strikes_remaining = 3 - new_strikes
             dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Be respectful to others\n• Follow server and bot rules"
@@ -2230,7 +2230,7 @@ async def add_admin(ctx, user: discord.User):
     # Send DM to new admin
     dm_message = f"""🎉 **Congratulations, {user.name}!**
 
-You have been promoted to **Bot Admin** for flexedAI Bot by {ctx.author.name}!
+You have been promoted to **Bot Admin** for {BOT_NAME} Bot by {ctx.author.name}!
 
 **📊 Your New Permissions:**
 ✅ User Moderation (strikes, blacklist)
@@ -2399,7 +2399,7 @@ async def remove_admin(ctx, user: discord.User):
     # Send DM to removed admin
     dm_message = f"""📋 **Bot Admin Status Update**
 
-Your **Bot Admin** privileges for flexedAI Bot have been removed by {ctx.author.name}.
+Your **Bot Admin** privileges for {BOT_NAME} Bot have been removed by {ctx.author.name}.
 
 **What Changed:**
 • You no longer have access to administrative commands
@@ -2487,11 +2487,11 @@ async def leave_server(ctx, server_id: str, *, reason: str = None):
         if guild_owner:
             try:
                 if reason:
-                    leave_message = f"""📢 **flexedAI Bot Leaving Server**
+                    leave_message = f"""📢 **{BOT_NAME} Bot Leaving Server**
 
 Hello {guild_owner.name},
 
-flexedAI Bot is leaving **{guild_name}**.
+{BOT_NAME} Bot is leaving **{guild_name}**.
 
 **Reason:** {reason}
 
@@ -2499,16 +2499,16 @@ If you have questions,
 Contact: <@{OWNER_ID}> or
 Support Server: {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
-Thank you for using flexedAI Bot!
+Thank you for using {BOT_NAME} Bot!
 """
                 else:
-                    leave_message = f"""📢 **flexedAI Bot Leaving Server**
+                    leave_message = f"""📢 **{BOT_NAME} Bot Leaving Server**
 
 Hello {guild_owner.name},
 
-flexedAI Bot is leaving **{guild_name}**.
+{BOT_NAME} Bot is leaving **{guild_name}**.
 
-Thank you for using flexedAI Bot!
+Thank you for using {BOT_NAME} Bot!
 """
                 await guild_owner.send(leave_message)
                 owner_notified = True
@@ -2568,7 +2568,7 @@ async def stop_mode(ctx):
     
     embed = discord.Embed(
         title="🔴 Stop Mode Activated",
-        description="The bot will now **only respond** to:\n• Direct mentions/pings\n• Messages containing 'flexedAI'\n• Images/attachments",
+        description=f"The bot will now **only respond** to:\n• Direct mentions/pings\n• Messages containing '{BOT_NAME}'\n• Images/attachments",
         color=discord.Color.red()
     )
     embed.add_field(name="Channel", value=ctx.channel.mention, inline=True)
@@ -2661,7 +2661,7 @@ async def help_cmd(ctx):
     view = discord.ui.View()
     view.add_item(discord.ui.Button(label="Support Server", url="{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", style=discord.ButtonStyle.link))
     
-    embed.set_footer(text=f"flexedAI • Created by {OWNER_NAME}")
+    embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME}")
     await ctx.send(embed=embed, view=view)
 
 @bot.hybrid_command(name="whoami", description="Show your Discord profile.")
@@ -2717,13 +2717,13 @@ async def ping(ctx):
     
     await ctx.send(f"🏓 **Pong!** {emoji}\n**Latency:** {latency}ms ({status})")
 
-@bot.hybrid_command(name="invite", description="Add flexedAI to your own server!")
+@bot.hybrid_command(name="invite", description=f"Add {BOT_NAME} to your own server!")
 async def invite(ctx):
     invite_url = f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands"
     
     embed = discord.Embed(
         title="🔗 Invite flexedAI",
-        description="Want to bring flexedAI to your community? Click the button below to authorize the bot!",
+        description=f"Want to bring {BOT_NAME} to your community? Click the button below to authorize the bot!",
         color=discord.Color.blue()
     )
     embed.set_thumbnail(url=bot.user.display_avatar.url)
@@ -2911,7 +2911,7 @@ async def on_message(message):
         should_respond = True
     elif bot.user.mentioned_in(message) or (message.reference and message.reference.resolved and message.reference.resolved.author == bot.user):
         should_respond = True
-    elif "flexedai" in content_low:
+    elif BOT_NAME in content_low:
         should_respond = True
     elif not message.guild:
         should_respond = True
@@ -2970,12 +2970,12 @@ async def on_message(message):
         channel_mode = mode
         
         # Build comprehensive system prompt
-        system = f"""You are flexedAI, an advanced AI-powered Discord bot with comprehensive moderation and conversation capabilities.
+        system = f"""You are {BOT_NAME}, an advanced AI-powered Discord bot with comprehensive moderation and conversation capabilities.
 
 ═══════════════════════════════════════════════════════════════
 🤖 BOT IDENTITY & CORE INFO
 ═══════════════════════════════════════════════════════════════
-Name: flexedAI
+Name: {BOT_NAME}
 Username: {bot.user.name}
 Display Name: {bot.user.display_name}
 Bot ID: {bot.user.id}
@@ -3120,7 +3120,7 @@ Self-Awareness:
 • Don't dump information unless asked
 • Be conversational, not robotic
 
-Remember: You are flexedAI, a powerful and intelligent Discord bot
+Remember: You are {BOT_NAME}, a powerful and intelligent Discord bot
 created to enhance server communities with AI-powered conversations
 and comprehensive moderation tools."""
 
