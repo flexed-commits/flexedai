@@ -379,7 +379,7 @@ Your server **{guild.name}** is blacklisted from using flexedAI Bot.
 The bot has automatically left your server. You cannot re-add this bot while blacklisted.
 
 **Appeal:** Contact <@{OWNER_ID}>
-**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
+**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
 *Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
@@ -459,7 +459,7 @@ To maintain optimal performance with our AI API, the bot has a 0.6-second cooldo
 
 💡 **Need Help?**
 Contact the bot owner: <@{OWNER_ID}>
-Join the Support Server: https://discord.com/invite/XMvPq7W5N4
+Join the Support Server: {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
 Enjoy using flexedAI! 🎉
 """
@@ -505,7 +505,7 @@ Enjoy using flexedAI! 🎉
             
             welcome_embed.add_field(
                 name="💡 Need Help?",
-                value=f"Contact: <@{OWNER_ID}>\n[Join Support Server](https://discord.com/invite/XMvPq7W5N4)",
+                value=f"Contact: <@{OWNER_ID}>\n[Join Support Server]({os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')})",
                 inline=False
             )
             
@@ -992,7 +992,7 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
     )
     
     # Log to dedicated blacklist channel
@@ -1135,7 +1135,7 @@ Your server **{guild_name}** has been blacklisted from using flexedAI Bot.
 
 **Appeal Process:**
 If you believe this is a mistake, contact: <@{OWNER_ID}>
-**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
+**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
 *Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
@@ -1156,7 +1156,7 @@ If you believe this is a mistake, contact: <@{OWNER_ID}>
         # Log to blacklist channel
         log_embed = discord.Embed(
             title="🚫 Guild Blacklisted",
-            description=f"A server has been permanently blacklisted.",
+            description=f"A server has been blacklisted.",
             color=discord.Color.dark_red(),
             timestamp=datetime.datetime.utcnow()
         )
@@ -1177,7 +1177,7 @@ If you believe this is a mistake, contact: <@{OWNER_ID}>
         # Confirm to command user
         embed = discord.Embed(
             title="🚫 Guild Blacklisted",
-            description=f"Server has been permanently blacklisted.",
+            description=f"Server has been blacklisted.",
             color=discord.Color.red()
         )
         embed.add_field(name="Server Name", value=guild_name, inline=True)
@@ -1262,7 +1262,7 @@ async def add_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No re
     # Send DM to user
     dm_message = f"⚡ **Strike Issued**\n\n**You have received {amount} strike(s)**\n\n**Reason:** {reason}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
     if is_banned:
-        dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**What this means:**\n• You can no longer use the bot\n• All access has been revoked\n• This is a permanent suspension unless appealed\n\n**Appeal Process:**\nContact the bot owner: <@!1081876265683927080>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4"
+        dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**What this means:**\n• You can no longer use the bot\n• All access has been revoked\n• This is a permanent suspension unless appealed\n\n**Appeal Process:**\nContact the bot owner: <@!1081876265683927080>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}"
     else:
         strikes_remaining = 3 - new_strikes
         dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Avoid using banned words\n• Be respectful to others\n• Follow server and bot rules"
@@ -1796,7 +1796,7 @@ class ReportActionView(discord.ui.View):
         # Send DM to reported user
         dm_message = f"⚡ **Strike Issued**\n\n**You have received 1 strike**\n\n**Reason:** Action taken from user report #{self.report_id}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
         if is_banned:
-            dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4"
+            dm_message += "🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from flexedAI Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}"
         else:
             strikes_remaining = 3 - new_strikes
             dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Be respectful to others\n• Follow server and bot rules"
@@ -1846,7 +1846,7 @@ class ReportActionView(discord.ui.View):
         db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
         
         # Send DM
-        dm_message = f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        dm_message = f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
         dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
         
         # Log to blacklist channel
@@ -2257,7 +2257,7 @@ You have been promoted to **Bot Admin** for flexedAI Bot by {ctx.author.name}!
 
 **📞 Need Help?**
 • Contact Owner: <@{OWNER_ID}>
-• Support Server: https://discord.com/invite/XMvPq7W5N4
+• Support Server: {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
 **Welcome to the admin team! 🚀**
 
@@ -2497,7 +2497,7 @@ flexedAI Bot is leaving **{guild_name}**.
 
 If you have questions, 
 Contact: <@{OWNER_ID}> or
-Support Server: https://discord.com/invite/XMvPq7W5N4
+Support Server: {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
 Thank you for using flexedAI Bot!
 """
@@ -2659,9 +2659,9 @@ async def help_cmd(ctx):
     embed.add_field(name="📊 Utility", value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`, `/report`, `/invite`", inline=False)
     
     view = discord.ui.View()
-    view.add_item(discord.ui.Button(label="Support Server", url="https://discord.com/invite/XMvPq7W5N4", style=discord.ButtonStyle.link))
+    view.add_item(discord.ui.Button(label="Support Server", url="{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", style=discord.ButtonStyle.link))
     
-    embed.set_footer(text="flexedAI • Created by Ψ.1nOnly.Ψ")
+    embed.set_footer(text=f"flexedAI • Created by {OWNER_NAME}")
     await ctx.send(embed=embed, view=view)
 
 @bot.hybrid_command(name="whoami", description="Show your Discord profile.")
@@ -2719,7 +2719,7 @@ async def ping(ctx):
 
 @bot.hybrid_command(name="invite", description="Add flexedAI to your own server!")
 async def invite(ctx):
-    invite_url = "https://discord.com/oauth2/authorize?client_id=1379152032358858762&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands"
+    invite_url = f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands"
     
     embed = discord.Embed(
         title="🔗 Invite flexedAI",
