@@ -10,22 +10,22 @@ import random
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct" 
-OWNER_ID = 1081876265683927080
+MODEL_NAME = os.getenv('MODEL_NAME', "meta-llama/llama-4-maverick-17b-128e-instruct")
+OWNER_ID = int(os.getenv('OWNER_ID'))
+OWNER_NAME = os.getenv('OWNER_NAME')
 DB_FILE = "bot_data.db"
 JSON_FILE = "bot_data.json"
 INTERACTION_JSON = "interaction_logs.json"
 
 # Logging Channels
 LOG_CHANNELS = {
-    'server_join_leave': 1460868218670420009,
-    'strikes': 1460868262932906080,
-    'blacklist': 1460868307602378814,
-    'banned_words': 1460868341345419275,
-    'admin_logs': 1460868388695052442,
-    'reports': 1460868441878691922 # Using admin logs channel for reports
+    'server_join_leave': int(os.getenv('LOG_CHANNEL_SERVER_JOIN_LEAVE')),
+    'strikes': int(os.getenv('LOG_CHANNEL_STRIKES')),
+    'blacklist': int(os.getenv('LOG_CHANNEL_BLACKLIST')),
+    'banned_words': int(os.getenv('LOG_CHANNEL_BANNED_WORDS')),
+    'admin_logs': int(os.getenv('LOG_CHANNEL_ADMIN_LOGS')),
+    'reports': int(os.getenv('LOG_CHANNEL_REPORTS'))
 }
-
 # Discord message limits
 MAX_MESSAGE_LENGTH = 2000
 MAX_INPUT_TOKENS = 8000
