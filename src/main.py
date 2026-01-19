@@ -2823,39 +2823,26 @@ async def command_ids(ctx):
 
 def generate_encoding_map():
     """Generate a custom character mapping for encoding"""
-    random.seed(42069)  # Fixed seed for consistency
-    
     # All characters to encode
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits + ' .,!?-_\n\t'
     
-    # Available symbols for encoding
-    symbols = list('~`@#$%^&*()_+-=[]{}|;:<>,.?/\\')
-    
-    # Shuffle symbols for more randomness
-    shuffled = symbols.copy()
-    random.shuffle(shuffled)
-    
+    # Create deterministic but unique 2-char codes
+    # Using a simple formula that guarantees uniqueness
     encoding_map = {}
     decoding_map = {}
     
-    # Create unique 2-char codes for each character
-    code_index = 0
+    # Base symbols to use
+    base_symbols = '~`@#$%^&*()_+-=[]{}|;:<>?/\\'
+    
     for i, char in enumerate(chars):
-        # Use two different symbols
-        first = shuffled[code_index % len(shuffled)]
-        second = shuffled[(code_index + 1) % len(shuffled)]
-        code = first + second
+        # Create unique code using two symbols based on index
+        idx1 = i % len(base_symbols)
+        idx2 = (i // len(base_symbols)) % len(base_symbols)
         
-        # Ensure code is unique
-        while code in decoding_map:
-            code_index += 1
-            first = shuffled[code_index % len(shuffled)]
-            second = shuffled[(code_index + 1) % len(shuffled)]
-            code = first + second
+        code = base_symbols[idx1] + base_symbols[idx2]
         
         encoding_map[char] = code
         decoding_map[code] = char
-        code_index += 2
     
     return encoding_map, decoding_map
 
@@ -2869,7 +2856,7 @@ def encode_text(text):
         if char in ENCODE_MAP:
             result.append(ENCODE_MAP[char])
         else:
-            # For emojis and special characters, use UTF-8 hex with marker
+            # For emojis and special characters
             hex_val = char.encode('utf-8').hex()
             result.append(f"<{hex_val}>")
     return ''.join(result)
@@ -2880,8 +2867,8 @@ def decode_text(text):
     i = 0
     
     while i < len(text):
-        # Check for UTF-8 encoded emoji/special char
-        if i < len(text) and text[i] == '<':
+        # Check for UTF-8 encoded special char
+        if text[i:i+1] == '<':
             end = text.find('>', i)
             if end != -1:
                 hex_code = text[i+1:end]
@@ -2891,9 +2878,10 @@ def decode_text(text):
                     i = end + 1
                     continue
                 except:
-                    pass
+                    i += 1
+                    continue
         
-        # Try to decode 2-character symbol code
+        # Try to decode 2-character code
         if i + 1 < len(text):
             code = text[i:i+2]
             if code in DECODE_MAP:
@@ -2901,7 +2889,7 @@ def decode_text(text):
                 i += 2
                 continue
         
-        # Skip unknown character
+        # Skip if unknown
         i += 1
     
     return ''.join(result)
@@ -2910,12 +2898,12 @@ def decode_text(text):
 async def encode_message(ctx, *, message: str):
     """Encode a message using the bot's custom encoding"""
     
-    # Check word filter on original message
+    # Check word filter
     if not is_bypass_user(ctx.author.id):
         banned = db_query("SELECT word FROM banned_words", fetch=True)
         content_low = message.lower()
-        if any(bw[0] in content_low for bw in banned):
-            await ctx.send("❌ **Cannot encode**\nYour message contains banned words. The word filter applies before encoding.", ephemeral=True)
+        if banned and any(bw[0] in content_low for bw in banned):
+            await ctx.send("❌ **Cannot encode** - Message contains banned words.", ephemeral=True)
             return
     
     try:
@@ -2923,93 +2911,67 @@ async def encode_message(ctx, *, message: str):
         
         embed = discord.Embed(
             title="🔐 Message Encoded",
-            description=f"Your message has been encoded using {BOT_NAME}'s custom cipher.",
             color=discord.Color.green()
         )
         
-        # Show original (truncated if too long)
-        original_display = message[:100] + "..." if len(message) > 100 else message
+        original_display = (message[:100] + "...") if len(message) > 100 else message
         embed.add_field(name="📝 Original", value=f"```{original_display}```", inline=False)
         
-        # Show encoded
-        encoded_display = encoded[:1000] + "..." if len(encoded) > 1000 else encoded
+        encoded_display = (encoded[:1000] + "...") if len(encoded) > 1000 else encoded
         embed.add_field(name="🔒 Encoded", value=f"```{encoded_display}```", inline=False)
         
-        # Stats
-        embed.add_field(
-            name="📊 Stats", 
-            value=f"Original: {len(message)} chars\nEncoded: {len(encoded)} chars", 
-            inline=False
-        )
-        
-        embed.set_footer(text=f"Use /decode to decrypt • Encoded by {ctx.author.name}")
+        embed.set_footer(text=f"Use /decode to decrypt")
         
         await ctx.send(embed=embed)
         
-        # Send copyable version
         if len(encoded) <= 1900:
-            await ctx.send(f"**📋 Copy this to share:**\n```{encoded}```")
+            await ctx.send(f"```{encoded}```")
             
     except Exception as e:
-        await ctx.send(f"❌ **Encoding failed**\n```{str(e)}```", ephemeral=True)
+        await ctx.send(f"❌ **Encoding failed:** `{str(e)}`", ephemeral=True)
 
 @bot.hybrid_command(name="decode", description="Decode a message using custom cipher")
 async def decode_message(ctx, *, encoded_message: str):
     """Decode a message using the bot's custom encoding"""
     
     try:
-        # Clean up the encoded message (remove code blocks if present)
-        encoded_clean = encoded_message.strip().replace('`', '').strip()
-        
+        encoded_clean = encoded_message.strip().replace('`', '')
         decoded = decode_text(encoded_clean)
         
         if not decoded:
-            await ctx.send("❌ **Decoding failed**\nThe message doesn't appear to be encoded with this bot's cipher.", ephemeral=True)
+            await ctx.send("❌ **Invalid encoded message**", ephemeral=True)
             return
         
-        # Check word filter on decoded message
+        # Check word filter on decoded
         if not is_bypass_user(ctx.author.id):
             banned = db_query("SELECT word FROM banned_words", fetch=True)
             decoded_low = decoded.lower()
-            if any(bw[0] in decoded_low for bw in banned):
-                await ctx.send("⚠️ **Decoded message contains banned words**\nThe decoded content violates the word filter and cannot be displayed.", ephemeral=True)
-                
-                # Log this attempt
-                log_msg = f"User {ctx.author.name} ({ctx.author.id}) attempted to decode message containing banned words in {ctx.guild.name if ctx.guild else 'DM'}"
-                db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
-                
-                # Add a strike
+            if banned and any(bw[0] in decoded_low for bw in banned):
+                # Add strike
                 res = db_query("SELECT strikes FROM users WHERE user_id = ?", (str(ctx.author.id),), fetch=True)
-                current_strikes = res[0][0] if res else 0
-                new_strikes = current_strikes + 1
+                current = res[0][0] if res else 0
+                new_strikes = current + 1
                 is_banned = 1 if new_strikes >= 3 else 0
                 
                 db_query("INSERT OR REPLACE INTO users (user_id, strikes, blacklisted) VALUES (?, ?, ?)", 
                         (str(ctx.author.id), new_strikes, is_banned))
                 
-                await ctx.send(f"⚡ **Strike issued**\nAttempting to decode messages with banned words is a violation.\n**Your strikes:** {new_strikes}/3", ephemeral=True)
+                await ctx.send(f"⚠️ **Decoded message contains banned words**\n⚡ Strike issued: {new_strikes}/3", ephemeral=True)
                 return
         
         embed = discord.Embed(
             title="🔓 Message Decoded",
-            description=f"The encoded message has been successfully decrypted.",
             color=discord.Color.blue()
         )
         
-        # Show encoded (truncated)
-        encoded_display = encoded_clean[:100] + "..." if len(encoded_clean) > 100 else encoded_clean
-        embed.add_field(name="🔒 Encoded", value=f"```{encoded_display}```", inline=False)
-        
-        # Show decoded
-        decoded_display = decoded[:1000] + "..." if len(decoded) > 1000 else decoded
-        embed.add_field(name="📝 Decoded", value=f"```{decoded_display}```", inline=False)
-        
-        embed.set_footer(text=f"Decoded by {ctx.author.name}")
+        decoded_display = (decoded[:1000] + "...") if len(decoded) > 1000 else decoded
+        embed.add_field(name="📝 Decoded Message", value=f"```{decoded_display}```", inline=False)
         
         await ctx.send(embed=embed)
         
     except Exception as e:
-        await ctx.send(f"❌ **Decoding failed**\n```{str(e)}```\nMake sure the message was encoded with this bot.", ephemeral=True)
+        await ctx.send(f"❌ **Decoding failed:** `{str(e)}`", ephemeral=True)
+        
 async def add_smart_reaction(message, user_message: str, bot_response: str):
     """Let AI decide if and which emoji reactions to add"""
     if random.random() > bot.reaction_chance:
