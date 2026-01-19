@@ -1124,7 +1124,7 @@ async def blacklist_guild_add(ctx, guild_id: str, *, reason: str = "No reason pr
 
 Hello {guild.owner.name},
 
-Your server **{guild_name}** has been blacklisted from using flexedAI Bot.
+Your server **{guild_name}** has been blacklisted from using {BOT_NAME} Bot.
 
 **Reason:** {reason}
 
@@ -1846,7 +1846,7 @@ class ReportActionView(discord.ui.View):
         db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
         
         # Send DM
-        dm_message = f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        dm_message = f"🚫 **You have been blacklisted from {BOT_NAME} Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
         dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
         
         # Log to blacklist channel
@@ -2638,12 +2638,12 @@ async def set_prefix(ctx, new_prefix: str):
     
     await ctx.send(embed=embed)
 
-@bot.hybrid_command(name="help", description="Display flexedAI command center.")
+@bot.hybrid_command(name="help", description=f"Display {BOT_NAME} command center.")
 async def help_cmd(ctx):
     is_admin = is_bot_admin(ctx.author.id)
     
     embed = discord.Embed(
-        title="📡 flexedAI Command Center",
+        title=f"📡 {BOT_NAME} Command Center",
         description="Here are all the commands you have access to:",
         color=discord.Color.blue()
     )
