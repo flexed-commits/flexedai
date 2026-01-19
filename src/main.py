@@ -2659,7 +2659,7 @@ async def help_cmd(ctx):
     embed.add_field(name="📊 Utility", value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`, `/report`, `/invite`", inline=False)
     
     view = discord.ui.View()
-    view.add_item(discord.ui.Button(label="Support Server", url="{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", style=discord.ButtonStyle.link))
+    view.add_item(discord.ui.Button(label="Support Server", url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", style=discord.ButtonStyle.link))
     
     embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME}")
     await ctx.send(embed=embed, view=view)
