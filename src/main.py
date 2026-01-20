@@ -20,6 +20,7 @@ DB_FILE = "bot_data.db"
 JSON_FILE = "bot_data.json"
 INTERACTION_JSON = "interaction_logs.json"
 BOT_NAME= os.getenv('BOT_NAME')
+ENCODING_FILE="encoding_map.json"
 # Logging Channels
 LOG_CHANNELS = {
     'server_join_leave': int(os.getenv('LOG_CHANNEL_SERVER_JOIN_LEAVE')),
@@ -2821,32 +2822,57 @@ async def command_ids(ctx):
     except Exception as e:
         await ctx.send(f"❌ **Error fetching command IDs:**\n```\n{str(e)}\n```")
 
+
 def generate_encoding_map():
-    """Generate a custom character mapping for encoding"""
-    # Standard characters to be encoded
-    # We exclude the symbols used in base_symbols to prevent collision
+    """Generate a random character mapping for encoding"""
+    # Characters to be encoded
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits + ' .,!?\n\t'
+    
+    # Available symbols for creating codes (alphanumeric + =&/)
+    base_symbols = string.ascii_letters + string.digits + '=&/'
     
     encoding_map = {}
     decoding_map = {}
     
-    # Only use alphabets, numbers, and specifically =&/
-    base_symbols = string.ascii_letters + string.digits + '=&/'
+    # Generate all possible 2-character combinations
+    used_codes = set()
     
-    for i, char in enumerate(chars):
-        # Create unique 2-char code
-        idx1 = i % len(base_symbols)
-        idx2 = (i // len(base_symbols)) % len(base_symbols)
-        
-        code = base_symbols[idx1] + base_symbols[idx2]
-        
-        encoding_map[char] = code
-        decoding_map[code] = char
+    for char in chars:
+        # Keep generating random codes until we get a unique one
+        while True:
+            code = random.choice(base_symbols) + random.choice(base_symbols)
+            if code not in used_codes and code != '&&':  # Reserve && for special chars
+                used_codes.add(code)
+                encoding_map[char] = code
+                decoding_map[code] = char
+                break
     
     return encoding_map, decoding_map
 
+def load_or_generate_maps():
+    """Load existing encoding map or generate a new one"""
+    if os.path.exists(ENCODING_FILE):
+        try:
+            with open(ENCODING_FILE, 'r') as f:
+                data = json.load(f)
+                return data['encode'], data['decode']
+        except:
+            pass
+    
+    # Generate new maps
+    encode_map, decode_map = generate_encoding_map()
+    
+    # Save to file
+    try:
+        with open(ENCODING_FILE, 'w') as f:
+            json.dump({'encode': encode_map, 'decode': decode_map}, f)
+    except:
+        pass
+    
+    return encode_map, decode_map
+
 # Generate maps at module level
-ENCODE_MAP, DECODE_MAP = generate_encoding_map()
+ENCODE_MAP, DECODE_MAP = load_or_generate_maps()
 
 def encode_text(text):
     """Encode text using custom encoding"""
@@ -2855,8 +2881,7 @@ def encode_text(text):
         if char in ENCODE_MAP:
             result.append(ENCODE_MAP[char])
         else:
-            # For emojis/special chars, use a '&&' prefix to signal hex
-            # This ensures we only use allowed symbols
+            # For emojis/special chars, use '&&' prefix with hex
             hex_val = char.encode('utf-8').hex()
             result.append(f"&&{hex_val}&")
     return ''.join(result)
@@ -2867,8 +2892,8 @@ def decode_text(text):
     i = 0
     
     while i < len(text):
-        # Check for our custom hex format (&&...&)
-        if text[i:i+2] == '&&':
+        # Check for hex-encoded special characters (&&...&)
+        if i + 1 < len(text) and text[i:i+2] == '&&':
             end = text.find('&', i + 2)
             if end != -1:
                 hex_code = text[i+2:end]
@@ -2888,7 +2913,9 @@ def decode_text(text):
                 i += 2
                 continue
         
+        # Skip unrecognized character
         i += 1
+    
     return ''.join(result)
 
 @bot.hybrid_command(name="encode", description="Encode a message using custom cipher")
@@ -2915,7 +2942,7 @@ async def encode_message(ctx, *, message: str):
         
         await ctx.send(embed=embed)
         
-        # Sending in single backticks as requested
+        # Send full encoded message in single backticks
         if len(encoded) <= 1990:
             await ctx.send(f"`{encoded}`")
             
@@ -2926,7 +2953,7 @@ async def encode_message(ctx, *, message: str):
 async def decode_message(ctx, *, encoded_message: str):
     """Decode a message using the bot's custom encoding"""
     try:
-        # Strip single backticks if the user included them in the input
+        # Strip backticks if present
         encoded_clean = encoded_message.strip().strip('`')
         decoded = decode_text(encoded_clean)
         
