@@ -2823,15 +2823,14 @@ async def command_ids(ctx):
 
 def generate_encoding_map():
     """Generate a custom character mapping for encoding"""
-    # All characters to encode
-    chars = string.ascii_lowercase + string.ascii_uppercase + string.digits + ' .,!?-_\n\t'
+    # 1. Standard characters to be encoded
+    # I've removed - and _ from here because they are in base_symbols
+    chars = string.ascii_lowercase + string.ascii_uppercase + string.digits + ' .,!?\n\t'
     
-    # Create deterministic but unique 2-char codes
-    # Using a simple formula that guarantees uniqueness
     encoding_map = {}
     decoding_map = {}
     
-    # Base symbols to use
+    # 2. Symbols used to build the 2-char codes
     base_symbols = '~`@#$%^&*()_+-=[]{}|;:<>?/\\'
     
     for i, char in enumerate(chars):
@@ -2856,7 +2855,7 @@ def encode_text(text):
         if char in ENCODE_MAP:
             result.append(ENCODE_MAP[char])
         else:
-            # For emojis and special characters
+            # For emojis and special characters (like - or _)
             hex_val = char.encode('utf-8').hex()
             result.append(f"<{hex_val}>")
     return ''.join(result)
@@ -2868,7 +2867,7 @@ def decode_text(text):
     
     while i < len(text):
         # Check for UTF-8 encoded special char
-        if text[i:i+1] == '<':
+        if text[i] == '<':
             end = text.find('>', i)
             if end != -1:
                 hex_code = text[i+1:end]
@@ -2877,9 +2876,9 @@ def decode_text(text):
                     result.append(char)
                     i = end + 1
                     continue
-                except:
-                    i += 1
-                    continue
+                except (ValueError, UnicodeDecodeError):
+                    # If hex is invalid, move past the '<' and continue
+                    pass
         
         # Try to decode 2-character code
         if i + 1 < len(text):
@@ -2889,7 +2888,7 @@ def decode_text(text):
                 i += 2
                 continue
         
-        # Skip if unknown
+        # Skip character if no match found
         i += 1
     
     return ''.join(result)
@@ -2902,7 +2901,7 @@ async def encode_message(ctx, *, message: str):
     if not is_bypass_user(ctx.author.id):
         banned = db_query("SELECT word FROM banned_words", fetch=True)
         content_low = message.lower()
-        if banned and any(bw[0] in content_low for bw in banned):
+        if banned and any(bw[0].lower() in content_low for bw in banned):
             await ctx.send("❌ **Cannot encode** - Message contains banned words.", ephemeral=True)
             return
     
@@ -2924,6 +2923,7 @@ async def encode_message(ctx, *, message: str):
         
         await ctx.send(embed=embed)
         
+        # Keep under Discord's 2000 char limit
         if len(encoded) <= 1900:
             await ctx.send(f"```{encoded}```")
             
@@ -2935,7 +2935,8 @@ async def decode_message(ctx, *, encoded_message: str):
     """Decode a message using the bot's custom encoding"""
     
     try:
-        encoded_clean = encoded_message.strip().replace('`', '')
+        # Clean up input in case it was wrapped in backticks
+        encoded_clean = encoded_message.strip().strip('`')
         decoded = decode_text(encoded_clean)
         
         if not decoded:
@@ -2946,8 +2947,8 @@ async def decode_message(ctx, *, encoded_message: str):
         if not is_bypass_user(ctx.author.id):
             banned = db_query("SELECT word FROM banned_words", fetch=True)
             decoded_low = decoded.lower()
-            if banned and any(bw[0] in decoded_low for bw in banned):
-                # Add strike
+            if banned and any(bw[0].lower() in decoded_low for bw in banned):
+                # Fetch current strikes
                 res = db_query("SELECT strikes FROM users WHERE user_id = ?", (str(ctx.author.id),), fetch=True)
                 current = res[0][0] if res else 0
                 new_strikes = current + 1
@@ -2971,6 +2972,7 @@ async def decode_message(ctx, *, encoded_message: str):
         
     except Exception as e:
         await ctx.send(f"❌ **Decoding failed:** `{str(e)}`", ephemeral=True)
+
         
 async def add_smart_reaction(message, user_message: str, bot_response: str):
     """Let AI decide if and which emoji reactions to add"""
