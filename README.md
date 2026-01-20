@@ -62,7 +62,6 @@ All actions are logged to dedicated channels with rich embeds:
 
 ### 💾 Data Management
 - **SQLite Database** - Persistent storage for all bot data
-- **Daily Backups** - Automatic 24-hour backup system sent to owner
 - **JSON Migration** - Legacy JSON to SQLite migration support
 - **Export Tools** - Export logs, data, server lists, and complete configurations
 - **8 Database Tables** - Comprehensive data structure for all features
