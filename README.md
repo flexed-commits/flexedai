@@ -805,7 +805,7 @@ When inviting the bot, ensure these permissions are enabled:
 
 ⭐ Star this repository if you found it helpful!
 
-[![Discord](https://img.shields.io/discord/YOUR_SERVER_ID?color=7289da&label=Discord&logo=discord&logoColor=white&style=for-the-badge)](https://discord.com/invite/XMvPq7W5N4)
+[![Discord](https://img.shields.io/discord/1460574191072972913?color=7289da&label=Discord&logo=discord&logoColor=white&style=for-the-badge)](https://discord.com/invite/XMvPq7W5N4)
 [![GitHub stars](https://img.shields.io/github/stars/flexed-commits/flexedai?style=for-the-badge)](https://github.com/flexed-commits/flexedai/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/flexed-commits/flexedai?style=for-the-badge)](https://github.com/flexed-commits/flexedai/issues)
 
