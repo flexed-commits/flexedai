@@ -64,7 +64,7 @@ def init_db():
 
     c.execute('''CREATE TABLE IF NOT EXISTS settings (
         id TEXT PRIMARY KEY, 
-        prefix TEXT DEFAULT "!", 
+        prefix TEXT DEFAULT "/", 
         language TEXT DEFAULT "English", 
         mode TEXT DEFAULT "stop"
     )''')
