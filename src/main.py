@@ -7,6 +7,7 @@ import os, time, datetime, json, sqlite3, asyncio
 from groq import AsyncGroq 
 from collections import deque
 import random
+from patreon import PatreonPromoter
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -345,11 +346,19 @@ class AIBot(commands.Bot):
         self.groq_client = AsyncGroq(api_key=GROQ_API_KEY)
         self.memory = {}
         self.reaction_chance = 0.10  # 10% chance to add reactions; 10/100 = 10% i.e 0.10
-        self.last_response_time = 0  
+        self.last_response_time = 0
+        
     async def setup_hook(self):
         self.daily_backup.start()
         print(f"✅ {self.user} Online | All Commands Locked & Loaded")
         print(f"🔄 Daily backup task started")
+
+# Initialize Patreon promoter (OUTSIDE the class, at module level)
+patreon_promoter = PatreonPromoter(
+    patreon_url="https://patreon.com/flexedAI/membership",
+    min_messages=50,
+    max_messages=60
+)
 
 bot = AIBot()
 
@@ -376,7 +385,27 @@ async def on_guild_join(guild):
 
 Hello {guild.owner.name},
 
-Your server **{guild.name}** is blacklisted from using {BOT_NAME} Bot.
+Your server **{guild.name}** is blackclass AIBot(commands.Bot):
+    def __init__(self):
+        super().__init__(command_prefix=get_prefix, intents=discord.Intents.all(), help_command=None)
+        self.groq_client = AsyncGroq(api_key=GROQ_API_KEY)
+        self.memory = {}
+        self.reaction_chance = 0.10  # 10% chance to add reactions; 10/100 = 10% i.e 0.10
+        self.last_response_time = 0
+        
+    async def setup_hook(self):
+        self.daily_backup.start()
+        print(f"✅ {self.user} Online | All Commands Locked & Loaded")
+        print(f"🔄 Daily backup task started")
+
+# Initialize Patreon promoter (OUTSIDE the class, at module level)
+patreon_promoter = PatreonPromoter(
+    patreon_url="https://patreon.com/flexedAI/membership",
+    min_messages=50,
+    max_messages=60
+)
+
+bot = AIBot()listed from using {BOT_NAME} Bot.
 
 **Reason:** {reason}
 
