@@ -2899,10 +2899,10 @@ async def help_cmd(ctx):
         embed.add_field(name="👑 Owner Only", value="`add-admin`, `remove-admin`, `list-admins`, `leave`", inline=False)
 
     if is_admin:
-        embed.add_field(name="🛡️ Admin Utility", value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`", inline=False)
-        embed.add_field(name="🔨 Moderation", value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/bannedword`, `/reports`", inline=False)
-        embed.add_field(name="⚙️ Settings", value="`/start`, `/stop`, `/lang`, `/prefix`", inline=False)
-
+        embed.add_field(name="🛡️ Admin Utility", value="`sync`, `messages`, `clearlogs`, `server-list`, `backup`, `data`, `announce`", inline=False)
+        embed.add_field(name="🔨 Moderation", value="`/blacklist`, `/addstrike`, `/removestrike`, `/strikelist`, `/bannedword`, `/reports`, `/bypass`", inline=False)
+        embed.add_field(name="⚙️ Settings", value="`/start`, `/stop`, `/lang`, `/prefix`, `/setupupdates`, `/changeupdates`", inline=False)
+ 
     embed.add_field(name="📊 Utility", value="`/help`, `/whoami`, `/stats`, `/ping`, `/forget`, `/report`, `/invite`", inline=False)
     
     view = discord.ui.View()
