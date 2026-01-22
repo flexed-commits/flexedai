@@ -489,51 +489,57 @@ Enjoy using {BOT_NAME}! 🎉
     
     # Try to find a general/system channel to send welcome message
     try:
-        # Try to find the system channel or first text channel
-        target_channel = guild.system_channel
+    # Try to find the system channel or first text channel
+    target_channel = guild.system_channel
+    
+    if not target_channel:
+        # Find first text channel bot can send messages to
+        for channel in guild.text_channels:
+            if channel.permissions_for(guild.me).send_messages:
+                target_channel = channel
+                break
+    
+    if target_channel:
+        welcome_embed = discord.Embed(
+            title=f"👋 Thanks for adding {BOT_NAME}!",
+            description="**⚠️ IMPORTANT: Setup Required**\n\nBefore you can use this bot, you need to set up an updates channel!",
+            color=discord.Color.orange()
+        )
         
-        if not target_channel:
-            # Find first text channel bot can send messages to
-            for channel in guild.text_channels:
-                if channel.permissions_for(guild.me).send_messages:
-                    target_channel = channel
-                    break
+        welcome_embed.add_field(
+            name="🔧 Required Setup",
+            value=f"Use `/setupupdates` to set a channel for important bot announcements and updates.\n\n**Without this setup, the bot will not function!**",
+            inline=False
+        )
         
-        if target_channel:
-            welcome_embed = discord.Embed(
-                title="👋 Thanks for adding {BOT_NAME}!",
-                description="I'm ready to assist your server with AI-powered conversations and moderation!",
-                color=discord.Color.blue()
-            )
-            
-            welcome_embed.add_field(
-                name="🚀 Getting Started",
-                value="• Use `/help` to see all commands\n• Use `/start` to enable auto-responses in this channel\n• Use `/lang` to set your preferred language",
-                inline=False
-            )
-            
-            welcome_embed.add_field(
-                name="⏱️ Response Cooldown (Important!)",
-                value="**The bot has a 0.6-second cooldown between responses.**\n\n"
-                      "**How it works:**\n"
-                      "• Bot responds immediately to any message\n"
-                      "• If another user messages within 0.6s of last response, bot stays silent\n"
-                      "• After 0.6s, bot will respond to new messages normally\n\n"
-                      "**Why?** We use a cost-effective API with rate limits. This cooldown ensures stable, reliable service for everyone! 🎯",
-                inline=False
-            )
-            
-            welcome_embed.add_field(
-                name="💡 Need Help?",
-                value=f"Contact: <@{OWNER_ID}>\n[Join Support Server]({os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')})",
-                inline=False
-            )
-            
-            welcome_embed.set_footer(text="Use /help to see all available commands")
-            
-            await target_channel.send(embed=welcome_embed)
-    except Exception as e:
-        print(f"⚠️ Could not send welcome message to server {guild.name}: {e}")
+        welcome_embed.add_field(
+            name="🚀 Getting Started",
+            value="• Use `/setupupdates #channel` to set updates channel\n• Use `/help` to see all commands\n• Use `/start` to enable auto-responses in channels\n• Use `/lang` to set your preferred language",
+            inline=False
+        )
+        
+        welcome_embed.add_field(
+            name="⏱️ Response Cooldown (Important!)",
+            value="**The bot has a 0.6-second cooldown between responses.**\n\n"
+                  "**How it works:**\n"
+                  "• Bot responds immediately to any message\n"
+                  "• If another user messages within 0.6s of last response, bot stays silent\n"
+                  "• After 0.6s, bot will respond to new messages normally\n\n"
+                  "**Why?** We use a cost-effective API with rate limits. This cooldown ensures stable, reliable service for everyone! 🎯",
+            inline=False
+        )
+        
+        welcome_embed.add_field(
+            name="💡 Need Help?",
+            value=f"Contact: <@{OWNER_ID}>\n[Join Support Server]({os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')})",
+            inline=False
+        )
+        
+        welcome_embed.set_footer(text="⚠️ Setup updates channel first using /setupupdates")
+        
+        await target_channel.send(embed=welcome_embed)
+except Exception as e:
+    print(f"⚠️ Could not send welcome message to server {guild.name}: {e}")
 
 @bot.event
 async def on_guild_remove(guild):
