@@ -3332,14 +3332,15 @@ and comprehensive moderation tools."""
             print(f"✅ Response sent successfully to {message.author.name}")
 
             # Patreon promotion check
-should_promote = patreon_promoter.track_message(str(message.channel.id))
-if should_promote:
-    try:
-        embed, view = patreon_promoter.create_promotion_message()
-        await message.channel.send(embed=embed, view=view)
-        print(f"💎 Sent Patreon promotion in {message.channel.name if message.guild else 'DM'}")
-    except Exception as e:
-        print(f"⚠️ Failed to send Patreon promotion: {e}")
+            should_promote = patreon_promoter.track_message(str(message.channel.id))
+            if should_promote:
+                try:
+                    embed, view = patreon_promoter.create_promotion_message()
+                    await message.channel.send(embed=embed, view=view)
+                    print(f"💎 Sent Patreon promotion in {message.channel.name if message.guild else 'DM'}")
+                except Exception as e:
+                    print(f"⚠️ Failed to send Patreon promotion: {e}")
+            
         
         except discord.errors.HTTPException as e:
             print(f"❌ ERROR in AI response generation:")
