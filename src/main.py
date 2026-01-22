@@ -120,7 +120,14 @@ def init_db():
     reason TEXT,
     blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
-
+# New table for updates channel configuration
+c.execute('''CREATE TABLE IF NOT EXISTS updates_channels (
+    guild_id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    setup_by TEXT,
+    setup_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)''')
+ 
     conn.commit()
     conn.close()
 
