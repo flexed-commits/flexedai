@@ -90,7 +90,7 @@ def init_db():
         added_by TEXT,
         added_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
-    # New table for word filter bypass
+
     c.execute('''CREATE TABLE IF NOT EXISTS word_filter_bypass (
         user_id TEXT PRIMARY KEY,
         added_by TEXT,
@@ -98,7 +98,6 @@ def init_db():
         added_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
 
-    # New table for reports
     c.execute('''CREATE TABLE IF NOT EXISTS reports (
         report_id INTEGER PRIMARY KEY AUTOINCREMENT,
         reporter_id TEXT,
@@ -112,24 +111,26 @@ def init_db():
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         status TEXT DEFAULT 'pending'
     )''')
-    # New Table for blacklisted guilds
+
     c.execute('''CREATE TABLE IF NOT EXISTS blacklisted_guilds (
-    guild_id TEXT PRIMARY KEY,
-    guild_name TEXT,
-    blacklisted_by TEXT,
-    reason TEXT,
-    blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        guild_id TEXT PRIMARY KEY,
+        guild_name TEXT,
+        blacklisted_by TEXT,
+        reason TEXT,
+        blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
-# New table for updates channel configuration
-c.execute('''CREATE TABLE IF NOT EXISTS updates_channels (
-    guild_id TEXT PRIMARY KEY,
-    channel_id TEXT NOT NULL,
-    setup_by TEXT,
-    setup_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)''')
+
+    # This was the culprit line causing the IndentationError
+    c.execute('''CREATE TABLE IF NOT EXISTS updates_channels (
+        guild_id TEXT PRIMARY KEY,
+        channel_id TEXT NOT NULL,
+        setup_by TEXT,
+        setup_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
  
     conn.commit()
     conn.close()
+
 
 def migrate_json_to_db():
     if not os.path.exists(JSON_FILE):
