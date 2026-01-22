@@ -3313,12 +3313,12 @@ async def on_message(message):
     mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
     mode = mode_check[0][0] if mode_check else "stop"
 
-# Check if server has configured updates channel (required)
-if message.guild and not has_updates_channel(message.guild.id):
-    # Only respond to setup command
-    if not message.content.lower().startswith(tuple(['/setupupdates', '!setupupdates'])):
-        # Silently ignore - server needs to setup updates channel first
-        return
+    # Check if server has configured updates channel (required)
+    if message.guild and not has_updates_channel(message.guild.id):
+        # Only respond to setup command
+        if not message.content.lower().startswith(tuple(['/setupupdates', '!setupupdates'])):
+            # Silently ignore - server needs to setup updates channel first
+            return
 
     should_respond = False
     bot_trigger_name = BOT_NAME.lower()
