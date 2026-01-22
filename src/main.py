@@ -866,6 +866,19 @@ async def bot_data(ctx):
         } for g in guild_blacklist
     ]
     data['statistics']['total_blacklisted_guilds'] = len(data['blacklisted_guilds'])
+    # Updates channels configuration
+c.execute("SELECT guild_id, channel_id, setup_by, setup_at FROM updates_channels")
+updates_channels_data = c.fetchall()
+data['updates_channels'] = [
+    {
+        "guild_id": u[0],
+        "guild_name": bot.get_guild(int(u[0])).name if bot.get_guild(int(u[0])) else "Unknown",
+        "channel_id": u[1],
+        "setup_by": u[2],
+        "setup_at": u[3]
+    } for u in updates_channels_data
+]
+data['statistics']['total_configured_updates_channels'] = len(data['updates_channels'])
     # Updates channels
     c.execute("SELECT * FROM updates_channels")
     updates_channels = c.fetchall()
@@ -966,6 +979,7 @@ async def bot_data(ctx):
     embed.add_field(name="🏰 Blacklisted Guilds", value=data['statistics']['total_blacklisted_guilds'], inline=True)
     embed.add_field(name="🔓 Filter Bypass Users", value=len(data['word_filter_bypass']), inline=True)
     embed.add_field(name="✨ Bot Admins", value=len(data['bot_admins']), inline=True)
+    embed.add_field(name="📢 Updates Channels", value=len(data['updates_channels']), inline=True)
 
     # Channel statistics
     embed.add_field(name="🟢 Channels (Start Mode)", value=data['statistics']['channels_in_start_mode'], inline=True)
@@ -2678,6 +2692,199 @@ async def set_prefix(ctx, new_prefix: str):
     
     await ctx.send(embed=embed)
 
+@bot.hybrid_command(name="setupupdates", description="Setup channel for bot announcements (Admin only).")
+async def setup_updates(ctx, channel: discord.TextChannel):
+    """Setup updates channel for important bot announcements"""
+    if ctx.author.id != OWNER_ID:
+        if not ctx.guild or not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions")
+            return
+    
+    if not ctx.guild:
+        await ctx.send("❌ **This command can only be used in servers.**")
+        return
+    
+    # Check if bot has permissions in the channel
+    bot_perms = channel.permissions_for(ctx.guild.me)
+    if not bot_perms.send_messages or not bot_perms.embed_links:
+        await ctx.send(f"❌ **Missing Permissions**\n\nI need **Send Messages** and **Embed Links** permissions in {channel.mention}")
+        return
+    
+    # Check if already configured
+    existing = db_query("SELECT channel_id FROM updates_channels WHERE guild_id = ?", (str(ctx.guild.id),), fetch=True)
+    
+    if existing:
+        old_channel_id = existing[0][0]
+        # Update existing
+        db_query("UPDATE updates_channels SET channel_id = ?, setup_by = ?, setup_at = CURRENT_TIMESTAMP WHERE guild_id = ?", 
+                (str(channel.id), str(ctx.author.id), str(ctx.guild.id)))
+        action = "updated"
+    else:
+        # Insert new
+        db_query("INSERT INTO updates_channels (guild_id, channel_id, setup_by) VALUES (?, ?, ?)",
+                (str(ctx.guild.id), str(channel.id), str(ctx.author.id)))
+        action = "set"
+    
+    # Log the action
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", 
+            (f"Updates channel {action} in {ctx.guild.name} ({ctx.guild.id}) to #{channel.name} ({channel.id}) by {ctx.author.name} ({ctx.author.id})",))
+    
+    # Send confirmation
+    embed = discord.Embed(
+        title=f"✅ Updates Channel {action.capitalize()}",
+        description=f"Bot announcements will be sent to {channel.mention}",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Channel", value=f"{channel.mention}\n`{channel.id}`", inline=True)
+    embed.add_field(name="Setup By", value=ctx.author.mention, inline=True)
+    
+    if action == "updated":
+        embed.add_field(name="Previous Channel", value=f"<#{old_channel_id}>", inline=False)
+    
+    embed.set_footer(text="Important bot announcements will be posted here")
+    
+    await ctx.send(embed=embed)
+    
+    # Send test message to the channel
+    try:
+        test_embed = discord.Embed(
+            title="📢 Updates Channel Configured",
+            description=f"This channel has been set as the updates channel for **{ctx.guild.name}**.\n\nImportant announcements from the bot owner will be posted here.",
+            color=discord.Color.blue()
+        )
+        test_embed.set_footer(text=f"Setup by {ctx.author.name}")
+        await channel.send(embed=test_embed)
+    except:
+        pass
+
+@bot.hybrid_command(name="changeupdates", description="Change the updates channel (Admin only).")
+async def change_updates(ctx, channel: discord.TextChannel):
+    """Change the existing updates channel to a new one"""
+    # This is essentially the same as setupupdates, so we can call it
+    await setup_updates(ctx, channel)
+
+@bot.hybrid_command(name="announce", description="Owner/Admin: Send announcement to all servers.")
+@owner_or_bot_admin()
+async def announce(ctx, *, message: str):
+    """Send an announcement to all configured updates channels and server owners"""
+    
+    # Initial confirmation
+    await ctx.send("📢 **Starting announcement broadcast...**\nThis may take a moment.")
+    
+    # Get all guilds with configured updates channels
+    updates_channels = db_query("SELECT guild_id, channel_id FROM updates_channels", fetch=True)
+    
+    if not updates_channels:
+        await ctx.send("⚠️ **No servers have configured updates channels!**\nServers need to use `/setupupdates` first.")
+        return
+    
+    # Create announcement embed
+    announcement_embed = discord.Embed(
+        title=f"📢 {BOT_NAME} Announcement",
+        description=message,
+        color=discord.Color.blue(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    announcement_embed.set_footer(text=f"Announcement from {ctx.author.name} • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    announcement_embed.set_author(name=BOT_NAME, icon_url=bot.user.display_avatar.url)
+    
+    # Statistics
+    total_guilds = len(updates_channels)
+    channel_success = 0
+    channel_fail = 0
+    dm_success = 0
+    dm_fail = 0
+    
+    # Send to all configured channels and owners
+    for guild_id, channel_id in updates_channels:
+        guild = bot.get_guild(int(guild_id))
+        
+        if not guild:
+            channel_fail += 1
+            continue
+        
+        # Try to send to configured channel
+        try:
+            channel = guild.get_channel(int(channel_id))
+            if channel:
+                await channel.send(embed=announcement_embed)
+                channel_success += 1
+            else:
+                channel_fail += 1
+        except Exception as e:
+            print(f"Failed to send announcement to {guild.name}: {e}")
+            channel_fail += 1
+        
+        # Try to send DM to server owner
+        try:
+            owner_dm_embed = announcement_embed.copy()
+            owner_dm_embed.title = f"📢 {BOT_NAME} Announcement for {guild.name}"
+            await guild.owner.send(embed=owner_dm_embed)
+            dm_success += 1
+        except:
+            dm_fail += 1
+        
+        # Small delay to avoid rate limits
+        await asyncio.sleep(0.5)
+    
+    # Log the announcement
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", 
+            (f"Global announcement sent by {ctx.author.name} ({ctx.author.id}). Message: {message[:200]}",))
+    
+    # Send results
+    result_embed = discord.Embed(
+        title="✅ Announcement Broadcast Complete",
+        description=f"Your announcement has been sent!",
+        color=discord.Color.green()
+    )
+    result_embed.add_field(name="📊 Statistics", 
+                           value=f"**Total Servers:** {total_guilds}\n"
+                                 f"**Channel Success:** {channel_success}\n"
+                                 f"**Channel Failed:** {channel_fail}\n"
+                                 f"**Owner DM Success:** {dm_success}\n"
+                                 f"**Owner DM Failed:** {dm_fail}",
+                           inline=False)
+    result_embed.add_field(name="📝 Message", value=message[:1000], inline=False)
+    
+    await ctx.send(embed=result_embed)
+
+@bot.hybrid_command(name="viewupdates", description="View your server's updates channel configuration.")
+async def view_updates(ctx):
+    """View the current updates channel configuration"""
+    if not ctx.guild:
+        await ctx.send("❌ **This command can only be used in servers.**")
+        return
+    
+    config = db_query("SELECT channel_id, setup_by, setup_at FROM updates_channels WHERE guild_id = ?", 
+                     (str(ctx.guild.id),), fetch=True)
+    
+    if not config:
+        embed = discord.Embed(
+            title="⚠️ No Updates Channel Configured",
+            description="This server hasn't set up an updates channel yet!",
+            color=discord.Color.orange()
+        )
+        embed.add_field(name="Setup Now", 
+                       value="Use `/setupupdates #channel` to configure one.\n\n**This is required for the bot to function properly!**",
+                       inline=False)
+        await ctx.send(embed=embed)
+        return
+    
+    channel_id, setup_by, setup_at = config[0]
+    
+    embed = discord.Embed(
+        title="📢 Updates Channel Configuration",
+        description="Current updates channel setup for this server:",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="Channel", value=f"<#{channel_id}>\n`{channel_id}`", inline=True)
+    embed.add_field(name="Setup By", value=f"<@{setup_by}>", inline=True)
+    embed.add_field(name="Setup Date", value=setup_at, inline=False)
+    embed.set_footer(text="Use /changeupdates to change the channel")
+    
+    await ctx.send(embed=embed)
+
+
 @bot.hybrid_command(name="help", description=f"Display {BOT_NAME} command center.")
 async def help_cmd(ctx):
     is_admin = is_bot_admin(ctx.author.id)
@@ -3284,8 +3491,9 @@ Core Traits:
 • Don't be overly verbose or annoying
 • Avoid unnecessary follow-up questions
 • Be smart and contextually aware
-• Try to keep the responses shorter
+• Try to keep the responses shorter (usually should not be more than 170 characters; if need then bypass this)
 • Use emojis correctly
+• Use Gen-Z slangs and abbreviations if user likes it.
 
 Language Rule (CRITICAL):
 ⚠️ You MUST respond ONLY in {lang} language. This is non-negotiable.
