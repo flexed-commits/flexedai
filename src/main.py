@@ -90,7 +90,7 @@ def init_db():
         added_by TEXT,
         added_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS word_filter_bypass (
         user_id TEXT PRIMARY KEY,
         added_by TEXT,
@@ -111,7 +111,7 @@ def init_db():
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         status TEXT DEFAULT 'pending'
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS blacklisted_guilds (
         guild_id TEXT PRIMARY KEY,
         guild_name TEXT,
@@ -120,16 +120,17 @@ def init_db():
         blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
 
-    # This was the culprit line causing the IndentationError
+    # FIXED: This was likely the cause of your error
     c.execute('''CREATE TABLE IF NOT EXISTS updates_channels (
         guild_id TEXT PRIMARY KEY,
         channel_id TEXT NOT NULL,
         setup_by TEXT,
-        setup_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        setup_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
  
     conn.commit()
     conn.close()
+
 
 
 def migrate_json_to_db():
