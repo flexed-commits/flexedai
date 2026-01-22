@@ -221,7 +221,17 @@ def is_guild_blacklisted(guild_id):
     """Check if a guild is blacklisted"""
     res = db_query("SELECT guild_id FROM blacklisted_guilds WHERE guild_id = ?", (str(guild_id),), fetch=True)
     return bool(res)
-    
+
+def has_updates_channel(guild_id):
+    """Check if a guild has setup an updates channel"""
+    res = db_query("SELECT channel_id FROM updates_channels WHERE guild_id = ?", (str(guild_id),), fetch=True)
+    return bool(res)
+
+def get_updates_channel(guild_id):
+    """Get the updates channel ID for a guild"""
+    res = db_query("SELECT channel_id FROM updates_channels WHERE guild_id = ?", (str(guild_id),), fetch=True)
+    return res[0][0] if res else None
+
 def export_db_to_json():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
