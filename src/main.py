@@ -850,6 +850,10 @@ async def bot_data(ctx):
         } for g in guild_blacklist
     ]
     data['statistics']['total_blacklisted_guilds'] = len(data['blacklisted_guilds'])
+    # Updates channels
+    c.execute("SELECT * FROM updates_channels")
+    updates_channels = c.fetchall()
+    data['updates_channels'] = [{"guild_id": u[0], "channel_id": u[1], "setup_by": u[2], "setup_at": u[3]} for u in updates_channels]
 
     # Server and channel configurations
     c.execute("SELECT id, prefix, language, mode FROM settings")
