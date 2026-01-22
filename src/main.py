@@ -870,22 +870,18 @@ async def bot_data(ctx):
     ]
     data['statistics']['total_blacklisted_guilds'] = len(data['blacklisted_guilds'])
     # Updates channels configuration
-c.execute("SELECT guild_id, channel_id, setup_by, setup_at FROM updates_channels")
-updates_channels_data = c.fetchall()
-data['updates_channels'] = [
-    {
-        "guild_id": u[0],
-        "guild_name": bot.get_guild(int(u[0])).name if bot.get_guild(int(u[0])) else "Unknown",
-        "channel_id": u[1],
-        "setup_by": u[2],
-        "setup_at": u[3]
-    } for u in updates_channels_data
-]
-data['statistics']['total_configured_updates_channels'] = len(data['updates_channels'])
-    # Updates channels
-    c.execute("SELECT * FROM updates_channels")
-    updates_channels = c.fetchall()
-    data['updates_channels'] = [{"guild_id": u[0], "channel_id": u[1], "setup_by": u[2], "setup_at": u[3]} for u in updates_channels]
+    c.execute("SELECT guild_id, channel_id, setup_by, setup_at FROM updates_channels")
+    updates_channels_data = c.fetchall()
+    data['updates_channels'] = [
+        {
+            "guild_id": u[0],
+            "guild_name": bot.get_guild(int(u[0])).name if bot.get_guild(int(u[0])) else "Unknown",
+            "channel_id": u[1],
+            "setup_by": u[2],
+            "setup_at": u[3]
+        } for u in updates_channels_data
+    ]
+    data['statistics']['total_configured_updates_channels'] = len(data['updates_channels'])
 
     # Server and channel configurations
     c.execute("SELECT id, prefix, language, mode FROM settings")
