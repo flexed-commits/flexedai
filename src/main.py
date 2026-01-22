@@ -356,8 +356,8 @@ class AIBot(commands.Bot):
 # Initialize Patreon promoter (OUTSIDE the class, at module level)
 patreon_promoter = PatreonPromoter(
     patreon_url="https://patreon.com/flexedAI/membership",
-    min_messages=50,
-    max_messages=60
+    min_messages=15,
+    max_messages=20
 )
 
 bot = AIBot()
