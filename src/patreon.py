@@ -5,17 +5,17 @@ from collections import defaultdict
 class PatreonPromoter:
     """
     Handles automatic Patreon promotion messages in Discord channels.
-    Sends a promotion message every 50-60 messages per channel.
+    Sends a promotion message every 15-20 messages per channel.
     """
     
-    def __init__(self, patreon_url: str, min_messages: int = 50, max_messages: int = 60):
+    def __init__(self, patreon_url: str, min_messages: int = 15, max_messages: int = 20):
         """
         Initialize the Patreon promoter.
         
         Args:
             patreon_url: The Patreon membership URL
-            min_messages: Minimum messages before promotion (default: 50)
-            max_messages: Maximum messages before promotion (default: 60)
+            min_messages: Minimum messages before promotion (default: 15)
+            max_messages: Maximum messages before promotion (default: 20)
         """
         self.patreon_url = patreon_url
         self.min_messages = min_messages
