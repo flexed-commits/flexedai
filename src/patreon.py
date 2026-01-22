@@ -81,7 +81,7 @@ class PatreonPromoter:
         # Create view with button
         view = discord.ui.View()
         button = discord.ui.Button(
-            label="🎁 Become a Patron",
+            label="Become a Patron",
             style=discord.ButtonStyle.link,
             url=self.patreon_url,
             emoji="💎"
