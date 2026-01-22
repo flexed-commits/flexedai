@@ -75,7 +75,7 @@ class PatreonPromoter:
         
         embed.set_footer(
             text="💡 This message appears occasionally to support development • Thank you for understanding!",
-            icon_url="https://imgur.com/gallery/patreon-logo-wtjhBJM#6dJGw4G"  # Patreon logo
+            icon_url="https://cdn.discordapp.com/attachments/1460667196954116249/1463760149373259858/6dJGw4G.png?ex=6973005e&is=6971aede&hm=f2565ff50bbdaa5bad6cb9b03336d4f14c79590b74e6048a9647e1047f0fb9bd&"  # Patreon logo
         )
         
         # Create view with button
