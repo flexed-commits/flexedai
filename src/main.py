@@ -2692,7 +2692,7 @@ async def set_prefix(ctx, new_prefix: str):
     await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="setupupdates", description="Setup channel for bot announcements (Admin only).")
-async def setup_updates(ctx, channel: discord.TextChannel):
+async def setup_updates(ctx, channel: discord.TextChannel = None):
     """Setup updates channel for important bot announcements"""
     if ctx.author.id != OWNER_ID:
         if not ctx.guild or not ctx.author.guild_permissions.administrator:
@@ -2702,6 +2702,10 @@ async def setup_updates(ctx, channel: discord.TextChannel):
     if not ctx.guild:
         await ctx.send("❌ **This command can only be used in servers.**")
         return
+    
+    # If no channel provided, use the current channel
+    if channel is None:
+        channel = ctx.channel
     
     # Check if bot has permissions in the channel
     bot_perms = channel.permissions_for(ctx.guild.me)
@@ -2718,11 +2722,13 @@ async def setup_updates(ctx, channel: discord.TextChannel):
         db_query("UPDATE updates_channels SET channel_id = ?, setup_by = ?, setup_at = CURRENT_TIMESTAMP WHERE guild_id = ?", 
                 (str(channel.id), str(ctx.author.id), str(ctx.guild.id)))
         action = "updated"
+        was_updated = True
     else:
         # Insert new
         db_query("INSERT INTO updates_channels (guild_id, channel_id, setup_by) VALUES (?, ?, ?)",
                 (str(ctx.guild.id), str(channel.id), str(ctx.author.id)))
         action = "set"
+        was_updated = False
     
     # Log the action
     db_query("INSERT INTO admin_logs (log) VALUES (?)", 
@@ -2737,7 +2743,7 @@ async def setup_updates(ctx, channel: discord.TextChannel):
     embed.add_field(name="Channel", value=f"{channel.mention}\n`{channel.id}`", inline=True)
     embed.add_field(name="Setup By", value=ctx.author.mention, inline=True)
     
-    if action == "updated":
+    if was_updated:
         embed.add_field(name="Previous Channel", value=f"<#{old_channel_id}>", inline=False)
     
     embed.set_footer(text="Important bot announcements will be posted here")
@@ -2753,14 +2759,81 @@ async def setup_updates(ctx, channel: discord.TextChannel):
         )
         test_embed.set_footer(text=f"Setup by {ctx.author.name}")
         await channel.send(embed=test_embed)
-    except:
-        pass
+    except Exception as e:
+        print(f"Failed to send test message to updates channel: {e}")
 
 @bot.hybrid_command(name="changeupdates", description="Change the updates channel (Admin only).")
-async def change_updates(ctx, channel: discord.TextChannel):
+async def change_updates(ctx, channel: discord.TextChannel = None):
     """Change the existing updates channel to a new one"""
-    # This is essentially the same as setupupdates, so we can call it
-    await setup_updates(ctx, channel)
+    if ctx.author.id != OWNER_ID:
+        if not ctx.guild or not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions")
+            return
+    
+    if not ctx.guild:
+        await ctx.send("❌ **This command can only be used in servers.**")
+        return
+    
+    # If no channel provided, use the current channel
+    if channel is None:
+        channel = ctx.channel
+    
+    # Check if already configured
+    existing = db_query("SELECT channel_id FROM updates_channels WHERE guild_id = ?", (str(ctx.guild.id),), fetch=True)
+    
+    if not existing:
+        await ctx.send(f"⚠️ **No updates channel configured yet**\n\nUse `/setupupdates` to set up an updates channel first.\n\n*Alternatively, I'll set {channel.mention} as your updates channel now.*")
+        # Call setupupdates instead
+        await setup_updates(ctx, channel)
+        return
+    
+    old_channel_id = existing[0][0]
+    
+    # Don't allow changing to the same channel
+    if old_channel_id == str(channel.id):
+        await ctx.send(f"⚠️ **Already configured**\n\n{channel.mention} is already set as your updates channel.")
+        return
+    
+    # Check if bot has permissions in the new channel
+    bot_perms = channel.permissions_for(ctx.guild.me)
+    if not bot_perms.send_messages or not bot_perms.embed_links:
+        await ctx.send(f"❌ **Missing Permissions**\n\nI need **Send Messages** and **Embed Links** permissions in {channel.mention}")
+        return
+    
+    # Update to new channel
+    db_query("UPDATE updates_channels SET channel_id = ?, setup_by = ?, setup_at = CURRENT_TIMESTAMP WHERE guild_id = ?", 
+            (str(channel.id), str(ctx.author.id), str(ctx.guild.id)))
+    
+    # Log the action
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", 
+            (f"Updates channel changed in {ctx.guild.name} ({ctx.guild.id}) from <#{old_channel_id}> to #{channel.name} ({channel.id}) by {ctx.author.name} ({ctx.author.id})",))
+    
+    # Send confirmation
+    embed = discord.Embed(
+        title="✅ Updates Channel Changed",
+        description=f"Bot announcements will now be sent to {channel.mention}",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="New Channel", value=f"{channel.mention}\n`{channel.id}`", inline=True)
+    embed.add_field(name="Changed By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Previous Channel", value=f"<#{old_channel_id}>", inline=False)
+    embed.set_footer(text="Important bot announcements will be posted here")
+    
+    await ctx.send(embed=embed)
+    
+    # Send notification to the new channel
+    try:
+        notification_embed = discord.Embed(
+            title="📢 Updates Channel Changed",
+            description=f"This channel is now the updates channel for **{ctx.guild.name}**.\n\nImportant announcements from the bot owner will be posted here.",
+            color=discord.Color.blue()
+        )
+        notification_embed.add_field(name="Previous Channel", value=f"<#{old_channel_id}>", inline=True)
+        notification_embed.add_field(name="Changed By", value=ctx.author.mention, inline=True)
+        notification_embed.set_footer(text=f"Changed at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        await channel.send(embed=notification_embed)
+    except Exception as e:
+        print(f"Failed to send notification to new updates channel: {e}")
 
 @bot.hybrid_command(name="announce", description="Owner/Admin: Send announcement to all servers.")
 @owner_or_bot_admin()
@@ -2800,35 +2873,46 @@ async def announce(ctx, *, message: str):
         
         if not guild:
             channel_fail += 1
+            dm_fail += 1
             continue
         
         # Try to send to configured channel
+        channel_sent = False
         try:
             channel = guild.get_channel(int(channel_id))
             if channel:
                 await channel.send(embed=announcement_embed)
                 channel_success += 1
+                channel_sent = True
             else:
                 channel_fail += 1
         except Exception as e:
-            print(f"Failed to send announcement to {guild.name}: {e}")
+            print(f"Failed to send announcement to channel in {guild.name}: {e}")
             channel_fail += 1
         
         # Try to send DM to server owner
+        dm_sent = False
         try:
-            owner_dm_embed = announcement_embed.copy()
-            owner_dm_embed.title = f"📢 {BOT_NAME} Announcement for {guild.name}"
-            await guild.owner.send(embed=owner_dm_embed)
-            dm_success += 1
-        except:
+            if guild.owner:
+                owner_dm_embed = announcement_embed.copy()
+                owner_dm_embed.title = f"📢 {BOT_NAME} Announcement for {guild.name}"
+                await guild.owner.send(embed=owner_dm_embed)
+                dm_success += 1
+                dm_sent = True
+        except discord.Forbidden:
+            # Owner has DMs disabled
             dm_fail += 1
+            print(f"DMs disabled for owner of {guild.name}")
+        except Exception as e:
+            dm_fail += 1
+            print(f"Failed to DM owner of {guild.name}: {e}")
         
         # Small delay to avoid rate limits
         await asyncio.sleep(0.5)
     
     # Log the announcement
     db_query("INSERT INTO admin_logs (log) VALUES (?)", 
-            (f"Global announcement sent by {ctx.author.name} ({ctx.author.id}). Message: {message[:200]}",))
+            (f"Global announcement sent by {ctx.author.name} ({ctx.author.id}). Channel success: {channel_success}, DM success: {dm_success}. Message: {message[:200]}",))
     
     # Send results
     result_embed = discord.Embed(
@@ -2838,12 +2922,12 @@ async def announce(ctx, *, message: str):
     )
     result_embed.add_field(name="📊 Statistics", 
                            value=f"**Total Servers:** {total_guilds}\n"
-                                 f"**Channel Success:** {channel_success}\n"
-                                 f"**Channel Failed:** {channel_fail}\n"
-                                 f"**Owner DM Success:** {dm_success}\n"
-                                 f"**Owner DM Failed:** {dm_fail}",
+                                 f"**Channel Messages:** ✅ {channel_success} | ❌ {channel_fail}\n"
+                                 f"**Owner DMs:** ✅ {dm_success} | ❌ {dm_fail}\n"
+                                 f"**Total Delivered:** {channel_success + dm_success}/{total_guilds * 2} messages",
                            inline=False)
     result_embed.add_field(name="📝 Message", value=message[:1000], inline=False)
+    result_embed.set_footer(text="Note: DM failures are usually due to disabled DMs")
     
     await ctx.send(embed=result_embed)
 
