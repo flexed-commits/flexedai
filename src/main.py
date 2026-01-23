@@ -2838,17 +2838,14 @@ async def change_updates(ctx, channel: discord.TextChannel = None):
 @bot.hybrid_command(name="announce", description="Owner/Admin: Send announcement to all servers.")
 @owner_or_bot_admin()
 async def announce(ctx, *, message: str):
-    """Send an announcement to all configured updates channels and server owners"""
+    """Send an announcement to all configured updates channels and ALL server owners"""
     
     # Initial confirmation
     await ctx.send("📢 **Starting announcement broadcast...**\nThis may take a moment.")
     
     # Get all guilds with configured updates channels
     updates_channels = db_query("SELECT guild_id, channel_id FROM updates_channels", fetch=True)
-    
-    if not updates_channels:
-        await ctx.send("⚠️ **No servers have configured updates channels!**\nServers need to use `/setupupdates` first.")
-        return
+    configured_guild_ids = {str(uc[0]) for uc in updates_channels} if updates_channels else set()
     
     # Create announcement embed
     announcement_embed = discord.Embed(
@@ -2861,44 +2858,54 @@ async def announce(ctx, *, message: str):
     announcement_embed.set_author(name=BOT_NAME, icon_url=bot.user.display_avatar.url)
     
     # Statistics
-    total_guilds = len(updates_channels)
+    total_guilds = len(bot.guilds)
     channel_success = 0
     channel_fail = 0
     dm_success = 0
     dm_fail = 0
     
-    # Send to all configured channels and owners
-    for guild_id, channel_id in updates_channels:
-        guild = bot.get_guild(int(guild_id))
+    # Process all guilds
+    for guild in bot.guilds:
+        guild_id = str(guild.id)
         
-        if not guild:
+        # Try to send to configured channel if it exists
+        if guild_id in configured_guild_ids:
+            channel_sent = False
+            # Find the channel_id for this guild
+            channel_id = next((uc[1] for uc in updates_channels if str(uc[0]) == guild_id), None)
+            
+            if channel_id:
+                try:
+                    channel = guild.get_channel(int(channel_id))
+                    if channel:
+                        await channel.send(embed=announcement_embed)
+                        channel_success += 1
+                        channel_sent = True
+                    else:
+                        channel_fail += 1
+                except Exception as e:
+                    print(f"Failed to send announcement to channel in {guild.name}: {e}")
+                    channel_fail += 1
+        else:
+            # Guild doesn't have updates channel configured, count as N/A
             channel_fail += 1
-            dm_fail += 1
-            continue
         
-        # Try to send to configured channel
-        channel_sent = False
-        try:
-            channel = guild.get_channel(int(channel_id))
-            if channel:
-                await channel.send(embed=announcement_embed)
-                channel_success += 1
-                channel_sent = True
-            else:
-                channel_fail += 1
-        except Exception as e:
-            print(f"Failed to send announcement to channel in {guild.name}: {e}")
-            channel_fail += 1
-        
-        # Try to send DM to server owner
-        dm_sent = False
+        # ALWAYS try to send DM to server owner (regardless of updates channel setup)
         try:
             if guild.owner:
                 owner_dm_embed = announcement_embed.copy()
                 owner_dm_embed.title = f"📢 {BOT_NAME} Announcement for {guild.name}"
+                
+                # Add a note if they haven't set up updates channel
+                if guild_id not in configured_guild_ids:
+                    owner_dm_embed.add_field(
+                        name="💡 Setup Tip",
+                        value=f"Your server hasn't configured an updates channel yet! Use `/setupupdates #channel` in your server to receive announcements directly in a channel.",
+                        inline=False
+                    )
+                
                 await guild.owner.send(embed=owner_dm_embed)
                 dm_success += 1
-                dm_sent = True
         except discord.Forbidden:
             # Owner has DMs disabled
             dm_fail += 1
@@ -2914,20 +2921,33 @@ async def announce(ctx, *, message: str):
     db_query("INSERT INTO admin_logs (log) VALUES (?)", 
             (f"Global announcement sent by {ctx.author.name} ({ctx.author.id}). Channel success: {channel_success}, DM success: {dm_success}. Message: {message[:200]}",))
     
-    # Send results
+    # Send results with better breakdown
     result_embed = discord.Embed(
         title="✅ Announcement Broadcast Complete",
         description=f"Your announcement has been sent!",
         color=discord.Color.green()
     )
-    result_embed.add_field(name="📊 Statistics", 
-                           value=f"**Total Servers:** {total_guilds}\n"
-                                 f"**Channel Messages:** ✅ {channel_success} | ❌ {channel_fail}\n"
-                                 f"**Owner DMs:** ✅ {dm_success} | ❌ {dm_fail}\n"
-                                 f"**Total Delivered:** {channel_success + dm_success}/{total_guilds * 2} messages",
-                           inline=False)
+    result_embed.add_field(
+        name="📊 Server Statistics", 
+        value=f"**Total Servers:** {total_guilds}\n"
+              f"**Servers with Updates Channel:** {len(configured_guild_ids)}\n"
+              f"**Servers without Updates Channel:** {total_guilds - len(configured_guild_ids)}",
+        inline=False
+    )
+    result_embed.add_field(
+        name="📨 Delivery Statistics",
+        value=f"**Channel Messages:**\n"
+              f"  ✅ Sent: {channel_success}\n"
+              f"  ❌ Failed/N/A: {channel_fail}\n\n"
+              f"**Owner DMs (All Servers):**\n"
+              f"  ✅ Delivered: {dm_success}\n"
+              f"  ❌ Failed (DMs disabled): {dm_fail}\n\n"
+              f"**Total Delivered:** {channel_success + dm_success} messages\n"
+              f"**Success Rate:** {round((dm_success / total_guilds) * 100, 1)}% owners reached",
+        inline=False
+    )
     result_embed.add_field(name="📝 Message", value=message[:1000], inline=False)
-    result_embed.set_footer(text="Note: DM failures are usually due to disabled DMs")
+    result_embed.set_footer(text="Note: All server owners receive DMs regardless of updates channel setup")
     
     await ctx.send(embed=result_embed)
 
