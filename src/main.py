@@ -3297,6 +3297,20 @@ async def help_cmd(ctx):
     class Page1View(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=180)
+            self.add_item(discord.ui.Button(
+                label="Support Server",
+                style=discord.ButtonStyle.link,
+                url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}",
+                emoji="🆘",
+                row=1
+            ))
+            self.add_item(discord.ui.Button(
+                label="Invite Bot",
+                style=discord.ButtonStyle.link,
+                url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands",
+                emoji="🤖",
+                row=1
+            ))
             
         @discord.ui.button(label="Next Page →", style=discord.ButtonStyle.primary, emoji="📄", row=0)
         async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -3304,18 +3318,24 @@ async def help_cmd(ctx):
                 await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
                 return
             await interaction.response.edit_message(embed=admin_embed, view=Page2View())
-        
-        @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘", row=1)
-        async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-            pass
-        
-        @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖", row=1)
-        async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-            pass
     
     class Page2View(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=180)
+            self.add_item(discord.ui.Button(
+                label="Support Server",
+                style=discord.ButtonStyle.link,
+                url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}",
+                emoji="🆘",
+                row=1
+            ))
+            self.add_item(discord.ui.Button(
+                label="Invite Bot",
+                style=discord.ButtonStyle.link,
+                url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands",
+                emoji="🤖",
+                row=1
+            ))
             
         @discord.ui.button(label="← Previous Page", style=discord.ButtonStyle.secondary, emoji="📄", row=0)
         async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -3323,26 +3343,22 @@ async def help_cmd(ctx):
                 await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
                 return
             await interaction.response.edit_message(embed=user_embed, view=Page1View())
-        
-        @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘", row=1)
-        async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-            pass
-        
-        @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖", row=1)
-        async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-            pass
     
     class UserOnlyView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=180)
-            
-        @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘")
-        async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-            pass
-        
-        @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖")
-        async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-            pass
+            self.add_item(discord.ui.Button(
+                label="Support Server",
+                style=discord.ButtonStyle.link,
+                url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}",
+                emoji="🆘"
+            ))
+            self.add_item(discord.ui.Button(
+                label="Invite Bot",
+                style=discord.ButtonStyle.link,
+                url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands",
+                emoji="🤖"
+            ))
     
     # Send appropriate view based on user permissions
     if is_admin:
