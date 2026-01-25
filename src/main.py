@@ -1,4 +1,4 @@
-p# Feel free to use my code; Just make sure to edit the hardcoded ids.
+# Feel free to use my code; Just make sure to edit the hardcoded ids.
 
 import discord
 import hashlib, string
