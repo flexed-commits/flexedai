@@ -1,4 +1,4 @@
-# Feel free to use my code; Just make sure to edit the hardcoded ids.
+p# Feel free to use my code; Just make sure to edit the hardcoded ids.
 
 import discord
 import hashlib, string
@@ -3070,22 +3070,31 @@ async def help_cmd(ctx):
 """
     user_embed.add_field(name="✨ Bot Features", value=features.strip(), inline=False)
     
-    user_embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME} • Part 1/2")
+    user_embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME}")
     user_embed.set_thumbnail(url=bot.user.display_avatar.url)
     
-    # Send user embed (no buttons)
-    await ctx.send(embed=user_embed)
-    
-    # EMBED 2: Admin Commands (Only if user is admin/owner)
+    # Create view for first embed
     if is_admin:
-        admin_embed = discord.Embed(
-            title=f"🛡️ {BOT_NAME} Command Guide - Admin Commands",
-            description=f"**Your Access Level:** {'👑 Owner' if is_owner else '✨ Bot Admin'}",
-            color=discord.Color.gold() if is_owner else discord.Color.blue()
-        )
-        
-        if is_owner:
-            owner_cmds = """
+        # Admins/Owners see "Next Page" button
+        class HelpView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=180)
+                
+            @discord.ui.button(label="Next Page →", style=discord.ButtonStyle.primary, emoji="📄")
+            async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user.id != ctx.author.id:
+                    await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
+                    return
+                
+                # Create admin embed
+                admin_embed = discord.Embed(
+                    title=f"🛡️ {BOT_NAME} Command Guide - Admin Commands",
+                    description=f"**Your Access Level:** {'👑 Owner' if is_owner else '✨ Bot Admin'}",
+                    color=discord.Color.gold() if is_owner else discord.Color.blue()
+                )
+                
+                if is_owner:
+                    owner_cmds = """
 **`add-admin <user>`**
 └─ Grant bot admin privileges to a user
 └─ Sends DM notification with permission details
@@ -3102,9 +3111,9 @@ async def help_cmd(ctx):
 └─ Force bot to leave a specific server (DM only)
 └─ Optionally notify server owner with reason
 """
-            admin_embed.add_field(name="👑 Owner Only Commands", value=owner_cmds.strip(), inline=False)
-        
-        utility = """
+                    admin_embed.add_field(name="👑 Owner Only Commands", value=owner_cmds.strip(), inline=False)
+                
+                utility = """
 **`/sync`**
 └─ Sync all slash commands globally across Discord
 
@@ -3143,9 +3152,9 @@ async def help_cmd(ctx):
 **`ids`**
 └─ Display all slash command IDs for mentions
 """
-        admin_embed.add_field(name="🛠️ Admin Utility", value=utility.strip(), inline=False)
-        
-        moderation = """
+                admin_embed.add_field(name="🛠️ Admin Utility", value=utility.strip(), inline=False)
+                
+                moderation = """
 **`/blacklist`**
 └─ View all blacklisted users
 
@@ -3210,9 +3219,9 @@ async def help_cmd(ctx):
 **`/reportremove <report_id> [reason]`**
 └─ Delete specific report from system
 """
-        admin_embed.add_field(name="🔨 Moderation", value=moderation.strip(), inline=False)
-        
-        settings = """
+                admin_embed.add_field(name="🔨 Moderation", value=moderation.strip(), inline=False)
+                
+                settings = f"""
 **`/start`**
 └─ Bot responds to ALL messages in channel (Admin)
 
@@ -3236,65 +3245,51 @@ async def help_cmd(ctx):
 **`/viewupdates`**
 └─ View current updates channel configuration
 """
-        admin_embed.add_field(name="⚙️ Settings & Configuration", value=settings.strip(), inline=False)
+                admin_embed.add_field(name="⚙️ Settings & Configuration", value=settings.strip(), inline=False)
+                
+                admin_embed.set_footer(text=f"Admin Guide • All actions are logged • Page 2/2")
+                admin_embed.set_thumbnail(url=bot.user.display_avatar.url)
+                
+                # Create view with back button and link buttons
+                class AdminView(discord.ui.View):
+                    def __init__(self):
+                        super().__init__(timeout=180)
+                        
+                    @discord.ui.button(label="← Previous Page", style=discord.ButtonStyle.secondary, emoji="📄")
+                    async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+                        if interaction.user.id != ctx.author.id:
+                            await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
+                            return
+                        await interaction.response.edit_message(embed=user_embed, view=HelpView())
+                    
+                    @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘")
+                    async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+                        pass
+                    
+                    @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖")
+                    async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+                        pass
+                
+                await interaction.response.edit_message(embed=admin_embed, view=AdminView())
         
-        admin_embed.set_footer(text=f"Admin Guide • All actions are logged • Part 2/2")
-        admin_embed.set_thumbnail(url=bot.user.display_avatar.url)
-        
-        # Create view with buttons (only on 2nd embed)
-        view = discord.ui.View()
-        view.add_item(discord.ui.Button(
-            label="Support Server", 
-            url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", 
-            style=discord.ButtonStyle.link,
-            emoji="🆘"
-        ))
-        view.add_item(discord.ui.Button(
-            label="Invite Bot",
-            url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands",
-            style=discord.ButtonStyle.link,
-            emoji="🤖"
-        ))
-        
-        # Send admin embed with buttons
-        await ctx.send(embed=admin_embed, view=view)
+        view = HelpView()
+        await ctx.send(embed=user_embed, view=view)
     else:
-        # For non-admins, send a simple 2nd embed with buttons
-        info_embed = discord.Embed(
-            title=f"📌 Additional Information",
-            description="Need more help or want to add the bot to your server?",
-            color=discord.Color.blue()
-        )
+        # Non-admins see only support/invite buttons (no navigation)
+        class UserView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=180)
+                
+            @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘")
+            async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+                pass
+            
+            @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖")
+            async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+                pass
         
-        info_embed.add_field(
-            name="💡 Tips",
-            value="""
-• Use `/start` in a channel to enable auto-responses (Admin only)
-• Use `/lang` to change the bot's language (Admin only)
-• Use `/forget` to clear your conversation history
-• Use `/report` if you encounter rule violations
-""".strip(),
-            inline=False
-        )
-        
-        info_embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME} • Part 2/2")
-        
-        # Create view with buttons for non-admins
-        view = discord.ui.View()
-        view.add_item(discord.ui.Button(
-            label="Support Server", 
-            url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", 
-            style=discord.ButtonStyle.link,
-            emoji="🆘"
-        ))
-        view.add_item(discord.ui.Button(
-            label="Invite Bot",
-            url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands",
-            style=discord.ButtonStyle.link,
-            emoji="🤖"
-        ))
-        
-        await ctx.send(embed=info_embed, view=view)
+        view = UserView()
+        await ctx.send(embed=user_embed, view=view)
     
 @bot.hybrid_command(name="stats", description="Check bot statistics.")
 async def stats(ctx):
