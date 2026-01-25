@@ -2993,10 +2993,10 @@ async def help_cmd(ctx):
     is_admin = is_bot_admin(ctx.author.id)
     is_owner = ctx.author.id == OWNER_ID
     
-    # EMBED 1: User Commands & Features (Everyone sees this)
+    # EMBED 1: User & Server Admin Commands
     user_embed = discord.Embed(
-        title=f"📚 {BOT_NAME} Command Guide - User Commands",
-        description="Complete guide to user commands and bot features",
+        title=f"📚 {BOT_NAME} Command Guide",
+        description="User commands and server configuration (Page 1/2)",
         color=discord.Color.green()
     )
     
@@ -3006,62 +3006,107 @@ async def help_cmd(ctx):
 
 **`/whoami`**
 └─ Show your Discord profile, roles, and bot status
-└─ Includes strike count and permissions
+└─ Includes strike count and bot permissions
 
 **`/stats`**
 └─ Display bot statistics (latency, servers, users)
+└─ Shows real-time server and user counts
 
 **`/ping`**
 └─ Check bot response time and connection status
-└─ Shows latency with quality indicator
+└─ Shows latency with quality indicator (Excellent/Good/Slow)
 
 **`/forget`**
 └─ Clear your conversation memory with the AI
 └─ Removes last 6 messages from context
+└─ Useful for starting fresh conversations
 
 **`/report <@user> <proof> <reason>`**
-└─ Report a user for misbehavior
-└─ Admins review and can take action
+└─ Report a user for misbehavior to bot admins
+└─ Admins review and can take moderation action
 └─ Attach proof images/links for evidence
+└─ All reports are logged and reviewed
 
 **`/invite`**
 └─ Get bot invite link to add to your server
-└─ Includes all necessary permissions
+└─ Includes all necessary permissions pre-configured
 
 **`/encode <message>`**
-└─ Encode text using custom cipher
+└─ Encode text using custom cipher system
 └─ Cannot encode banned words (unless bypass user)
+└─ Useful for sharing encoded messages
 
 **`/decode <encoded_message>`**
 └─ Decode previously encoded message
-└─ Triggers strike if decoded text has banned words
+└─ Triggers strike if decoded text contains banned words
+└─ Remove backticks from encoded text before decoding
 """
     user_embed.add_field(name="👤 User Commands", value=user_commands.strip(), inline=False)
+    
+    server_admin = f"""
+**`/start`**
+└─ Enable auto-response mode for this channel
+└─ Bot responds to ALL messages in channel
+└─ **Requires:** Server Administrator permission
+
+**`/stop`**
+└─ Enable selective-response mode for this channel
+└─ Bot only responds to mentions/triggers
+└─ **Requires:** Server Administrator permission
+
+**`/lang [language]`**
+└─ Set channel language for bot responses
+└─ Interactive dropdown menu for easy selection
+└─ **Available:** {len(AVAILABLE_LANGUAGES)} languages ({', '.join(AVAILABLE_LANGUAGES[:3])}, etc.)
+└─ **Requires:** Server Administrator permission
+
+**`/prefix <new_prefix>`**
+└─ Change command prefix for this server
+└─ Example: `/prefix !` changes prefix to `!`
+└─ **Requires:** Server Administrator permission
+
+**`/setupupdates [#channel]`**
+└─ Setup channel for bot announcements
+└─ **REQUIRED for bot to function properly**
+└─ Receives important updates from bot owner
+└─ **Requires:** Server Administrator permission
+
+**`/changeupdates [#channel]`**
+└─ Change existing updates channel to a new one
+└─ Updates configuration for announcement delivery
+└─ **Requires:** Server Administrator permission
+
+**`/viewupdates`**
+└─ View current updates channel configuration
+└─ Shows channel, setup date, and who configured it
+└─ **Available to:** All users
+"""
+    user_embed.add_field(name="⚙️ Server Admin Commands", value=server_admin.strip(), inline=False)
     
     features = f"""
 **🎯 Response Modes:**
 • **START:** Bot responds to every message in channel
-• **STOP:** Bot only responds to mentions/triggers
+• **STOP:** Bot only responds to mentions/triggers/{BOT_NAME}
 
 **⚡ Strike System:**
-• Users receive strikes for violations
-• 3 strikes = automatic blacklist
-• All actions logged with DM notifications
+• Users receive strikes for violations (banned words, etc.)
+• 3 strikes = automatic blacklist from bot
+• All actions logged with DM notifications to users
 
 **🔇 Word Filter:**
 • Banned words auto-deleted from messages
-• Admins and bypass users are exempt
+• Bot admins and bypass users are exempt
 • Strikes issued for repeated violations
 
 **📊 Multi-Language Support:**
 • {len(AVAILABLE_LANGUAGES)} languages available
 • Channel-specific language settings
-• AI responds in configured language
+• AI responds in configured language only
 
 **💾 Memory System:**
 • Remembers last 6 messages per user/channel
 • Provides context-aware responses
-• Use /forget to clear your memory
+• Use `/forget` to clear your memory
 
 **⏱️ Response Cooldown:**
 • 0.6 second cooldown between responses
@@ -3070,100 +3115,105 @@ async def help_cmd(ctx):
 """
     user_embed.add_field(name="✨ Bot Features", value=features.strip(), inline=False)
     
-    user_embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME}")
+    user_embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME} • Page 1/2")
     user_embed.set_thumbnail(url=bot.user.display_avatar.url)
     
-    # Create view for first embed
-    if is_admin:
-        # Admins/Owners see "Next Page" button
-        class HelpView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=180)
-                
-            @discord.ui.button(label="Next Page →", style=discord.ButtonStyle.primary, emoji="📄")
-            async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if interaction.user.id != ctx.author.id:
-                    await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
-                    return
-                
-                # Create admin embed
-                admin_embed = discord.Embed(
-                    title=f"🛡️ {BOT_NAME} Command Guide - Admin Commands",
-                    description=f"**Your Access Level:** {'👑 Owner' if is_owner else '✨ Bot Admin'}",
-                    color=discord.Color.gold() if is_owner else discord.Color.blue()
-                )
-                
-                if is_owner:
-                    owner_cmds = """
+    # EMBED 2: Bot Admin & Owner Commands
+    admin_embed = discord.Embed(
+        title=f"🛡️ {BOT_NAME} Admin Command Guide",
+        description=f"Bot admin and owner commands (Page 2/2)\n**Your Access:** {'👑 Owner' if is_owner else '✨ Bot Admin' if is_admin else '❌ No Access'}",
+        color=discord.Color.gold() if is_owner else discord.Color.blue()
+    )
+    
+    if is_owner:
+        owner_cmds = """
 **`add-admin <user>`**
 └─ Grant bot admin privileges to a user
-└─ Sends DM notification with permission details
+└─ Sends DM notification with full permission details
+└─ User gains access to all moderation commands
 
 **`remove-admin <user>`**
 └─ Revoke bot admin privileges from a user
 └─ Sends DM notification about removal
+└─ User loses all admin command access
 
 **`list-admins`**
 └─ Display all current bot administrators
 └─ Shows who added them and when
+└─ Includes appointment dates
 
 **`leave <server_id> [reason]`**
 └─ Force bot to leave a specific server (DM only)
 └─ Optionally notify server owner with reason
+└─ Logs action in admin logs
 """
-                    admin_embed.add_field(name="👑 Owner Only Commands", value=owner_cmds.strip(), inline=False)
-                
-                utility = """
+        admin_embed.add_field(name="👑 Owner Only Commands", value=owner_cmds.strip(), inline=False)
+    
+    utility = """
 **`/sync`**
 └─ Sync all slash commands globally across Discord
+└─ Updates command list for all servers
+└─ Use after adding new commands
 
 **`/messages`**
 └─ Export interaction logs from last 24 hours (DM only)
+└─ Receives JSON file with all recent interactions
 
 **`/allinteractions`**
 └─ Export ALL interaction logs ever recorded (DM only)
+└─ Complete history of bot usage
 
 **`/clearlogs`**
 └─ Permanently wipe all interaction logs (DM only)
+└─ Cannot be undone - use with caution
 
 **`server-list`**
 └─ Export complete list of all servers bot is in (DM only)
+└─ Includes member counts and owner info
 
 **`/backup`**
 └─ Trigger immediate database backup (DM only)
-└─ Receive JSON file with all data
+└─ Receive JSON file with all bot data
 
 **`/data`**
 └─ Export complete bot configuration and stats (DM only)
+└─ Comprehensive data export with all settings
 
 **`/logs`**
 └─ View recent 15 moderation action logs
+└─ Shows admin actions with timestamps
 
 **`/clearadminlogs`**
 └─ Clear all administrative action logs
+└─ Removes moderation history
 
 **`/searchlogs <keyword>`**
 └─ Search interaction logs for specific keyword
+└─ Returns up to 20 matching results
 
 **`/announce <message>`**
 └─ Send announcement to ALL server updates channels
 └─ Also sends DM to all server owners
+└─ Reaches every server bot is in
 
 **`ids`**
 └─ Display all slash command IDs for mentions
+└─ Useful for linking commands in messages
 """
-                admin_embed.add_field(name="🛠️ Admin Utility", value=utility.strip(), inline=False)
-                
-                moderation = """
+    admin_embed.add_field(name="🛠️ Admin Utility", value=utility.strip(), inline=False)
+    
+    moderation = """
 **`/blacklist`**
-└─ View all blacklisted users
+└─ View all blacklisted users with details
 
 **`/blacklist add <user_id> [reason]`**
 └─ Permanently ban user from using bot
 └─ Sends DM notification to user
+└─ Logs action with reason
 
 **`/blacklist remove <user_id> [reason]`**
 └─ Remove user from blacklist, restore access
+└─ Sends DM notification to user
 
 **`/blacklist-guild`**
 └─ View all blacklisted servers
@@ -3171,125 +3221,134 @@ async def help_cmd(ctx):
 **`/blacklist-guild add <guild_id> [reason]`**
 └─ Blacklist server and auto-leave immediately
 └─ Notifies server owner via DM
+└─ Bot cannot be re-added while blacklisted
 
 **`/blacklist-guild remove <guild_id> [reason]`**
 └─ Remove server from blacklist
+└─ Server can re-add bot
 
 **`/addstrike <user_id> [amount] [reason]`**
 └─ Add strike(s) to user (default: 1)
 └─ 3 strikes = automatic blacklist
+└─ Sends DM notification with strike count
 
 **`/removestrike <user_id> [amount] [reason]`**
 └─ Remove strike(s) from user
 └─ Auto-unban if drops below 3 strikes
+└─ Sends DM notification
 
 **`/clearstrike <user_id> [reason]`**
 └─ Remove ALL strikes from user and unban
+└─ Resets user to clean slate
+└─ Sends DM notification
 
 **`/strikelist`**
 └─ View all users with active strikes
+└─ Shows strike counts and blacklist status
 
 **`/bannedword`**
 └─ List all banned words in filter
 
 **`/bannedword add <word>`**
 └─ Add word to filter (auto-delete messages)
+└─ Word checked case-insensitively
 
 **`/bannedword remove <word>`**
 └─ Remove word from filter
+
+**`/listwords`**
+└─ Alternative command to list banned words
 
 **`/bypass`**
 └─ List users with word filter bypass
 
 **`/bypass add <user_id> [reason]`**
 └─ Grant word filter bypass permission
+└─ User can use banned words without penalty
+└─ Sends DM notification
 
 **`/bypass remove <user_id> [reason]`**
 └─ Revoke word filter bypass
+└─ User subject to normal filter rules
+└─ Sends DM notification
 
 **`/reports [status]`**
 └─ View reports (pending/reviewed/dismissed/all)
+└─ Shows last 20 reports by status
 
 **`/reportview <report_id>`**
 └─ View detailed report information
+└─ Includes proof, timestamps, and user info
 
 **`/reportclear <user_id> [reason]`**
 └─ Clear all reports for a specific user
+└─ Removes report history
 
 **`/reportremove <report_id> [reason]`**
 └─ Delete specific report from system
+└─ Permanently removes single report
 """
-                admin_embed.add_field(name="🔨 Moderation", value=moderation.strip(), inline=False)
-                
-                settings = f"""
-**`/start`**
-└─ Bot responds to ALL messages in channel (Admin)
-
-**`/stop`**
-└─ Bot only responds to mentions/triggers (Admin)
-
-**`/lang [language]`**
-└─ Set channel language (Admin required)
-└─ Dropdown menu with {len(AVAILABLE_LANGUAGES)} languages
-
-**`/prefix <new_prefix>`**
-└─ Change command prefix for server (Admin)
-
-**`/setupupdates [#channel]`**
-└─ Setup channel for bot announcements (Admin)
-└─ **REQUIRED for bot to function**
-
-**`/changeupdates [#channel]`**
-└─ Change existing updates channel (Admin)
-
-**`/viewupdates`**
-└─ View current updates channel configuration
-"""
-                admin_embed.add_field(name="⚙️ Settings & Configuration", value=settings.strip(), inline=False)
-                
-                admin_embed.set_footer(text=f"Admin Guide • All actions are logged • Page 2/2")
-                admin_embed.set_thumbnail(url=bot.user.display_avatar.url)
-                
-                # Create view with back button and link buttons
-                class AdminView(discord.ui.View):
-                    def __init__(self):
-                        super().__init__(timeout=180)
-                        
-                    @discord.ui.button(label="← Previous Page", style=discord.ButtonStyle.secondary, emoji="📄")
-                    async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-                        if interaction.user.id != ctx.author.id:
-                            await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
-                            return
-                        await interaction.response.edit_message(embed=user_embed, view=HelpView())
-                    
-                    @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘")
-                    async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-                        pass
-                    
-                    @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖")
-                    async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-                        pass
-                
-                await interaction.response.edit_message(embed=admin_embed, view=AdminView())
-        
-        view = HelpView()
-        await ctx.send(embed=user_embed, view=view)
-    else:
-        # Non-admins see only support/invite buttons (no navigation)
-        class UserView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=180)
-                
-            @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘")
-            async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-                pass
+    admin_embed.add_field(name="🔨 Moderation Commands", value=moderation.strip(), inline=False)
+    
+    admin_embed.set_footer(text=f"Bot Admin Guide • All actions are logged • Page 2/2")
+    admin_embed.set_thumbnail(url=bot.user.display_avatar.url)
+    
+    # Views with working buttons
+    class Page1View(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=180)
             
-            @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖")
-            async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
-                pass
+        @discord.ui.button(label="Next Page →", style=discord.ButtonStyle.primary, emoji="📄", row=0)
+        async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
+                return
+            await interaction.response.edit_message(embed=admin_embed, view=Page2View())
         
-        view = UserView()
-        await ctx.send(embed=user_embed, view=view)
+        @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘", row=1)
+        async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+            pass
+        
+        @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖", row=1)
+        async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+            pass
+    
+    class Page2View(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=180)
+            
+        @discord.ui.button(label="← Previous Page", style=discord.ButtonStyle.secondary, emoji="📄", row=0)
+        async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message("❌ Only the command user can navigate pages.", ephemeral=True)
+                return
+            await interaction.response.edit_message(embed=user_embed, view=Page1View())
+        
+        @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘", row=1)
+        async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+            pass
+        
+        @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖", row=1)
+        async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+            pass
+    
+    class UserOnlyView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=180)
+            
+        @discord.ui.button(label="Support Server", style=discord.ButtonStyle.link, url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", emoji="🆘")
+        async def support_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+            pass
+        
+        @discord.ui.button(label="Invite Bot", style=discord.ButtonStyle.link, url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands", emoji="🤖")
+        async def invite_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+            pass
+    
+    # Send appropriate view based on user permissions
+    if is_admin:
+        await ctx.send(embed=user_embed, view=Page1View())
+    else:
+        await ctx.send(embed=user_embed, view=UserOnlyView())
     
 @bot.hybrid_command(name="stats", description="Check bot statistics.")
 async def stats(ctx):
