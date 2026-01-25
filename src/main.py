@@ -3000,118 +3000,85 @@ async def help_cmd(ctx):
         color=discord.Color.green()
     )
     
-    user_commands = """
-**`/help`**
-└─ Display this comprehensive command guide
-
-**`/whoami`**
-└─ Show your Discord profile, roles, and bot status
-└─ Includes strike count and bot permissions
-
-**`/stats`**
-└─ Display bot statistics (latency, servers, users)
-└─ Shows real-time server and user counts
-
-**`/ping`**
-└─ Check bot response time and connection status
-└─ Shows latency with quality indicator (Excellent/Good/Slow)
-
-**`/forget`**
-└─ Clear your conversation memory with the AI
-└─ Removes last 6 messages from context
-└─ Useful for starting fresh conversations
-
-**`/report <@user> <proof> <reason>`**
-└─ Report a user for misbehavior to bot admins
-└─ Admins review and can take moderation action
-└─ Attach proof images/links for evidence
-└─ All reports are logged and reviewed
-
-**`/invite`**
-└─ Get bot invite link to add to your server
-└─ Includes all necessary permissions pre-configured
-
-**`/encode <message>`**
-└─ Encode text using custom cipher system
-└─ Cannot encode banned words (unless bypass user)
-└─ Useful for sharing encoded messages
-
-**`/decode <encoded_message>`**
-└─ Decode previously encoded message
-└─ Triggers strike if decoded text contains banned words
-└─ Remove backticks from encoded text before decoding
+    # Split user commands into TWO fields to stay under 1024 char limit
+    user_commands_part1 = """
+**`/help`** - Display this guide
+**`/whoami`** - Show your profile & bot status
+**`/stats`** - Display bot statistics
+**`/ping`** - Check bot response time
+**`/forget`** - Clear conversation memory
+**`/report <@user> <proof> <reason>`** - Report user to admins
+**`/invite`** - Get bot invite link
 """
-    user_embed.add_field(name="👤 User Commands", value=user_commands.strip(), inline=False)
     
-    server_admin = f"""
-**`/start`**
-└─ Enable auto-response mode for this channel
-└─ Bot responds to ALL messages in channel
-└─ **Requires:** Server Administrator permission
-
-**`/stop`**
-└─ Enable selective-response mode for this channel
-└─ Bot only responds to mentions/triggers
-└─ **Requires:** Server Administrator permission
-
-**`/lang [language]`**
-└─ Set channel language for bot responses
-└─ Interactive dropdown menu for easy selection
-└─ **Available:** {len(AVAILABLE_LANGUAGES)} languages ({', '.join(AVAILABLE_LANGUAGES[:3])}, etc.)
-└─ **Requires:** Server Administrator permission
-
-**`/prefix <new_prefix>`**
-└─ Change command prefix for this server
-└─ Example: `/prefix !` changes prefix to `!`
-└─ **Requires:** Server Administrator permission
-
-**`/setupupdates [#channel]`**
-└─ Setup channel for bot announcements
-└─ **REQUIRED for bot to function properly**
-└─ Receives important updates from bot owner
-└─ **Requires:** Server Administrator permission
-
-**`/changeupdates [#channel]`**
-└─ Change existing updates channel to a new one
-└─ Updates configuration for announcement delivery
-└─ **Requires:** Server Administrator permission
-
-**`/viewupdates`**
-└─ View current updates channel configuration
-└─ Shows channel, setup date, and who configured it
-└─ **Available to:** All users
+    user_commands_part2 = """
+**`/encode <message>`** - Encode text with cipher
+**`/decode <encoded>`** - Decode cipher text
+└─ Note: Remove backticks before decoding
+└─ Strike issued if decoded text has banned words
 """
-    user_embed.add_field(name="⚙️ Server Admin Commands", value=server_admin.strip(), inline=False)
     
+    user_embed.add_field(name="👤 User Commands (1/2)", value=user_commands_part1.strip(), inline=False)
+    user_embed.add_field(name="👤 User Commands (2/2)", value=user_commands_part2.strip(), inline=False)
+    
+    # Split server admin commands into TWO fields
+    server_admin_part1 = f"""
+**`/start`** - Enable auto-response mode
+└─ Bot responds to ALL messages
+└─ Requires: Administrator
+
+**`/stop`** - Enable selective-response mode
+└─ Bot only responds to mentions
+└─ Requires: Administrator
+
+**`/lang [language]`** - Set channel language
+└─ {len(AVAILABLE_LANGUAGES)} languages available
+└─ Requires: Administrator
+
+**`/prefix <new_prefix>`** - Change command prefix
+└─ Requires: Administrator
+"""
+    
+    server_admin_part2 = """
+**`/setupupdates [#channel]`** - Setup updates channel
+└─ REQUIRED for bot to function
+└─ Requires: Administrator
+
+**`/changeupdates [#channel]`** - Change updates channel
+└─ Requires: Administrator
+
+**`/viewupdates`** - View current updates channel
+└─ Available to all users
+"""
+    
+    user_embed.add_field(name="⚙️ Server Admin (1/2)", value=server_admin_part1.strip(), inline=False)
+    user_embed.add_field(name="⚙️ Server Admin (2/2)", value=server_admin_part2.strip(), inline=False)
+    
+    # Features field - also split if needed
     features = f"""
 **🎯 Response Modes:**
-• **START:** Bot responds to every message in channel
-• **STOP:** Bot only responds to mentions/triggers/{BOT_NAME}
+• START: Responds to every message
+• STOP: Only mentions/triggers
 
 **⚡ Strike System:**
-• Users receive strikes for violations (banned words, etc.)
-• 3 strikes = automatic blacklist from bot
-• All actions logged with DM notifications to users
+• 3 strikes = auto-blacklist
+• All actions logged with DM notifications
 
 **🔇 Word Filter:**
-• Banned words auto-deleted from messages
-• Bot admins and bypass users are exempt
-• Strikes issued for repeated violations
+• Banned words auto-deleted
+• Admins/bypass users exempt
 
-**📊 Multi-Language Support:**
-• {len(AVAILABLE_LANGUAGES)} languages available
-• Channel-specific language settings
-• AI responds in configured language only
+**📊 Multi-Language:**
+• {len(AVAILABLE_LANGUAGES)} languages supported
+• Channel-specific settings
 
-**💾 Memory System:**
-• Remembers last 6 messages per user/channel
-• Provides context-aware responses
-• Use `/forget` to clear your memory
+**💾 Memory:**
+• Remembers last 6 messages
+• Use `/forget` to clear
 
-**⏱️ Response Cooldown:**
-• 0.6 second cooldown between responses
+**⏱️ Cooldown:**
+• 0.6s between responses
 • Prevents API rate limiting
-• Ensures stable service for all users
 """
     user_embed.add_field(name="✨ Bot Features", value=features.strip(), inline=False)
     
@@ -3127,168 +3094,77 @@ async def help_cmd(ctx):
     
     if is_owner:
         owner_cmds = """
-**`add-admin <user>`**
-└─ Grant bot admin privileges to a user
-└─ Sends DM notification with full permission details
-└─ User gains access to all moderation commands
-
-**`remove-admin <user>`**
-└─ Revoke bot admin privileges from a user
-└─ Sends DM notification about removal
-└─ User loses all admin command access
-
-**`list-admins`**
-└─ Display all current bot administrators
-└─ Shows who added them and when
-└─ Includes appointment dates
-
-**`leave <server_id> [reason]`**
-└─ Force bot to leave a specific server (DM only)
-└─ Optionally notify server owner with reason
-└─ Logs action in admin logs
+**`add-admin <user>`** - Grant admin privileges
+**`remove-admin <user>`** - Revoke admin privileges
+**`list-admins`** - Display all admins
+**`leave <server_id> [reason]`** - Leave server (DM only)
 """
-        admin_embed.add_field(name="👑 Owner Only Commands", value=owner_cmds.strip(), inline=False)
+        admin_embed.add_field(name="👑 Owner Only", value=owner_cmds.strip(), inline=False)
     
-    utility = """
-**`/sync`**
-└─ Sync all slash commands globally across Discord
-└─ Updates command list for all servers
-└─ Use after adding new commands
-
-**`/messages`**
-└─ Export interaction logs from last 24 hours (DM only)
-└─ Receives JSON file with all recent interactions
-
-**`/allinteractions`**
-└─ Export ALL interaction logs ever recorded (DM only)
-└─ Complete history of bot usage
-
-**`/clearlogs`**
-└─ Permanently wipe all interaction logs (DM only)
-└─ Cannot be undone - use with caution
-
-**`server-list`**
-└─ Export complete list of all servers bot is in (DM only)
-└─ Includes member counts and owner info
-
-**`/backup`**
-└─ Trigger immediate database backup (DM only)
-└─ Receive JSON file with all bot data
-
-**`/data`**
-└─ Export complete bot configuration and stats (DM only)
-└─ Comprehensive data export with all settings
-
-**`/logs`**
-└─ View recent 15 moderation action logs
-└─ Shows admin actions with timestamps
-
-**`/clearadminlogs`**
-└─ Clear all administrative action logs
-└─ Removes moderation history
-
-**`/searchlogs <keyword>`**
-└─ Search interaction logs for specific keyword
-└─ Returns up to 20 matching results
-
-**`/announce <message>`**
-└─ Send announcement to ALL server updates channels
-└─ Also sends DM to all server owners
-└─ Reaches every server bot is in
-
-**`ids`**
-└─ Display all slash command IDs for mentions
-└─ Useful for linking commands in messages
+    # Split utility commands into multiple fields
+    utility_part1 = """
+**`/sync`** - Sync slash commands
+**`/messages`** - Export 24h logs (DM only)
+**`/allinteractions`** - Export ALL logs (DM only)
+**`/clearlogs`** - Wipe interaction logs (DM only)
+**`server-list`** - Export server list (DM only)
+**`/backup`** - Trigger backup (DM only)
+**`/data`** - Export complete data (DM only)
 """
-    admin_embed.add_field(name="🛠️ Admin Utility", value=utility.strip(), inline=False)
     
-    moderation = """
-**`/blacklist`**
-└─ View all blacklisted users with details
-
-**`/blacklist add <user_id> [reason]`**
-└─ Permanently ban user from using bot
-└─ Sends DM notification to user
-└─ Logs action with reason
-
-**`/blacklist remove <user_id> [reason]`**
-└─ Remove user from blacklist, restore access
-└─ Sends DM notification to user
-
-**`/blacklist-guild`**
-└─ View all blacklisted servers
-
-**`/blacklist-guild add <guild_id> [reason]`**
-└─ Blacklist server and auto-leave immediately
-└─ Notifies server owner via DM
-└─ Bot cannot be re-added while blacklisted
-
-**`/blacklist-guild remove <guild_id> [reason]`**
-└─ Remove server from blacklist
-└─ Server can re-add bot
-
-**`/addstrike <user_id> [amount] [reason]`**
-└─ Add strike(s) to user (default: 1)
-└─ 3 strikes = automatic blacklist
-└─ Sends DM notification with strike count
-
-**`/removestrike <user_id> [amount] [reason]`**
-└─ Remove strike(s) from user
-└─ Auto-unban if drops below 3 strikes
-└─ Sends DM notification
-
-**`/clearstrike <user_id> [reason]`**
-└─ Remove ALL strikes from user and unban
-└─ Resets user to clean slate
-└─ Sends DM notification
-
-**`/strikelist`**
-└─ View all users with active strikes
-└─ Shows strike counts and blacklist status
-
-**`/bannedword`**
-└─ List all banned words in filter
-
-**`/bannedword add <word>`**
-└─ Add word to filter (auto-delete messages)
-└─ Word checked case-insensitively
-
-**`/bannedword remove <word>`**
-└─ Remove word from filter
-
-**`/listwords`**
-└─ Alternative command to list banned words
-
-**`/bypass`**
-└─ List users with word filter bypass
-
-**`/bypass add <user_id> [reason]`**
-└─ Grant word filter bypass permission
-└─ User can use banned words without penalty
-└─ Sends DM notification
-
-**`/bypass remove <user_id> [reason]`**
-└─ Revoke word filter bypass
-└─ User subject to normal filter rules
-└─ Sends DM notification
-
-**`/reports [status]`**
-└─ View reports (pending/reviewed/dismissed/all)
-└─ Shows last 20 reports by status
-
-**`/reportview <report_id>`**
-└─ View detailed report information
-└─ Includes proof, timestamps, and user info
-
-**`/reportclear <user_id> [reason]`**
-└─ Clear all reports for a specific user
-└─ Removes report history
-
-**`/reportremove <report_id> [reason]`**
-└─ Delete specific report from system
-└─ Permanently removes single report
+    utility_part2 = """
+**`/logs`** - View recent 15 action logs
+**`/clearadminlogs`** - Clear admin logs
+**`/searchlogs <keyword>`** - Search logs
+**`/announce <message>`** - Broadcast to all servers
+**`ids`** - Display command IDs
 """
-    admin_embed.add_field(name="🔨 Moderation Commands", value=moderation.strip(), inline=False)
+    
+    admin_embed.add_field(name="🛠️ Admin Utility (1/2)", value=utility_part1.strip(), inline=False)
+    admin_embed.add_field(name="🛠️ Admin Utility (2/2)", value=utility_part2.strip(), inline=False)
+    
+    # Split moderation into MULTIPLE fields (it's very long)
+    mod_part1 = """
+**`/blacklist`** - View blacklisted users
+**`/blacklist add <id> [reason]`** - Ban user from bot
+**`/blacklist remove <id> [reason]`** - Unban user
+**`/blacklist-guild`** - View blacklisted servers
+**`/blacklist-guild add <id> [reason]`** - Ban server
+**`/blacklist-guild remove <id> [reason]`** - Unban server
+"""
+    
+    mod_part2 = """
+**`/addstrike <id> [amt] [reason]`** - Add strikes
+**`/removestrike <id> [amt] [reason]`** - Remove strikes
+**`/clearstrike <id> [reason]`** - Clear all strikes
+**`/strikelist`** - View users with strikes
+"""
+    
+    mod_part3 = """
+**`/bannedword`** - List banned words
+**`/bannedword add <word>`** - Add to filter
+**`/bannedword remove <word>`** - Remove from filter
+**`/listwords`** - Alternative list command
+"""
+    
+    mod_part4 = """
+**`/bypass`** - List bypass users
+**`/bypass add <id> [reason]`** - Grant bypass
+**`/bypass remove <id> [reason]`** - Revoke bypass
+"""
+    
+    mod_part5 = """
+**`/reports [status]`** - View reports
+**`/reportview <id>`** - View report details
+**`/reportclear <id> [reason]`** - Clear user reports
+**`/reportremove <id> [reason]`** - Delete report
+"""
+    
+    admin_embed.add_field(name="🔨 Moderation (1/5)", value=mod_part1.strip(), inline=False)
+    admin_embed.add_field(name="🔨 Moderation (2/5)", value=mod_part2.strip(), inline=False)
+    admin_embed.add_field(name="🔨 Moderation (3/5)", value=mod_part3.strip(), inline=False)
+    admin_embed.add_field(name="🔨 Moderation (4/5)", value=mod_part4.strip(), inline=False)
+    admin_embed.add_field(name="🔨 Moderation (5/5)", value=mod_part5.strip(), inline=False)
     
     admin_embed.set_footer(text=f"Bot Admin Guide • All actions are logged • Page 2/2")
     admin_embed.set_thumbnail(url=bot.user.display_avatar.url)
@@ -3365,21 +3241,6 @@ async def help_cmd(ctx):
         await ctx.send(embed=user_embed, view=Page1View())
     else:
         await ctx.send(embed=user_embed, view=UserOnlyView())
-    
-@bot.hybrid_command(name="stats", description="Check bot statistics.")
-async def stats(ctx):
-    latency = round(bot.latency * 1000, 2)
-    guild_count = len(bot.guilds)
-    
-    embed = discord.Embed(
-        title="📊 Bot Statistics",
-        color=discord.Color.blue()
-    )
-    embed.add_field(name="🏓 Latency", value=f"{latency}ms", inline=True)
-    embed.add_field(name="🌐 Servers", value=guild_count, inline=True)
-    embed.add_field(name="👥 Users", value=sum(g.member_count for g in bot.guilds), inline=True)
-    
-    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="ping", description="Check bot response time.")
 async def ping(ctx):
