@@ -2993,189 +2993,27 @@ async def help_cmd(ctx):
     is_admin = is_bot_admin(ctx.author.id)
     is_owner = ctx.author.id == OWNER_ID
     
-    # Create main embed
-    embed = discord.Embed(
-        title=f"📚 {BOT_NAME} Complete Command Guide",
-        description=f"Comprehensive guide to all available commands.\n\n**Your Access Level:** {'👑 Owner' if is_owner else '✨ Bot Admin' if is_admin else '👤 User'}",
-        color=discord.Color.gold() if is_owner else discord.Color.blue() if is_admin else discord.Color.green()
+    # EMBED 1: User Commands & Features (Everyone sees this)
+    user_embed = discord.Embed(
+        title=f"📚 {BOT_NAME} Command Guide - User Commands",
+        description="Complete guide to user commands and bot features",
+        color=discord.Color.green()
     )
     
-    # OWNER ONLY COMMANDS
-    if is_owner:
-        owner_commands = """
-**`add-admin <user>`**
-└─ Add a user as bot administrator with full moderation permissions
-
-**`remove-admin <user>`**
-└─ Revoke bot admin privileges from a user
-
-**`list-admins`**
-└─ Display all current bot administrators and when they were added
-
-**`leave <server_id> [reason]`**
-└─ Force bot to leave a specific server (DM only)
-└─ Optionally notify server owner with a reason
-"""
-        embed.add_field(name="👑 Owner Only Commands", value=owner_commands.strip(), inline=False)
-    
-    # ADMIN/OWNER COMMANDS
-    if is_admin:
-        admin_utility = """
-**`/sync`**
-└─ Sync all slash commands globally across Discord
-
-**`/messages`**
-└─ Export interaction logs from the last 24 hours (DM only)
-
-**`/allinteractions`**
-└─ Export ALL interaction logs ever recorded (DM only)
-
-**`/clearlogs`**
-└─ Permanently wipe all interaction logs from database (DM only)
-
-**`server-list`**
-└─ Export complete list of all servers bot is in (DM only)
-
-**`/backup`**
-└─ Trigger immediate database backup and receive JSON file (DM only)
-
-**`/data`**
-└─ Export complete bot configuration, stats, and all data (DM only)
-
-**`/logs`**
-└─ View recent 15 moderation action logs
-
-**`/clearadminlogs`**
-└─ Clear all administrative action logs
-
-**`/searchlogs <keyword>`**
-└─ Search interaction logs for specific keyword (20 results max)
-
-**`/announce <message>`**
-└─ Send announcement to ALL server updates channels and owners
-└─ Reaches every server the bot is in
-
-**`ids`**
-└─ Display all slash command IDs for Discord mentions
-"""
-        embed.add_field(name="🛠️ Admin Utility Commands", value=admin_utility.strip(), inline=False)
-        
-        moderation = """
-**`/blacklist`**
-└─ View all blacklisted users
-
-**`/blacklist add <user_id> [reason]`**
-└─ Permanently ban a user from using the bot
-└─ Sends DM notification to user
-
-**`/blacklist remove <user_id> [reason]`**
-└─ Remove user from blacklist and restore access
-└─ Sends DM notification to user
-
-**`/blacklist-guild`**
-└─ View all blacklisted servers
-
-**`/blacklist-guild add <guild_id> [reason]`**
-└─ Blacklist server and auto-leave immediately
-└─ Notifies server owner via DM
-
-**`/blacklist-guild remove <guild_id> [reason]`**
-└─ Remove server from blacklist
-
-**`/addstrike <user_id> [amount] [reason]`**
-└─ Add strike(s) to user (default: 1)
-└─ 3 strikes = automatic blacklist
-└─ Sends DM notification to user
-
-**`/removestrike <user_id> [amount] [reason]`**
-└─ Remove strike(s) from user
-└─ Auto-unban if drops below 3 strikes
-
-**`/clearstrike <user_id> [reason]`**
-└─ Remove ALL strikes from user and unban
-
-**`/strikelist`**
-└─ View all users with active strikes
-
-**`/bannedword`**
-└─ List all banned words in filter
-
-**`/bannedword add <word>`**
-└─ Add word to banned words filter
-└─ Messages containing it will be auto-deleted
-
-**`/bannedword remove <word>`**
-└─ Remove word from filter
-
-**`/listwords`**
-└─ Alternative command to list banned words
-
-**`/bypass`**
-└─ List users with word filter bypass
-
-**`/bypass add <user_id> [reason]`**
-└─ Grant user permission to bypass word filter
-└─ Sends DM notification
-
-**`/bypass remove <user_id> [reason]`**
-└─ Revoke word filter bypass privileges
-└─ Sends DM notification
-
-**`/reports [status]`**
-└─ View reports by status (pending/reviewed/dismissed/all)
-└─ Shows last 20 reports
-
-**`/reportview <report_id>`**
-└─ View detailed information about specific report
-
-**`/reportclear <user_id> [reason]`**
-└─ Clear all reports filed against a user
-
-**`/reportremove <report_id> [reason]`**
-└─ Delete a specific report from system
-"""
-        embed.add_field(name="🔨 Moderation Commands", value=moderation.strip(), inline=False)
-        
-        settings = """
-**`/start`**
-└─ Bot responds to ALL messages in channel (Admin required)
-
-**`/stop`**
-└─ Bot only responds to mentions/triggers (Admin required)
-
-**`/lang [language]`**
-└─ Set channel language (Admin required)
-└─ Dropdown menu for easy selection
-└─ Supports: {', '.join(AVAILABLE_LANGUAGES[:5])}... ({len(AVAILABLE_LANGUAGES)} total)
-
-**`/prefix <new_prefix>`**
-└─ Change command prefix for server (Admin required)
-
-**`/setupupdates [#channel]`**
-└─ Setup channel for bot announcements (Admin required)
-└─ **REQUIRED for bot to function properly**
-
-**`/changeupdates [#channel]`**
-└─ Change existing updates channel (Admin required)
-
-**`/viewupdates`**
-└─ View current updates channel configuration
-"""
-        embed.add_field(name="⚙️ Settings & Configuration", value=settings.strip(), inline=False)
-    
-    # USER COMMANDS (Everyone can see)
     user_commands = """
 **`/help`**
 └─ Display this comprehensive command guide
 
 **`/whoami`**
 └─ Show your Discord profile, roles, and bot status
+└─ Includes strike count and permissions
 
 **`/stats`**
 └─ Display bot statistics (latency, servers, users)
 
 **`/ping`**
 └─ Check bot response time and connection status
+└─ Shows latency with quality indicator
 
 **`/forget`**
 └─ Clear your conversation memory with the AI
@@ -3184,10 +3022,11 @@ async def help_cmd(ctx):
 **`/report <@user> <proof> <reason>`**
 └─ Report a user for misbehavior
 └─ Admins review and can take action
-└─ Attach proof images/links
+└─ Attach proof images/links for evidence
 
 **`/invite`**
 └─ Get bot invite link to add to your server
+└─ Includes all necessary permissions
 
 **`/encode <message>`**
 └─ Encode text using custom cipher
@@ -3197,21 +3036,20 @@ async def help_cmd(ctx):
 └─ Decode previously encoded message
 └─ Triggers strike if decoded text has banned words
 """
-    embed.add_field(name="👤 User Commands", value=user_commands.strip(), inline=False)
+    user_embed.add_field(name="👤 User Commands", value=user_commands.strip(), inline=False)
     
-    # FEATURES & INFO
     features = f"""
 **🎯 Response Modes:**
-• **START Mode:** Bot responds to every message
-• **STOP Mode:** Bot only responds to mentions/triggers
+• **START:** Bot responds to every message in channel
+• **STOP:** Bot only responds to mentions/triggers
 
 **⚡ Strike System:**
 • Users receive strikes for violations
 • 3 strikes = automatic blacklist
-• All actions are logged and users receive DM notifications
+• All actions logged with DM notifications
 
 **🔇 Word Filter:**
-• Banned words are auto-deleted
+• Banned words auto-deleted from messages
 • Admins and bypass users are exempt
 • Strikes issued for repeated violations
 
@@ -3228,35 +3066,235 @@ async def help_cmd(ctx):
 **⏱️ Response Cooldown:**
 • 0.6 second cooldown between responses
 • Prevents API rate limiting
-• Ensures stable service for everyone
-
-**📢 Updates System:**
-• Servers must setup updates channel
-• Admins can send announcements to all servers
-• Important notifications delivered directly
+• Ensures stable service for all users
 """
-    embed.add_field(name="✨ Key Features", value=features.strip(), inline=False)
+    user_embed.add_field(name="✨ Bot Features", value=features.strip(), inline=False)
     
-    # FOOTER & LINKS
-    embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME} • Use /invite to add to your server")
-    embed.set_thumbnail(url=bot.user.display_avatar.url)
+    user_embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME} • Part 1/2")
+    user_embed.set_thumbnail(url=bot.user.display_avatar.url)
     
-    # Create view with buttons
-    view = discord.ui.View()
-    view.add_item(discord.ui.Button(
-        label="Support Server", 
-        url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", 
-        style=discord.ButtonStyle.link,
-        emoji="🆘"
-    ))
-    view.add_item(discord.ui.Button(
-        label="Invite Bot",
-        url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands",
-        style=discord.ButtonStyle.link,
-        emoji="🤖"
-    ))
+    # Send user embed (no buttons)
+    await ctx.send(embed=user_embed)
     
-    await ctx.send(embed=embed, view=view)
+    # EMBED 2: Admin Commands (Only if user is admin/owner)
+    if is_admin:
+        admin_embed = discord.Embed(
+            title=f"🛡️ {BOT_NAME} Command Guide - Admin Commands",
+            description=f"**Your Access Level:** {'👑 Owner' if is_owner else '✨ Bot Admin'}",
+            color=discord.Color.gold() if is_owner else discord.Color.blue()
+        )
+        
+        if is_owner:
+            owner_cmds = """
+**`add-admin <user>`**
+└─ Grant bot admin privileges to a user
+└─ Sends DM notification with permission details
+
+**`remove-admin <user>`**
+└─ Revoke bot admin privileges from a user
+└─ Sends DM notification about removal
+
+**`list-admins`**
+└─ Display all current bot administrators
+└─ Shows who added them and when
+
+**`leave <server_id> [reason]`**
+└─ Force bot to leave a specific server (DM only)
+└─ Optionally notify server owner with reason
+"""
+            admin_embed.add_field(name="👑 Owner Only Commands", value=owner_cmds.strip(), inline=False)
+        
+        utility = """
+**`/sync`**
+└─ Sync all slash commands globally across Discord
+
+**`/messages`**
+└─ Export interaction logs from last 24 hours (DM only)
+
+**`/allinteractions`**
+└─ Export ALL interaction logs ever recorded (DM only)
+
+**`/clearlogs`**
+└─ Permanently wipe all interaction logs (DM only)
+
+**`server-list`**
+└─ Export complete list of all servers bot is in (DM only)
+
+**`/backup`**
+└─ Trigger immediate database backup (DM only)
+└─ Receive JSON file with all data
+
+**`/data`**
+└─ Export complete bot configuration and stats (DM only)
+
+**`/logs`**
+└─ View recent 15 moderation action logs
+
+**`/clearadminlogs`**
+└─ Clear all administrative action logs
+
+**`/searchlogs <keyword>`**
+└─ Search interaction logs for specific keyword
+
+**`/announce <message>`**
+└─ Send announcement to ALL server updates channels
+└─ Also sends DM to all server owners
+
+**`ids`**
+└─ Display all slash command IDs for mentions
+"""
+        admin_embed.add_field(name="🛠️ Admin Utility", value=utility.strip(), inline=False)
+        
+        moderation = """
+**`/blacklist`**
+└─ View all blacklisted users
+
+**`/blacklist add <user_id> [reason]`**
+└─ Permanently ban user from using bot
+└─ Sends DM notification to user
+
+**`/blacklist remove <user_id> [reason]`**
+└─ Remove user from blacklist, restore access
+
+**`/blacklist-guild`**
+└─ View all blacklisted servers
+
+**`/blacklist-guild add <guild_id> [reason]`**
+└─ Blacklist server and auto-leave immediately
+└─ Notifies server owner via DM
+
+**`/blacklist-guild remove <guild_id> [reason]`**
+└─ Remove server from blacklist
+
+**`/addstrike <user_id> [amount] [reason]`**
+└─ Add strike(s) to user (default: 1)
+└─ 3 strikes = automatic blacklist
+
+**`/removestrike <user_id> [amount] [reason]`**
+└─ Remove strike(s) from user
+└─ Auto-unban if drops below 3 strikes
+
+**`/clearstrike <user_id> [reason]`**
+└─ Remove ALL strikes from user and unban
+
+**`/strikelist`**
+└─ View all users with active strikes
+
+**`/bannedword`**
+└─ List all banned words in filter
+
+**`/bannedword add <word>`**
+└─ Add word to filter (auto-delete messages)
+
+**`/bannedword remove <word>`**
+└─ Remove word from filter
+
+**`/bypass`**
+└─ List users with word filter bypass
+
+**`/bypass add <user_id> [reason]`**
+└─ Grant word filter bypass permission
+
+**`/bypass remove <user_id> [reason]`**
+└─ Revoke word filter bypass
+
+**`/reports [status]`**
+└─ View reports (pending/reviewed/dismissed/all)
+
+**`/reportview <report_id>`**
+└─ View detailed report information
+
+**`/reportclear <user_id> [reason]`**
+└─ Clear all reports for a specific user
+
+**`/reportremove <report_id> [reason]`**
+└─ Delete specific report from system
+"""
+        admin_embed.add_field(name="🔨 Moderation", value=moderation.strip(), inline=False)
+        
+        settings = """
+**`/start`**
+└─ Bot responds to ALL messages in channel (Admin)
+
+**`/stop`**
+└─ Bot only responds to mentions/triggers (Admin)
+
+**`/lang [language]`**
+└─ Set channel language (Admin required)
+└─ Dropdown menu with {len(AVAILABLE_LANGUAGES)} languages
+
+**`/prefix <new_prefix>`**
+└─ Change command prefix for server (Admin)
+
+**`/setupupdates [#channel]`**
+└─ Setup channel for bot announcements (Admin)
+└─ **REQUIRED for bot to function**
+
+**`/changeupdates [#channel]`**
+└─ Change existing updates channel (Admin)
+
+**`/viewupdates`**
+└─ View current updates channel configuration
+"""
+        admin_embed.add_field(name="⚙️ Settings & Configuration", value=settings.strip(), inline=False)
+        
+        admin_embed.set_footer(text=f"Admin Guide • All actions are logged • Part 2/2")
+        admin_embed.set_thumbnail(url=bot.user.display_avatar.url)
+        
+        # Create view with buttons (only on 2nd embed)
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(
+            label="Support Server", 
+            url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", 
+            style=discord.ButtonStyle.link,
+            emoji="🆘"
+        ))
+        view.add_item(discord.ui.Button(
+            label="Invite Bot",
+            url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands",
+            style=discord.ButtonStyle.link,
+            emoji="🤖"
+        ))
+        
+        # Send admin embed with buttons
+        await ctx.send(embed=admin_embed, view=view)
+    else:
+        # For non-admins, send a simple 2nd embed with buttons
+        info_embed = discord.Embed(
+            title=f"📌 Additional Information",
+            description="Need more help or want to add the bot to your server?",
+            color=discord.Color.blue()
+        )
+        
+        info_embed.add_field(
+            name="💡 Tips",
+            value="""
+• Use `/start` in a channel to enable auto-responses (Admin only)
+• Use `/lang` to change the bot's language (Admin only)
+• Use `/forget` to clear your conversation history
+• Use `/report` if you encounter rule violations
+""".strip(),
+            inline=False
+        )
+        
+        info_embed.set_footer(text=f"{BOT_NAME} • Created by {OWNER_NAME} • Part 2/2")
+        
+        # Create view with buttons for non-admins
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(
+            label="Support Server", 
+            url=f"{os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}", 
+            style=discord.ButtonStyle.link,
+            emoji="🆘"
+        ))
+        view.add_item(discord.ui.Button(
+            label="Invite Bot",
+            url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands",
+            style=discord.ButtonStyle.link,
+            emoji="🤖"
+        ))
+        
+        await ctx.send(embed=info_embed, view=view)
     
 @bot.hybrid_command(name="stats", description="Check bot statistics.")
 async def stats(ctx):
