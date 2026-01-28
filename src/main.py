@@ -2116,7 +2116,7 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     log_embed.set_footer(text=f"Report ID: {report_id} | Status: PENDING | Reported by: {ctx.author.name}")
     
     # Send to reports/admin logs channel with action buttons
-    channel = bot.get_channel(LOG_CHANNELS['admin_logs'])
+    channel = bot.get_channel(LOG_CHANNELS['reports'])
     if channel:
         view = ReportActionView(report_id, member.id, member.name)
         await channel.send(embed=log_embed, view=view)
