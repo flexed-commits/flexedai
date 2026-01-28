@@ -2394,7 +2394,7 @@ You have been promoted to **Bot Admin** for {BOT_NAME} Bot by {ctx.author.name}!
 
 **Welcome to the admin team! 🚀**
 
-*Granted: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Granted: {datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}*
 """
     
     dm_sent = await send_user_dm(str(user.id), dm_message)
@@ -2404,7 +2404,7 @@ You have been promoted to **Bot Admin** for {BOT_NAME} Bot by {ctx.author.name}!
         title="✨ New Bot Admin Appointed",
         description="A new administrator has been added to the bot team.",
         color=discord.Color.gold(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.UTC)
     )
     
     # User information
@@ -2424,12 +2424,12 @@ You have been promoted to **Bot Admin** for {BOT_NAME} Bot by {ctx.author.name}!
     # Timestamp
     log_embed.add_field(
         name="📅 Appointment Date",
-        value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'),
+        value=datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S UTC'),
         inline=True
     )
     
-    # Account info
-    account_age = (datetime.datetime.utcnow() - user.created_at).days
+    # Account info - FIXED timezone issue
+    account_age = (datetime.datetime.now(datetime.UTC) - user.created_at).days
     log_embed.add_field(
         name="ℹ️ Account Information",
         value=f"**Created:** {user.created_at.strftime('%Y-%m-%d')}\n**Age:** {account_age} days old",
