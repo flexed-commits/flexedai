@@ -8,6 +8,7 @@ from groq import AsyncGroq
 from collections import deque
 import random
 from patreon import PatreonPromoter
+from topgg import init_vote_db, start_webhook_server, vote_reminder_loop
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -131,7 +132,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-
+init_vote_db()
 
 def migrate_json_to_db():
     if not os.path.exists(JSON_FILE):
@@ -364,13 +365,19 @@ class AIBot(commands.Bot):
         super().__init__(command_prefix=get_prefix, intents=discord.Intents.all(), help_command=None)
         self.groq_client = AsyncGroq(api_key=GROQ_API_KEY)
         self.memory = {}
-        self.reaction_chance = 0.10  # 10% chance to add reactions; 10/100 = 10% i.e 0.10
+        self.reaction_chance = 0.10
         self.last_response_time = 0
         
     async def setup_hook(self):
         self.daily_backup.start()
+        # Start webhook server
+        asyncio.create_task(start_webhook_server(self, port=8080))
+        # Start vote reminder loop
+        asyncio.create_task(vote_reminder_loop(self))
         print(f"✅ {self.user} Online | All Commands Locked & Loaded")
         print(f"🔄 Daily backup task started")
+        print(f"🗳️ Top.gg webhook server starting...")
+        print(f"🔔 Vote reminder loop started")
 
 # Initialize Patreon promoter (OUTSIDE the class, at module level)
 patreon_promoter = PatreonPromoter(
@@ -1983,7 +1990,81 @@ class ReportActionView(discord.ui.View):
             ephemeral=True
         )
 
-
+@bot.hybrid_command(name="votereminder", description="Manage your vote reminders")
+async def vote_reminder_settings(ctx, action: str = None):
+    """Manage vote reminder settings"""
+    
+    if action is None:
+        # Show current status
+        status = db_query(
+            "SELECT enabled, last_vote, next_reminder, total_votes FROM vote_reminders WHERE user_id = ?",
+            (str(ctx.author.id),),
+            fetch=True
+        )
+        
+        if not status:
+            embed = discord.Embed(
+                title="🔔 Vote Reminders",
+                description="You haven't voted yet! Vote on Top.gg to unlock reminders.",
+                color=discord.Color.orange()
+            )
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="Vote Now",
+                url=f"https://top.gg/bot/{bot.user.id}/vote",
+                style=discord.ButtonStyle.link,
+                emoji="🗳️"
+            ))
+            await ctx.send(embed=embed, view=view)
+            return
+        
+        enabled, last_vote, next_reminder, total_votes = status[0]
+        
+        embed = discord.Embed(
+            title="🔔 Your Vote Reminder Settings",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(
+            name="📊 Status",
+            value=f"**Reminders:** {'✅ Enabled' if enabled else '❌ Disabled'}\n**Total Votes:** {total_votes}",
+            inline=False
+        )
+        
+        if last_vote:
+            embed.add_field(name="🕐 Last Vote", value=last_vote, inline=True)
+        if next_reminder and enabled:
+            embed.add_field(name="⏰ Next Reminder", value=next_reminder, inline=True)
+        
+        embed.add_field(
+            name="⚙️ Commands",
+            value="`/votereminder enable` - Enable reminders\n`/votereminder disable` - Disable reminders",
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
+        return
+    
+    if action.lower() == "enable":
+        # Enable reminders
+        next_reminder = (datetime.utcnow() + timedelta(hours=12)).isoformat()
+        db_query(
+            "UPDATE vote_reminders SET enabled = 1, next_reminder = ? WHERE user_id = ?",
+            (next_reminder, str(ctx.author.id))
+        )
+        await ctx.send("✅ **Vote reminders enabled!** I'll remind you every 12 hours.")
+    
+    elif action.lower() == "disable":
+        # Disable reminders
+        db_query(
+            "UPDATE vote_reminders SET enabled = 0 WHERE user_id = ?",
+            (str(ctx.author.id),)
+        )
+        await ctx.send("❌ **Vote reminders disabled.** You won't receive any more reminders.")
+    
+    else:
+        await ctx.send("❌ Invalid action. Use `enable` or `disable`.")
+        
 # --- REPORT COMMAND ---
 @bot.hybrid_command(name="report", description="Report a user for misbehavior.")
 async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
