@@ -2382,7 +2382,7 @@ You have been promoted to **Bot Admin** for {BOT_NAME} Bot by {ctx.author.name}!
     log_embed.set_footer(text=f"Admin ID: {user.id} • Appointed by: {ctx.author.name}")
     
     # Send to admin logs channel
-    log_sent = await log_to_channel(bot, 'admin_logs', log_embed)
+    await log_to_channel(bot, 'admin_logs', log_embed)
     
     # Confirm to owner with detailed embed
     confirm_embed = discord.Embed(
@@ -2405,7 +2405,7 @@ You have been promoted to **Bot Admin** for {BOT_NAME} Bot by {ctx.author.name}!
     
     confirm_embed.add_field(
         name="📬 Notifications",
-        value=f"**DM to User:** {'✅ Sent' if dm_sent else '❌ Failed'}\n**Admin Log:** {'✅ Logged' if log_sent else '❌ Failed'}",
+        value=f"**DM to User:** {'✅ Sent' if dm_sent else '❌ Failed'}\n**Admin Log:** ✅ Logged",
         inline=False
     )
     
@@ -2432,7 +2432,7 @@ async def remove_admin(ctx, user: discord.User):
         await ctx.send("❌ **Cannot remove owner from admin privileges.**")
         return
     
-    # FIX: Changed table check from word_filter_bypass to bot_admins
+    # Check if user is actually an admin
     existing = db_query("SELECT added_by, added_at FROM bot_admins WHERE user_id = ?", (str(user.id),), fetch=True)
     
     if not existing:
@@ -2478,15 +2478,44 @@ Thank you for your service! 🙏
         color=discord.Color.orange(),
         timestamp=datetime.datetime.utcnow()
     )
-    log_embed.add_field(name="👤 Removed Admin", value=f"{user.mention}\n**Username:** {user.name}\n**ID:** `{user.id}`", inline=True)
-    log_embed.add_field(name="⚖️ Removed By", value=f"{ctx.author.mention}\n**Username:** {ctx.author.name}\n**ID:** `{ctx.author.id}`", inline=True)
-    log_embed.add_field(name="📅 Removal Date", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
-    log_embed.add_field(name="📜 Admin History", value=f"**Originally Added:** {added_at}\n**Added By:** <@{added_by}>", inline=True)
-    log_embed.add_field(name="📬 DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
+    log_embed.add_field(
+        name="👤 Removed Admin", 
+        value=f"{user.mention}\n**Username:** {user.name}\n**ID:** `{user.id}`", 
+        inline=True
+    )
+    log_embed.add_field(
+        name="⚖️ Removed By", 
+        value=f"{ctx.author.mention}\n**Username:** {ctx.author.name}\n**ID:** `{ctx.author.id}`", 
+        inline=True
+    )
+    log_embed.add_field(
+        name="📅 Removal Date", 
+        value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), 
+        inline=True
+    )
+    log_embed.add_field(
+        name="📜 Admin History", 
+        value=f"**Originally Added:** {added_at}\n**Added By:** <@{added_by}>", 
+        inline=True
+    )
+    log_embed.add_field(
+        name="📬 DM Notification", 
+        value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", 
+        inline=True
+    )
+    
+    # Current admin count
+    total_admins = len(db_query("SELECT user_id FROM bot_admins", fetch=True))
+    log_embed.add_field(
+        name="📊 Remaining Admins",
+        value=f"**{total_admins}** bot admin(s)",
+        inline=True
+    )
     
     log_embed.set_thumbnail(url=user.display_avatar.url)
     log_embed.set_footer(text=f"Admin ID: {user.id} | Removed by: {ctx.author.name}")
     
+    # Send to admin logs channel
     await log_to_channel(bot, 'admin_logs', log_embed)
     
     # Confirm to owner
@@ -2495,8 +2524,24 @@ Thank you for your service! 🙏
         description=f"{user.mention} has been removed from **Bot Admin**.",
         color=discord.Color.orange()
     )
-    embed.add_field(name="User", value=f"{user.name} (`{user.id}`)", inline=False)
-    embed.add_field(name="Removed By", value=ctx.author.name, inline=True)
+    embed.add_field(
+        name="👤 Removed Admin",
+        value=f"**Name:** {user.name}\n**ID:** `{user.id}`",
+        inline=True
+    )
+    embed.add_field(
+        name="📊 Status",
+        value=f"**Remaining Admins:** {total_admins}\n**Removed By:** {ctx.author.name}",
+        inline=True
+    )
+    embed.add_field(
+        name="📬 Notifications",
+        value=f"**DM to User:** {'✅ Sent' if dm_sent else '❌ Failed'}\n**Admin Log:** ✅ Logged",
+        inline=False
+    )
+    
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.set_footer(text="Admin privileges have been revoked")
     
     await ctx.send(embed=embed)
 
