@@ -1824,106 +1824,165 @@ class ReportActionView(discord.ui.View):
     
     @discord.ui.button(label="Add Strike", style=discord.ButtonStyle.danger, emoji="⚡", custom_id="add_strike")
     async def add_strike_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check if user is admin
-        if not is_bot_admin(interaction.user.id):
-            await interaction.response.send_message("❌ Only bot admins can add strikes.", ephemeral=True)
-            return
-        
-        # Add strike
-        res = db_query("SELECT strikes FROM users WHERE user_id = ?", (str(self.reported_user_id),), fetch=True)
-        current_strikes = res[0][0] if res else 0
-        new_strikes = current_strikes + 1
-        is_banned = 1 if new_strikes >= 3 else 0
-        
-        db_query("INSERT OR REPLACE INTO users (user_id, strikes, blacklisted) VALUES (?, ?, ?)", 
-                (str(self.reported_user_id), new_strikes, is_banned))
-        
-        # Update report status
-        db_query("UPDATE reports SET status = 'actioned' WHERE report_id = ?", (self.report_id,))
-        
-        log_msg = f"Report #{self.report_id}: Strike added to {self.reported_user_id} by {interaction.user.name} ({interaction.user.id}). Total: {new_strikes}/3. Reason: Action from report"
-        if is_banned:
-            log_msg += f" | User {self.reported_user_id} AUTO-BLACKLISTED."
-        db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
-        
-        # Send DM to reported user
-        dm_message = f"⚡ **Strike Issued**\n\n**You have received 1 strike**\n\n**Reason:** Action taken from user report #{self.report_id}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
-        if is_banned:
-            dm_message += f"🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from {BOT_NAME} Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}"
-        else:
-            strikes_remaining = 3 - new_strikes
-            dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Be respectful to others\n• Follow server and bot rules"
-        
-        dm_message += f"\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
-        dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
-        
-        # Log to strikes channel
-        log_embed = discord.Embed(
-            title="⚡ Strike Issued (From Report)" if not is_banned else "🚫 User Auto-Blacklisted (3 Strikes - From Report)",
-            description=f"Strike added from report #{self.report_id}.",
-            color=discord.Color.orange() if not is_banned else discord.Color.dark_red(),
-            timestamp=datetime.datetime.utcnow()
-        )
-        log_embed.add_field(name="👤 User ID", value=f"`{self.reported_user_id}`", inline=True)
-        log_embed.add_field(name="⚡ Strikes Added", value="1", inline=True)
-        log_embed.add_field(name="📊 Total Strikes", value=f"{new_strikes}/3", inline=True)
-        log_embed.add_field(name="⚖️ Actioned By", value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=True)
-        log_embed.add_field(name="🆔 Report ID", value=f"`#{self.report_id}`", inline=True)
-        log_embed.add_field(name="📬 DM Sent", value="✅ Delivered" if dm_sent else "❌ Failed", inline=True)
-        log_embed.add_field(name="📝 Reason", value=f"Action from report #{self.report_id}", inline=False)
-        
-        await log_to_channel(bot, 'strikes', log_embed)
-        
-        # Update embed
-        embed = interaction.message.embeds[0]
-        embed.color = discord.Color.orange()
-        embed.set_footer(text=f"Report ID: {self.report_id} | Status: ACTIONED (Strike) by {interaction.user.name}")
-        
-        await interaction.response.edit_message(embed=embed, view=self)
-        await interaction.followup.send(f"✅ Added 1 strike to <@{self.reported_user_id}>. Total: {new_strikes}/3" + (" 🚫 **User auto-blacklisted!**" if is_banned else ""), ephemeral=True)
+    # Check if user is admin
+    if not is_bot_admin(interaction.user.id):
+        await interaction.response.send_message("❌ Only bot admins can add strikes.", ephemeral=True)
+        return
     
-    @discord.ui.button(label="Blacklist", style=discord.ButtonStyle.danger, emoji="🚫", custom_id="blacklist")
-    async def blacklist_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check if user is admin
-        if not is_bot_admin(interaction.user.id):
-            await interaction.response.send_message("❌ Only bot admins can blacklist users.", ephemeral=True)
-            return
-        
-        # Blacklist user
-        db_query("INSERT OR REPLACE INTO users (user_id, blacklisted) VALUES (?, 1)", (str(self.reported_user_id),))
-        
-        # Update report status
-        db_query("UPDATE reports SET status = 'actioned' WHERE report_id = ?", (self.report_id,))
-        
-        log_msg = f"Report #{self.report_id}: User {self.reported_user_id} BLACKLISTED by {interaction.user.name} ({interaction.user.id}). Reason: Action from report"
-        db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
-        
-        # Send DM
-        dm_message = f"🚫 **You have been blacklisted from {BOT_NAME} Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
-        dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
-        
-        # Log to blacklist channel
-        log_embed = discord.Embed(
-            title="🚫 User Blacklisted (From Report)",
-            description=f"User blacklisted from report #{self.report_id}.",
-            color=discord.Color.dark_red(),
-            timestamp=datetime.datetime.utcnow()
+    # Add strike
+    res = db_query("SELECT strikes FROM users WHERE user_id = ?", (str(self.reported_user_id),), fetch=True)
+    current_strikes = res[0][0] if res else 0
+    new_strikes = current_strikes + 1
+    is_banned = 1 if new_strikes >= 3 else 0
+    
+    db_query("INSERT OR REPLACE INTO users (user_id, strikes, blacklisted) VALUES (?, ?, ?)", 
+            (str(self.reported_user_id), new_strikes, is_banned))
+    
+    # Update report status
+    db_query("UPDATE reports SET status = 'actioned' WHERE report_id = ?", (self.report_id,))
+    
+    log_msg = f"Report #{self.report_id}: Strike added to {self.reported_user_id} by {interaction.user.name} ({interaction.user.id}). Total: {new_strikes}/3. Reason: Action from report"
+    if is_banned:
+        log_msg += f" | User {self.reported_user_id} AUTO-BLACKLISTED."
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+    
+    # Send DM to reported user
+    dm_message = f"⚡ **Strike Issued**\n\n**You have received 1 strike**\n\n**Reason:** Action taken from user report #{self.report_id}\n**Total Strikes:** {new_strikes}/3\n**Issued By:** Administrator\n\n"
+    if is_banned:
+        dm_message += f"🚫 **ACCOUNT SUSPENDED**\n\nYou have reached 3 strikes and have been automatically blacklisted from {BOT_NAME} Bot.\n\n**Appeal Process:**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}"
+    else:
+        strikes_remaining = 3 - new_strikes
+        dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Be respectful to others\n• Follow server and bot rules"
+    
+    dm_message += f"\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+    dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
+    
+    # Log to strikes channel
+    log_embed = discord.Embed(
+        title="⚡ Strike Issued (From Report)" if not is_banned else "🚫 User Auto-Blacklisted (3 Strikes - From Report)",
+        description=f"Strike added from report #{self.report_id}.",
+        color=discord.Color.orange() if not is_banned else discord.Color.dark_red(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    log_embed.add_field(name="👤 User ID", value=f"`{self.reported_user_id}`", inline=True)
+    log_embed.add_field(name="👤 User Name", value=self.reported_user_name, inline=True)
+    log_embed.add_field(name="⚡ Strikes Added", value="1", inline=True)
+    log_embed.add_field(name="📊 Total Strikes", value=f"{new_strikes}/3", inline=True)
+    log_embed.add_field(name="⚖️ Actioned By", value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=True)
+    log_embed.add_field(name="📬 DM Sent", value="✅ Delivered" if dm_sent else "❌ Failed", inline=True)
+    log_embed.add_field(name="🆔 Report ID", value=f"`#{self.report_id}`", inline=True)
+    log_embed.add_field(name="📌 Status", value="🚫 **AUTO-BANNED**" if is_banned else f"⚠️ Active ({3-new_strikes} remaining)", inline=True)
+    log_embed.add_field(name="📝 Reason", value=f"Action from report #{self.report_id}", inline=False)
+    
+    await log_to_channel(bot, 'strikes', log_embed)
+    
+    # ALSO log to reports channel
+    report_log_embed = discord.Embed(
+        title=f"⚡ Report #{self.report_id} - Strike Issued",
+        description=f"A strike was issued based on this report.",
+        color=discord.Color.orange() if not is_banned else discord.Color.dark_red(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    report_log_embed.add_field(name="👤 Reported User", value=f"<@{self.reported_user_id}>\n`{self.reported_user_id}`", inline=True)
+    report_log_embed.add_field(name="⚡ Strikes", value=f"{new_strikes}/3", inline=True)
+    report_log_embed.add_field(name="⚖️ Actioned By", value=f"{interaction.user.mention}", inline=True)
+    report_log_embed.add_field(name="📌 Status", value="🚫 **AUTO-BANNED**" if is_banned else "⚠️ Active", inline=True)
+    report_log_embed.add_field(name="📬 DM Sent", value="✅ Yes" if dm_sent else "❌ Failed", inline=True)
+    report_log_embed.add_field(name="🆔 Report ID", value=f"`#{self.report_id}`", inline=True)
+    
+    await log_to_channel(bot, 'reports', report_log_embed)
+    
+    # Update embed
+    embed = interaction.message.embeds[0]
+    embed.color = discord.Color.orange() if not is_banned else discord.Color.dark_red()
+    embed.set_footer(text=f"Report ID: {self.report_id} | Status: ACTIONED (Strike) by {interaction.user.name} | {new_strikes}/3 strikes" + (" | AUTO-BANNED" if is_banned else ""))
+    
+    await interaction.response.edit_message(embed=embed, view=self)
+    await interaction.followup.send(
+        f"✅ **Strike Added Successfully**\n\n"
+        f"**User:** <@{self.reported_user_id}>\n"
+        f"**New Strike Total:** {new_strikes}/3\n"
+        f"**Status:** {'🚫 AUTO-BLACKLISTED' if is_banned else '⚠️ Active'}\n"
+        f"**DM Notification:** {'✅ Sent' if dm_sent else '❌ Failed'}", 
+        ephemeral=True
+    )
+
+@discord.ui.button(label="Blacklist", style=discord.ButtonStyle.danger, emoji="🚫", custom_id="blacklist")
+async def blacklist_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    # Check if user is admin
+    if not is_bot_admin(interaction.user.id):
+        await interaction.response.send_message("❌ Only bot admins can blacklist users.", ephemeral=True)
+        return
+    
+    # Check if already blacklisted
+    existing_blacklist = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(self.reported_user_id),), fetch=True)
+    if existing_blacklist and existing_blacklist[0][0] == 1:
+        await interaction.response.send_message(
+            f"⚠️ **User Already Blacklisted**\n\n<@{self.reported_user_id}> is already blacklisted from the bot.",
+            ephemeral=True
         )
-        log_embed.add_field(name="👤 User ID", value=f"`{self.reported_user_id}`", inline=True)
-        log_embed.add_field(name="⚖️ Actioned By", value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=True)
-        log_embed.add_field(name="🆔 Report ID", value=f"`#{self.report_id}`", inline=True)
-        log_embed.add_field(name="📝 Reason", value=f"Action from report #{self.report_id}", inline=False)
-        log_embed.add_field(name="📬 DM Notification", value="✅ Delivered" if dm_sent else "❌ Failed", inline=True)
-        
-        await log_to_channel(bot, 'blacklist', log_embed)
-        
-        # Update embed
-        embed = interaction.message.embeds[0]
-        embed.color = discord.Color.dark_red()
-        embed.set_footer(text=f"Report ID: {self.report_id} | Status: ACTIONED (Blacklist) by {interaction.user.name}")
-        
-        await interaction.response.edit_message(embed=embed, view=self)
-        await interaction.followup.send(f"✅ Blacklisted <@{self.reported_user_id}>", ephemeral=True)
+        return
+    
+    # Blacklist user
+    db_query("INSERT OR REPLACE INTO users (user_id, blacklisted) VALUES (?, 1)", (str(self.reported_user_id),))
+    
+    # Update report status
+    db_query("UPDATE reports SET status = 'actioned' WHERE report_id = ?", (self.report_id,))
+    
+    log_msg = f"Report #{self.report_id}: User {self.reported_user_id} BLACKLISTED by {interaction.user.name} ({interaction.user.id}). Reason: Action from report"
+    db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
+    
+    # Send DM
+    dm_message = f"🚫 **You have been blacklisted from {BOT_NAME} Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+    dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
+    
+    # Log to blacklist channel
+    log_embed = discord.Embed(
+        title="🚫 User Blacklisted (From Report)",
+        description=f"User blacklisted from report #{self.report_id}.",
+        color=discord.Color.dark_red(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    log_embed.add_field(name="👤 User ID", value=f"`{self.reported_user_id}`", inline=True)
+    log_embed.add_field(name="👤 User Name", value=self.reported_user_name, inline=True)
+    log_embed.add_field(name="⚖️ Actioned By", value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=True)
+    log_embed.add_field(name="🆔 Report ID", value=f"`#{self.report_id}`", inline=True)
+    log_embed.add_field(name="📬 DM Notification", value="✅ Delivered" if dm_sent else "❌ Failed (DMs closed)", inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="📝 Reason", value=f"Action from report #{self.report_id}", inline=False)
+    
+    await log_to_channel(bot, 'blacklist', log_embed)
+    
+    # ALSO log to reports channel
+    report_log_embed = discord.Embed(
+        title=f"🚫 Report #{self.report_id} - User Blacklisted",
+        description=f"User was blacklisted based on this report.",
+        color=discord.Color.dark_red(),
+        timestamp=datetime.datetime.utcnow()
+    )
+    report_log_embed.add_field(name="👤 Blacklisted User", value=f"<@{self.reported_user_id}>\n`{self.reported_user_id}`", inline=True)
+    report_log_embed.add_field(name="⚖️ Actioned By", value=f"{interaction.user.mention}", inline=True)
+    report_log_embed.add_field(name="📬 DM Sent", value="✅ Yes" if dm_sent else "❌ Failed", inline=True)
+    report_log_embed.add_field(name="🆔 Report ID", value=f"`#{self.report_id}`", inline=True)
+    report_log_embed.add_field(name="🕐 Actioned At", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    
+    await log_to_channel(bot, 'reports', report_log_embed)
+    
+    # Update embed
+    embed = interaction.message.embeds[0]
+    embed.color = discord.Color.dark_red()
+    embed.set_footer(text=f"Report ID: {self.report_id} | Status: ACTIONED (Blacklist) by {interaction.user.name} | User permanently banned")
+    
+    await interaction.response.edit_message(embed=embed, view=self)
+    await interaction.followup.send(
+        f"✅ **User Blacklisted Successfully**\n\n"
+        f"**User:** <@{self.reported_user_id}>\n"
+        f"**Status:** 🚫 Permanently Banned\n"
+        f"**DM Notification:** {'✅ Sent' if dm_sent else '❌ Failed'}\n\n"
+        f"This user can no longer use the bot.", 
+        ephemeral=True
+    )
+
 
 # --- REPORT COMMAND ---
 @bot.hybrid_command(name="report", description="Report a user for misbehavior.")
