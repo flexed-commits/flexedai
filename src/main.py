@@ -2182,7 +2182,7 @@ async def view_reports(ctx, status: str = "pending"):
 @bot.hybrid_command(name="reportview", description="Owner/Admin: View detailed report.")
 @owner_or_bot_admin()
 async def view_report_detail(ctx, report_id: int):
-    """View detailed information about a specific report"""
+    """View detailed information about a specific report (including deleted ones)"""
     report = db_query("SELECT * FROM reports WHERE report_id = ?", (report_id,), fetch=True)
     
     if not report:
@@ -2190,12 +2190,22 @@ async def view_report_detail(ctx, report_id: int):
         return
     
     report = report[0]
-    r_id, reporter_id, reporter_name, reported_id, reported_name, guild_id, guild_name, reason, proof, timestamp, status = report
+    r_id, reporter_id, reporter_name, reported_id, reported_name, guild_id, guild_name, reason, proof, timestamp, status, is_deleted = report
+    
+    # Determine color based on status
+    if is_deleted:
+        embed_color = discord.Color.dark_gray()
+    elif status == 'actioned':
+        embed_color = discord.Color.green()
+    elif status == 'claimed':
+        embed_color = discord.Color.blue()
+    else:
+        embed_color = discord.Color.orange()
     
     embed = discord.Embed(
         title=f"📋 Report Details - #{r_id}",
-        description=f"**Status:** {status.upper()}",
-        color=discord.Color.blue(),
+        description=f"**Status:** {status.upper()}" + (" 🗑️ **(DELETED/ARCHIVED)**" if is_deleted else ""),
+        color=embed_color,
         timestamp=datetime.datetime.utcnow()
     )
     
@@ -2207,6 +2217,9 @@ async def view_report_detail(ctx, report_id: int):
     embed.add_field(name="📎 Proof", value=proof if proof != "No proof attached" else "No attachments", inline=False)
     embed.add_field(name="📅 Submitted", value=timestamp, inline=True)
     
+    if is_deleted:
+        embed.add_field(name="🗑️ Archive Status", value="This report has been cleared/removed but remains viewable for record-keeping.", inline=False)
+    
     # Check reported user's current status
     user_status = db_query("SELECT strikes, blacklisted FROM users WHERE user_id = ?", (str(reported_id),), fetch=True)
     if user_status and user_status[0]:
@@ -2217,7 +2230,7 @@ async def view_report_detail(ctx, report_id: int):
     
     embed.add_field(name="📊 User Status", value=status_text, inline=True)
     
-    embed.set_footer(text=f"Report ID: {r_id}")
+    embed.set_footer(text=f"Report ID: {r_id}" + (" | ARCHIVED" if is_deleted else ""))
     
     await ctx.send(embed=embed)
 
