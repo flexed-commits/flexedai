@@ -137,7 +137,7 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
     print(f"\n▶️ PROCESSING VOTE for user {user_id}")
     
     try:
-        # Log the vote
+        # Log the vote (always log, even test votes)
         print("   📝 Logging vote to database...")
         db_query(
             "INSERT INTO vote_logs (user_id, is_weekend, vote_type) VALUES (?, ?, ?)",
@@ -145,28 +145,40 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
         )
         print("   ✅ Vote logged")
         
-        # Update vote count
-        print("   🔢 Updating vote count...")
-        existing = db_query(
-            "SELECT total_votes FROM vote_reminders WHERE user_id = ?",
-            (str(user_id),),
-            fetch=True
-        )
-        
-        if existing:
-            total_votes = existing[0][0] + 1
-            db_query(
-                "UPDATE vote_reminders SET last_vote = ?, total_votes = ? WHERE user_id = ?",
-                (datetime.utcnow().isoformat(), total_votes, str(user_id))
+        # Only update vote count for NON-TEST votes
+        total_votes = 0
+        if vote_type != 'test':
+            print("   🔢 Updating vote count...")
+            existing = db_query(
+                "SELECT total_votes FROM vote_reminders WHERE user_id = ?",
+                (str(user_id),),
+                fetch=True
             )
-            print(f"   ✅ Updated count to {total_votes}")
+            
+            if existing:
+                total_votes = existing[0][0] + 1
+                db_query(
+                    "UPDATE vote_reminders SET last_vote = ?, total_votes = ? WHERE user_id = ?",
+                    (datetime.utcnow().isoformat(), total_votes, str(user_id))
+                )
+                print(f"   ✅ Updated count to {total_votes}")
+            else:
+                total_votes = 1
+                db_query(
+                    "INSERT INTO vote_reminders (user_id, last_vote, total_votes) VALUES (?, ?, ?)",
+                    (str(user_id), datetime.utcnow().isoformat(), total_votes)
+                )
+                print(f"   ✅ Created new entry with count {total_votes}")
         else:
-            total_votes = 1
-            db_query(
-                "INSERT INTO vote_reminders (user_id, last_vote, total_votes) VALUES (?, ?, ?)",
-                (str(user_id), datetime.utcnow().isoformat(), total_votes)
+            print("   ℹ️ Test vote - skipping vote count update")
+            # Get existing count for display purposes
+            existing = db_query(
+                "SELECT total_votes FROM vote_reminders WHERE user_id = ?",
+                (str(user_id),),
+                fetch=True
             )
-            print(f"   ✅ Created new entry with count {total_votes}")
+            total_votes = existing[0][0] if existing else 0
+            print(f"   ℹ️ User's current vote count: {total_votes}")
         
         # Get user
         print(f"   👤 Fetching user {user_id}...")
@@ -188,7 +200,7 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
             
             embed = discord.Embed(
                 title="🗳️ New Vote Received!" if vote_type != 'test' else "🧪 Test Vote Received!",
-                description=f"Thank you for voting!" if vote_type != 'test' else "Test vote from Top.gg webhook",
+                description=f"Thank you for voting!" if vote_type != 'test' else "Test vote from Top.gg webhook (not counted)",
                 color=discord.Color.gold() if vote_type != 'test' else discord.Color.blue(),
                 timestamp=datetime.utcnow()
             )
@@ -199,10 +211,15 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
             else:
                 embed.add_field(name="👤 Voter", value=f"User ID: `{user_id}`", inline=True)
             
-            embed.add_field(name="📊 Total Votes", value=str(total_votes), inline=True)
+            # Show current total (not incremented for test votes)
+            embed.add_field(
+                name="📊 Total Votes", 
+                value=f"{total_votes}" + (" (test - not counted)" if vote_type == 'test' else ""), 
+                inline=True
+            )
             embed.add_field(name="🎁 Weekend Bonus", value="Yes ✨" if is_weekend else "No", inline=True)
             embed.add_field(name="🔖 Vote Type", value=vote_type.capitalize(), inline=True)
-            embed.set_footer(text="Vote on Top.gg")
+            embed.set_footer(text="Vote on Top.gg" if vote_type != 'test' else "Test vote - count not incremented")
             
             try:
                 msg = await vote_channel.send(embed=embed)
@@ -219,64 +236,77 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
             
             dm_embed = discord.Embed(
                 title="🎉 Thank you for voting!" if vote_type != 'test' else "🧪 Test Vote Received!",
-                description=f"Your vote has been recorded! You now have **{total_votes}** total vote(s).",
+                description=f"Your vote has been recorded! You now have **{total_votes}** total vote(s)." if vote_type != 'test' else f"This is a test vote and was **not counted**.\n\nYour current vote count: **{total_votes}**",
                 color=discord.Color.green() if vote_type != 'test' else discord.Color.blue(),
                 timestamp=datetime.utcnow()
             )
             
-            dm_embed.add_field(
-                name="🎁 Rewards",
-                value="• Voter role assigned\n• Helping the bot grow!\n• Your vote matters! ❤️" + ("\n• **Weekend Bonus!** 🎊" if is_weekend else ""),
-                inline=False
-            )
+            if vote_type != 'test':
+                dm_embed.add_field(
+                    name="🎁 Rewards",
+                    value="• Voter role assigned\n• Helping the bot grow!\n• Your vote matters! ❤️" + ("\n• **Weekend Bonus!** 🎊" if is_weekend else ""),
+                    inline=False
+                )
+                
+                dm_embed.add_field(
+                    name="⏰ Vote Again",
+                    value="You can vote again in 12 hours!\nClick below to enable reminders.",
+                    inline=False
+                )
+            else:
+                dm_embed.add_field(
+                    name="ℹ️ About Test Votes",
+                    value="Test votes are used to verify the webhook is working correctly. They don't count toward your total or give rewards.",
+                    inline=False
+                )
             
-            dm_embed.add_field(
-                name="⏰ Vote Again",
-                value="You can vote again in 12 hours!\nClick below to enable reminders.",
-                inline=False
-            )
-            
-            dm_embed.set_footer(text="Vote every 12 hours")
+            dm_embed.set_footer(text="Vote every 12 hours" if vote_type != 'test' else "Test vote from Top.gg")
             
             try:
-                await user.send(embed=dm_embed, view=view)
+                if vote_type != 'test':
+                    await user.send(embed=dm_embed, view=view)
+                else:
+                    await user.send(embed=dm_embed)  # No reminder button for test votes
                 print(f"   ✅ DM sent successfully")
             except discord.Forbidden:
                 print(f"   ⚠️ DMs disabled for user")
             except Exception as e:
                 print(f"   ❌ DM error: {e}")
         
-        # Assign voter role
-        print("   🎭 Attempting to assign voter role...")
-        try:
-            support_server_id = int(os.getenv('SUPPORT_SERVER_ID', '0'))
-            print(f"   Support server ID: {support_server_id}")
-            
-            if support_server_id:
-                guild = bot.get_guild(support_server_id)
-                if guild:
-                    print(f"   ✅ Guild found: {guild.name}")
-                    member = guild.get_member(int(user_id))
-                    if member:
-                        print(f"   ✅ Member found: {member.name}")
-                        role = guild.get_role(VOTER_ROLE_ID)
-                        if role:
-                            print(f"   ✅ Role found: {role.name}")
-                            if role not in member.roles:
-                                await member.add_roles(role, reason="Voted on Top.gg")
-                                print(f"   ✅ Role assigned!")
+        # Assign voter role ONLY for real votes (not test votes)
+        if vote_type != 'test':
+            print("   🎭 Attempting to assign voter role...")
+            try:
+                support_server_id = int(os.getenv('SUPPORT_SERVER_ID', '0'))
+                print(f"   Support server ID: {support_server_id}")
+                
+                if support_server_id:
+                    guild = bot.get_guild(support_server_id)
+                    if guild:
+                        print(f"   ✅ Guild found: {guild.name}")
+                        member = guild.get_member(int(user_id))
+                        if member:
+                            print(f"   ✅ Member found: {member.name}")
+                            role = guild.get_role(VOTER_ROLE_ID)
+                            if role:
+                                print(f"   ✅ Role found: {role.name}")
+                                if role not in member.roles:
+                                    await member.add_roles(role, reason="Voted on Top.gg")
+                                    print(f"   ✅ Role assigned!")
+                                else:
+                                    print(f"   ℹ️ User already has role")
                             else:
-                                print(f"   ℹ️ User already has role")
+                                print(f"   ❌ Role {VOTER_ROLE_ID} not found")
                         else:
-                            print(f"   ❌ Role {VOTER_ROLE_ID} not found")
+                            print(f"   ⚠️ User not in support server")
                     else:
-                        print(f"   ⚠️ User not in support server")
+                        print(f"   ❌ Support server not found")
                 else:
-                    print(f"   ❌ Support server not found")
-            else:
-                print(f"   ⚠️ SUPPORT_SERVER_ID not set in .env")
-        except Exception as e:
-            print(f"   ⚠️ Role assignment error: {e}")
+                    print(f"   ⚠️ SUPPORT_SERVER_ID not set in .env")
+            except Exception as e:
+                print(f"   ⚠️ Role assignment error: {e}")
+        else:
+            print("   ℹ️ Test vote - skipping role assignment")
         
         print("✅ Vote processing complete!\n")
         
