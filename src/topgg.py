@@ -45,7 +45,7 @@ def db_query(query, params=(), fetch=False):
         return c.fetchall() if fetch else None
 
 async def handle_vote(request):
-    """Handle Top.gg vote webhook - accepts ANY request (test or real)"""
+    """Handle Top.gg vote webhook"""
     print("\n" + "="*60)
     print("🎯 WEBHOOK REQUEST RECEIVED!")
     print(f"   Path: {request.path}")
@@ -65,17 +65,15 @@ async def handle_vote(request):
         raw_body = await request.text()
         print(f"\n📦 Raw Body: {raw_body}")
         
-        # Check if we have authorization (some webhooks don't send it for test)
+        # Check authorization if secret is set
         auth = request.headers.get('Authorization', '')
         
-        # If we have a secret configured, verify it
         if TOPGG_WEBHOOK_SECRET:
-            if auth and auth != TOPGG_WEBHOOK_SECRET:
+            if auth != TOPGG_WEBHOOK_SECRET:
                 print(f"❌ Authorization mismatch!")
                 print(f"   Expected: {TOPGG_WEBHOOK_SECRET}")
                 print(f"   Got: {auth}")
-                # Still process it anyway for debugging
-                print("⚠️ Processing anyway for debugging...")
+                return web.Response(status=401, text="Unauthorized")
         else:
             print("⚠️ No TOPGG_WEBHOOK_SECRET set - accepting all requests")
         
@@ -85,16 +83,13 @@ async def handle_vote(request):
             print(f"\n📊 Parsed Data: {json.dumps(data, indent=2)}")
         except Exception as e:
             print(f"❌ JSON Parse Error: {e}")
-            # Try to get data from query params
-            print("Trying query params...")
-            data = dict(request.query)
-            print(f"Query params: {data}")
+            return web.Response(status=400, text="Invalid JSON")
         
-        # Extract fields - be flexible with field names
-        user_id = data.get('user') or data.get('userid') or data.get('userID')
-        bot_id = data.get('bot') or data.get('botid') or data.get('botID')
+        # Extract fields
+        user_id = data.get('user')
+        bot_id = data.get('bot')
         vote_type = data.get('type', 'upvote')
-        is_weekend = data.get('isWeekend', False) or data.get('weekend', False)
+        is_weekend = data.get('isWeekend', False)
         
         print(f"\n📝 Extracted Data:")
         print(f"   Bot ID: {bot_id}")
@@ -104,8 +99,7 @@ async def handle_vote(request):
         
         if not user_id:
             print("❌ Missing user ID!")
-            # Still return 200 to not break the webhook
-            return web.Response(status=200, text="OK - No user ID")
+            return web.Response(status=400, text="Missing user ID")
         
         # Get bot instance
         bot = request.app.get('bot')
@@ -129,25 +123,27 @@ async def handle_vote(request):
         import traceback
         traceback.print_exc()
         print("="*60 + "\n")
-        # Still return 200 to not break webhook
-        return web.Response(status=200, text="Error but OK")
+        return web.Response(status=500, text="Internal server error")
 
 async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
     """Process a vote and send notifications"""
     print(f"\n▶️ PROCESSING VOTE for user {user_id}")
     
     try:
-        # Log the vote (always log, even test votes)
-        print("   📝 Logging vote to database...")
+        # Determine if this is a test vote
+        is_test = (vote_type == 'test')
+        
+        # Log the vote
+        print(f"   📝 Logging vote to database... (Type: {vote_type})")
         db_query(
             "INSERT INTO vote_logs (user_id, is_weekend, vote_type) VALUES (?, ?, ?)",
             (str(user_id), 1 if is_weekend else 0, vote_type)
         )
         print("   ✅ Vote logged")
         
-        # Only update vote count for NON-TEST votes
+        # Update vote count (only for non-test votes)
         total_votes = 0
-        if vote_type != 'test':
+        if not is_test:
             print("   🔢 Updating vote count...")
             existing = db_query(
                 "SELECT total_votes FROM vote_reminders WHERE user_id = ?",
@@ -171,7 +167,6 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                 print(f"   ✅ Created new entry with count {total_votes}")
         else:
             print("   ℹ️ Test vote - skipping vote count update")
-            # Get existing count for display purposes
             existing = db_query(
                 "SELECT total_votes FROM vote_reminders WHERE user_id = ?",
                 (str(user_id),),
@@ -199,9 +194,9 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
             print(f"   ✅ Vote channel found: #{vote_channel.name}")
             
             embed = discord.Embed(
-                title="🗳️ New Vote Received!" if vote_type != 'test' else "🧪 Test Vote Received!",
-                description=f"Thank you for voting!" if vote_type != 'test' else "Test vote from Top.gg webhook (not counted)",
-                color=discord.Color.gold() if vote_type != 'test' else discord.Color.blue(),
+                title="🗳️ New Vote Received!" if not is_test else "🧪 Test Vote Received!",
+                description="Thank you for voting!" if not is_test else "Test vote from Top.gg webhook (not counted)",
+                color=discord.Color.gold() if not is_test else discord.Color.blue(),
                 timestamp=datetime.utcnow()
             )
             
@@ -211,15 +206,14 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
             else:
                 embed.add_field(name="👤 Voter", value=f"User ID: `{user_id}`", inline=True)
             
-            # Show current total (not incremented for test votes)
             embed.add_field(
                 name="📊 Total Votes", 
-                value=f"{total_votes}" + (" (test - not counted)" if vote_type == 'test' else ""), 
+                value=f"{total_votes}" + (" (test - not counted)" if is_test else ""), 
                 inline=True
             )
             embed.add_field(name="🎁 Weekend Bonus", value="Yes ✨" if is_weekend else "No", inline=True)
             embed.add_field(name="🔖 Vote Type", value=vote_type.capitalize(), inline=True)
-            embed.set_footer(text="Vote on Top.gg" if vote_type != 'test' else "Test vote - count not incremented")
+            embed.set_footer(text="Vote on Top.gg" if not is_test else "Test vote - count not incremented")
             
             try:
                 msg = await vote_channel.send(embed=embed)
@@ -229,19 +223,18 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                 import traceback
                 traceback.print_exc()
         
-        # Send DM for ALL votes (including test)
+        # Send DM
         if user:
             print(f"   💌 Sending DM to {user.name}...")
-            view = VoteReminderView(user_id)
             
             dm_embed = discord.Embed(
-                title="🎉 Thank you for voting!" if vote_type != 'test' else "🧪 Test Vote Received!",
-                description=f"Your vote has been recorded! You now have **{total_votes}** total vote(s)." if vote_type != 'test' else f"This is a test vote and was **not counted**.\n\nYour current vote count: **{total_votes}**",
-                color=discord.Color.green() if vote_type != 'test' else discord.Color.blue(),
+                title="🎉 Thank you for voting!" if not is_test else "🧪 Test Vote Received!",
+                description=f"Your vote has been recorded! You now have **{total_votes}** total vote(s)." if not is_test else f"This is a test vote and was **not counted**.\n\nYour current vote count: **{total_votes}**",
+                color=discord.Color.green() if not is_test else discord.Color.blue(),
                 timestamp=datetime.utcnow()
             )
             
-            if vote_type != 'test':
+            if not is_test:
                 dm_embed.add_field(
                     name="🎁 Rewards",
                     value="• Voter role assigned\n• Helping the bot grow!\n• Your vote matters! ❤️" + ("\n• **Weekend Bonus!** 🎊" if is_weekend else ""),
@@ -253,28 +246,31 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                     value="You can vote again in 12 hours!\nClick below to enable reminders.",
                     inline=False
                 )
+                
+                view = VoteReminderView(user_id)
             else:
                 dm_embed.add_field(
                     name="ℹ️ About Test Votes",
                     value="Test votes are used to verify the webhook is working correctly. They don't count toward your total or give rewards.",
                     inline=False
                 )
+                view = None
             
-            dm_embed.set_footer(text="Vote every 12 hours" if vote_type != 'test' else "Test vote from Top.gg")
+            dm_embed.set_footer(text="Vote every 12 hours" if not is_test else "Test vote from Top.gg")
             
             try:
-                if vote_type != 'test':
+                if view:
                     await user.send(embed=dm_embed, view=view)
                 else:
-                    await user.send(embed=dm_embed)  # No reminder button for test votes
+                    await user.send(embed=dm_embed)
                 print(f"   ✅ DM sent successfully")
             except discord.Forbidden:
                 print(f"   ⚠️ DMs disabled for user")
             except Exception as e:
                 print(f"   ❌ DM error: {e}")
         
-        # Assign voter role ONLY for real votes (not test votes)
-        if vote_type != 'test':
+        # Assign voter role (only for non-test votes)
+        if not is_test:
             print("   🎭 Attempting to assign voter role...")
             try:
                 support_server_id = int(os.getenv('SUPPORT_SERVER_ID', '0'))
@@ -431,11 +427,11 @@ async def start_webhook_server(bot, port=8080):
         print(f"✅ Bot instance stored in app")
         print(f"   Bot: {bot.user.name if bot.user else 'Not ready yet'}")
         
-        # Add webhook handler for BOTH paths (test and production)
+        # Add webhook handler
         app.router.add_post('/topgg/webhook', handle_vote)
-        app.router.add_post('/webhook', handle_vote)  # Alternative path
-        app.router.add_post('/topgg', handle_vote)    # Alternative path
-        app.router.add_post('/', handle_vote)         # Root path
+        app.router.add_post('/webhook', handle_vote)
+        app.router.add_post('/topgg', handle_vote)
+        app.router.add_post('/', handle_vote)
         print("✅ Routes added: POST /topgg/webhook, /webhook, /topgg, /")
         
         # Health check
