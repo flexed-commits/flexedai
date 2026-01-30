@@ -14,9 +14,9 @@
 
 </div>
 
-**An advanced AI-powered Discord bot with comprehensive moderation and conversation capabilities**
+**An advanced AI-powered Discord bot with comprehensive moderation, voting rewards, and conversation capabilities**
 
-[Invite Bot](https://discord.com/oauth2/authorize?client_id=1379152032358858762&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands) • [Support Server](https://discord.com/invite/XMvPq7W5N4) • [Report Issues](https://github.com/flexed-commits/flexedai/issues)
+[Invite Bot](https://discord.com/oauth2/authorize?client_id=1379152032358858762&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands) • [Support Server](https://discord.com/invite/XMvPq7W5N4) • [Vote on Top.gg](https://top.gg/bot/1379152032358858762/vote) • [Support on Patreon](https://patreon.com/flexedAI/membership)
 
 ---
 
@@ -28,6 +28,31 @@
 - **Smart emoji reactions** - AI-suggested reactions (10% chance) based on conversation context
 - **0.6s Response Cooldown** - Prevents API rate limiting while maintaining responsive service
 - **Powered by Groq API** - Using `meta-llama/llama-4-maverick-17b-128e-instruct` model
+
+### 🗳️ Top.gg Voting System (NEW!)
+- **Voter Role Rewards** - Get exclusive Voter role for 12 hours after voting
+- **Vote Reminders** - Optional DM reminders every 12 hours
+- **Weekend Bonuses** - Special recognition for weekend votes
+- **Auto-Role Management** - Automatic role assignment and expiration
+- **Vote Tracking** - Track total votes per user
+- **Join Retention** - Users who voted recently get role when joining support server
+- **Webhook Integration** - Real-time vote processing via Top.gg webhook
+- **Vote Logs** - Dedicated channel for vote notifications with detailed stats
+
+### 💎 Patreon Integration (NEW!)
+- **Smart Promotion** - Automatic Patreon messages every 15-20 messages per channel
+- **Non-Intrusive** - Randomized intervals prevent spam
+- **Beautiful Embeds** - Professional promotional messages
+- **One-Click Support** - Direct link to become a Patron
+- **Channel-Specific Tracking** - Independent counters per channel
+
+### 📢 Updates Channel System (NEW!)
+- **Required Setup** - Servers must configure updates channel to use bot
+- **Global Announcements** - Send announcements to all servers at once
+- **Dual Notification** - Sends to both configured channel AND server owner DM
+- **Setup Verification** - Bot checks for updates channel on every interaction
+- **Easy Configuration** - Simple `/setupupdates` and `/changeupdates` commands
+- **View Settings** - Check current updates channel with `/viewupdates`
 
 ### 🛡️ Advanced Moderation System
 - **Strike System** - 3-strike auto-blacklist with DM notifications to users
@@ -46,6 +71,8 @@ All actions are logged to dedicated channels with rich embeds:
 - Admin actions (all moderation commands)
 - User reports with action tracking
 - Complete interaction logs (24h rolling + full export)
+- **Vote logs** - Track all Top.gg votes with user stats
+- **Updates tracking** - Monitor announcement delivery
 
 ### 🔐 Custom Encoding System
 - **Message Encoder/Decoder** - Custom cipher for encoding messages
@@ -64,7 +91,7 @@ All actions are logged to dedicated channels with rich embeds:
 - **SQLite Database** - Persistent storage for all bot data
 - **JSON Migration** - Legacy JSON to SQLite migration support
 - **Export Tools** - Export logs, data, server lists, and complete configurations
-- **8 Database Tables** - Comprehensive data structure for all features
+- **10 Database Tables** - Comprehensive data structure for all features (including vote_reminders, vote_logs, updates_channels)
 
 ---
 
@@ -75,6 +102,7 @@ All actions are logged to dedicated channels with rich embeds:
 - Discord Bot Token
 - Groq API Key
 - Discord User ID (for owner configuration)
+- Top.gg Webhook Secret (optional, for voting features)
 
 ### Installation
 
@@ -86,7 +114,7 @@ cd flexedai
 
 2. **Install dependencies**
 ```bash
-pip install discord.py groq python-dotenv
+pip install discord.py groq python-dotenv aiohttp
 ```
 
 3. **Create and configure `.env` file**
@@ -119,6 +147,10 @@ LOG_CHANNEL_REPORTS=channel_id_here
 
 # Optional: Support Server
 SUPPORT_SERVER_INVITE=https://discord.com/invite/XMvPq7W5N4
+
+# Optional: Top.gg Integration (for voting features)
+TOPGG_WEBHOOK_SECRET=your_topgg_webhook_secret
+SUPPORT_SERVER_ID=your_support_server_id
 ```
 
 **How to get these values:**
@@ -126,8 +158,18 @@ SUPPORT_SERVER_INVITE=https://discord.com/invite/XMvPq7W5N4
 - **GROQ_API_KEY**: [Groq Console](https://console.groq.com) → API Keys
 - **OWNER_ID**: Enable Developer Mode in Discord → Right-click your profile → Copy User ID
 - **LOG_CHANNEL_IDs**: Right-click channels in Discord → Copy Channel ID
+- **TOPGG_WEBHOOK_SECRET**: [Top.gg](https://top.gg/) → Your Bot → Webhooks → Secret
+- **SUPPORT_SERVER_ID**: Right-click your support server → Copy Server ID
 
-4. **Run the bot**
+4. **Set up Top.gg Webhook (Optional)**
+
+If you want voting features:
+1. Go to [Top.gg](https://top.gg/bot/your-bot-id/webhooks)
+2. Set webhook URL to: `https://your-domain.com/topgg/webhook`
+3. Set authorization header to your `TOPGG_WEBHOOK_SECRET`
+4. The bot automatically starts a webhook server on port 8080
+
+5. **Run the bot**
 ```bash
 python main.py
 ```
@@ -138,7 +180,10 @@ After starting the bot:
 1. The bot will automatically create `bot_data.db` (SQLite database)
 2. It will migrate any existing JSON data if present
 3. Daily backup task will start automatically
-4. Invite the bot to your server using the link generated
+4. **Top.gg webhook server starts on port 8080**
+5. **Vote reminder loop and role expiration loop start**
+6. Invite the bot to your server using the link generated
+7. **IMPORTANT**: Run `/setupupdates #channel` in your server to enable bot functionality
 
 ---
 
@@ -157,6 +202,22 @@ After starting the bot:
 | `/invite` | Get bot invite link | `/invite` |
 | `/encode <message>` | Encode a message using custom cipher | `/encode Hello World` |
 | `/decode <encoded>` | Decode an encoded message | `/decode Ke3r...` |
+| `/votereminder [action]` | Manage vote reminder settings | `/votereminder enable` |
+
+### 🗳️ Voting Commands (NEW!)
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `/votereminder` | View your voting reminder status | `/votereminder` |
+| `/votereminder enable` | Enable 12-hour vote reminders | `/votereminder enable` |
+| `/votereminder disable` | Disable vote reminders | `/votereminder disable` |
+
+**Voting Features:**
+- Vote on [Top.gg](https://top.gg/bot/1379152032358858762/vote) every 12 hours
+- Get exclusive Voter role for 12 hours
+- Enable reminders to never miss a vote
+- Weekend votes get special recognition
+- If you join the support server within 12 hours of voting, you'll automatically get the Voter role
 
 ### ⚙️ Configuration Commands (Admin/Owner)
 
@@ -166,6 +227,9 @@ After starting the bot:
 | `/stop` | Bot responds only to mentions/triggers | Admin/Owner | `/stop` |
 | `/lang [language]` | Set channel language (dropdown UI) | Admin/Owner | `/lang Spanish` |
 | `/prefix <new_prefix>` | Change command prefix for server | Admin/Owner | `/prefix !` |
+| `/setupupdates [#channel]` | **REQUIRED** - Setup updates channel | Admin/Owner | `/setupupdates #announcements` |
+| `/changeupdates [#channel]` | Change existing updates channel | Admin/Owner | `/changeupdates #news` |
+| `/viewupdates` | View current updates channel | Any User | `/viewupdates` |
 
 **Available Languages:**
 English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese, Korean, Chinese, Russian, Arabic, Turkish, Dutch, Marathi
@@ -237,6 +301,7 @@ English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese
 | `/clearadminlogs` | Clear all admin logs | No | `/clearadminlogs` |
 | `/searchlogs <keyword>` | Search interaction logs | No | `/searchlogs username` |
 | `ids` | List all slash command IDs | No | `!ids` |
+| `/announce <message>` | Broadcast to all servers (NEW!) | No | `/announce Important update!` |
 
 ### 👑 Owner-Only Commands
 
@@ -253,7 +318,7 @@ English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese
 
 ## 🗄️ Database Structure
 
-The bot uses SQLite (`bot_data.db`) with **8 tables**:
+The bot uses SQLite (`bot_data.db`) with **10 tables**:
 
 ### Core Tables
 
@@ -272,7 +337,7 @@ word TEXT PRIMARY KEY
 **settings** - Server/channel configurations
 ```sql
 id TEXT PRIMARY KEY
-prefix TEXT DEFAULT "!"
+prefix TEXT DEFAULT "/"
 language TEXT DEFAULT "English"
 mode TEXT DEFAULT "stop"
 ```
@@ -324,6 +389,7 @@ reason TEXT
 proof TEXT
 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 status TEXT DEFAULT 'pending'
+deleted INTEGER DEFAULT 0
 ```
 
 **blacklisted_guilds** - Blacklisted servers
@@ -335,9 +401,123 @@ reason TEXT
 blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ```
 
+### New Tables (Voting & Updates)
+
+**vote_reminders** - Top.gg voting system (NEW!)
+```sql
+user_id TEXT PRIMARY KEY
+enabled INTEGER DEFAULT 0
+last_vote DATETIME
+next_reminder DATETIME
+total_votes INTEGER DEFAULT 0
+role_expires_at DATETIME
+```
+
+**vote_logs** - Vote history tracking (NEW!)
+```sql
+id INTEGER PRIMARY KEY AUTOINCREMENT
+user_id TEXT
+voted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+is_weekend INTEGER DEFAULT 0
+vote_type TEXT DEFAULT 'upvote'
+```
+
+**updates_channels** - Server updates configuration (NEW!)
+```sql
+guild_id TEXT PRIMARY KEY
+channel_id TEXT NOT NULL
+setup_by TEXT
+setup_at TEXT DEFAULT CURRENT_TIMESTAMP
+```
+
 ---
 
 ## 🔧 Advanced Configuration
+
+### Top.gg Webhook Server (NEW!)
+
+The bot automatically starts a webhook server on port 8080 to receive vote notifications:
+
+```python
+# Webhook endpoints:
+POST /topgg/webhook  # Primary endpoint
+POST /webhook        # Alternative
+POST /topgg          # Alternative
+POST /               # Fallback
+
+GET /health          # Health check
+GET /test            # Test vote simulation
+```
+
+**Features:**
+- Real-time vote processing
+- Automatic role assignment (12-hour duration)
+- Vote logging to dedicated channel
+- DM notifications to voters
+- Weekend bonus tracking
+- Test vote endpoint for debugging
+
+**Setup:**
+1. Configure ngrok or similar tunnel to expose port 8080
+2. Set webhook URL on Top.gg to your public URL
+3. Add authorization secret to `.env`
+
+### Voter Role System (NEW!)
+
+When users vote on Top.gg:
+1. They receive the Voter role immediately (12-hour duration)
+2. DM sent with vote thank you and role info
+3. Vote logged to database and log channel
+4. After 12 hours, role automatically removed
+5. DM sent when role expires
+6. If user joins support server within 12 hours of voting, role is assigned automatically
+
+**Role Expiration:**
+- Background task checks every minute for expired roles
+- Automatic removal with DM notification
+- Users can vote again to renew role
+
+### Patreon Promotion System (NEW!)
+
+The bot includes smart Patreon promotion:
+
+```python
+# Configuration
+patreon_promoter = PatreonPromoter(
+    patreon_url="https://patreon.com/flexedAI/membership",
+    min_messages=15,    # Minimum messages before promotion
+    max_messages=20     # Maximum messages before promotion
+)
+```
+
+**How it works:**
+- Tracks message count per channel independently
+- Sends promotion after 15-20 messages (randomized)
+- Beautiful embed with Patreon branding
+- One-click "Become a Patron" button
+- Non-intrusive, appears occasionally
+
+### Updates Channel System (NEW!)
+
+**Required Setup:**
+Every server MUST configure an updates channel to use the bot:
+
+```bash
+/setupupdates #announcements
+```
+
+**How it works:**
+1. Bot checks for updates channel on every interaction
+2. If not configured, bot silently ignores most commands
+3. Only `/setupupdates` command works without configuration
+4. Once configured, all features become available
+
+**Announcement System:**
+When admins use `/announce`:
+1. Message sent to all configured updates channels
+2. DM sent to ALL server owners (even without updates channel)
+3. Servers without updates channel get setup reminder in DM
+4. Delivery statistics tracked and reported
 
 ### Response Cooldown System
 
@@ -386,7 +566,7 @@ When triggered, the AI analyzes the conversation and suggests 1-2 contextually a
 
 ### Logging Channel Configuration
 
-Create 6 dedicated channels in your server for different log types:
+Create **6 dedicated channels** in your server for different log types:
 
 ```python
 LOG_CHANNELS = {
@@ -416,6 +596,7 @@ LOG_CHANNELS = {
 - Can manage bot admins
 - Can force-leave servers
 - Receives daily backups
+- Can send global announcements
 
 ### Bot Admins
 - User moderation (blacklist, strikes)
@@ -423,18 +604,21 @@ LOG_CHANNELS = {
 - Report review and actions
 - Data exports
 - Server configuration
+- Global announcements
 - **Cannot:** Manage other admins, force-leave servers
 
 ### Server Administrators
 - Configure response mode (`/start`, `/stop`)
 - Set channel language
 - Change server prefix
+- Setup/change updates channel
 - **Cannot:** Moderate globally, access logs
 
 ### Regular Users
 - Use AI conversations
 - Submit reports
 - Use utility commands
+- Enable vote reminders
 - **Cannot:** Moderation or configuration
 
 ---
@@ -473,6 +657,29 @@ LOG_CHANNELS = {
    - Owner notified of attempt
    - Logged to blacklist channel
 
+### Voting Workflow (NEW!)
+1. User votes on Top.gg
+2. Webhook received by bot
+3. Vote logged to database and channel
+4. Voter role assigned (12 hours)
+5. DM sent to user with thank you
+6. Background task monitors expiration
+7. After 12 hours:
+   - Role automatically removed
+   - DM sent to user
+   - User can vote again
+
+### Updates Channel Workflow (NEW!)
+1. Server admin runs `/setupupdates #channel`
+2. Bot verifies permissions in channel
+3. Configuration saved to database
+4. Test message sent to channel
+5. All bot features now enabled
+6. When owner sends `/announce`:
+   - Message to all updates channels
+   - DM to all server owners
+   - Statistics reported back
+
 ---
 
 ## 📈 Bot Statistics
@@ -492,6 +699,9 @@ The bot tracks comprehensive statistics shown in `/stats`:
   - Total bot admins
   - Total pending reports
   - Total interactions logged
+  - **Total votes received (NEW!)**
+  - **Total active voters (NEW!)**
+  - **Total servers with updates channels (NEW!)**
 
 ---
 
@@ -509,6 +719,22 @@ The bot tracks comprehensive statistics shown in `/stats`:
   - Settings
   - Last 24h interactions
   - Recent admin logs
+  - **Vote statistics (NEW!)**
+  - **Updates channel configs (NEW!)**
+
+### Vote Reminder Loop (NEW!)
+- Runs every 5 minutes
+- Checks for users with reminders enabled
+- Sends DM when 12 hours have passed since last vote
+- Includes vote button and disable button
+- Auto-disables if DMs are closed
+
+### Role Expiration Loop (NEW!)
+- Runs every minute
+- Checks for expired voter roles
+- Automatically removes role after 12 hours
+- Sends DM notification to user
+- Handles users who left server
 
 ### Auto-Blacklist on 3 Strikes
 - Automatic when user reaches 3 strikes
@@ -529,6 +755,13 @@ The bot tracks comprehensive statistics shown in `/stats`:
 - Owner notified of server details
 - Logged to blacklist channel
 
+### Patreon Promotion (NEW!)
+- Tracks messages per channel
+- Sends promotion every 15-20 messages
+- Randomized intervals
+- Beautiful branded embeds
+- Non-intrusive timing
+
 ---
 
 ## 🔐 Security Features
@@ -538,22 +771,26 @@ The bot tracks comprehensive statistics shown in `/stats`:
 - DM failures are handled gracefully
 - Personal data only visible to admins
 - Reports are logged securely
+- Vote data stored with privacy in mind
 
 ### API Key Protection
 - All keys stored in `.env` (not in code)
 - `.env` should be in `.gitignore`
 - No keys in database or logs
+- Webhook secret verification
 
 ### Permission Checks
 - All admin commands verify permissions
 - Owner-only commands are restricted
 - Server admin checks for config commands
 - DM-only restriction for sensitive exports
+- Updates channel requirement prevents abuse
 
 ### Rate Limiting
 - 0.6s cooldown prevents abuse
 - AI request limiting via Groq
 - Message truncation at 8000 tokens
+- Webhook rate limiting built-in
 
 ---
 
@@ -562,14 +799,29 @@ The bot tracks comprehensive statistics shown in `/stats`:
 ### Bot doesn't respond
 - Check if blacklisted: `/whoami`
 - Verify response mode: Use `/start` in channel
+- **Check if updates channel is configured: `/viewupdates`**
 - Check if bot has permission to send messages
 - Verify cooldown hasn't silenced bot (wait 0.6s)
 
 ### Commands not working
 - Ensure you have correct permissions
+- **Verify updates channel is setup: `/setupupdates`**
 - Check if using slash commands vs prefix commands
 - Try `/sync` (admin only) to refresh commands
 - Verify bot has "Use Application Commands" permission
+
+### Voting features not working
+- Check webhook URL is correct on Top.gg
+- Verify `TOPGG_WEBHOOK_SECRET` in `.env`
+- Check `SUPPORT_SERVER_ID` is correct
+- Test webhook with `/test` endpoint
+- Check bot has manage roles permission in support server
+
+### Updates channel issues
+- Run `/setupupdates` to configure
+- Verify bot has send/embed permissions in channel
+- Check channel ID is saved: `/viewupdates`
+- Ensure channel exists and bot is in server
 
 ### Logging not working
 - Verify channel IDs in `.env`
@@ -591,11 +843,14 @@ The bot tracks comprehensive statistics shown in `/stats`:
 ## 📝 Best Practices
 
 ### For Server Owners
-1. Set up dedicated log channels
-2. Configure `/start` mode in bot channels only
-3. Use `/stop` mode in general channels
-4. Regularly review `/reports`
-5. Grant `/bypass` to trusted moderators only
+1. **ALWAYS run `/setupupdates` first**
+2. Set up dedicated log channels
+3. Configure `/start` mode in bot channels only
+4. Use `/stop` mode in general channels
+5. Regularly review `/reports`
+6. Grant `/bypass` to trusted moderators only
+7. Encourage users to vote on Top.gg
+8. Check updates channel configuration: `/viewupdates`
 
 ### For Bot Admins
 1. Always provide reasons for moderation actions
@@ -603,6 +858,7 @@ The bot tracks comprehensive statistics shown in `/stats`:
 3. Use `/reportview` for full context
 4. Export logs regularly with `/data`
 5. Communicate with users via DMs when possible
+6. Use `/announce` sparingly for important updates
 
 ### For Users
 1. Use `/forget` to clear conversation context
@@ -610,31 +866,8 @@ The bot tracks comprehensive statistics shown in `/stats`:
 3. Check your status with `/whoami`
 4. Respect the 0.6s cooldown
 5. Use `/help` to discover features
-
----
-
-## 🔄 Migration Guide
-
-### From JSON to SQLite
-
-If you have old bot data in `bot_data.json`:
-
-1. Place `bot_data.json` in the same directory as `main.py`
-2. Run the bot normally
-3. Bot will automatically:
-   - Create `bot_data.db`
-   - Migrate all data
-   - Rename old file to `bot_data.json.backup`
-   - Migrate interaction logs from `interaction_logs.json`
-
-**Migrated data:**
-- Blacklist → users table
-- Violations → strikes in users table
-- Banned words → banned_words table
-- Languages → settings table
-- Prefixes → settings table
-- Response modes → settings table
-- Admin logs → admin_logs table
+6. Vote on Top.gg to support the bot
+7. Enable vote reminders: `/votereminder enable`
 
 ---
 
@@ -709,6 +942,8 @@ SOFTWARE.
 
 - **Support Server**: [Join Discord](https://discord.com/invite/XMvPq7W5N4)
 - **Invite Bot**: [Add to Server](https://discord.com/oauth2/authorize?client_id=1379152032358858762&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands)
+- **Vote on Top.gg**: [Support the Bot](https://top.gg/bot/1379152032358858762/vote)
+- **Support on Patreon**: [Become a Patron](https://patreon.com/flexedAI/membership)
 - **GitHub**: [flexed-commits/flexedai](https://github.com/flexed-commits/flexedai)
 - **Creator**: Ψ.1nOnly.Ψ
 - **Report Issues**: [GitHub Issues](https://github.com/flexed-commits/flexedai/issues)
@@ -725,6 +960,7 @@ When inviting the bot, ensure these permissions are enabled:
 - ✅ Attach Files
 - ✅ Add Reactions
 - ✅ Manage Messages (for word filter deletion)
+- ✅ **Manage Roles (for voter role - NEW!)**
 - ✅ Use Slash Commands
 - ✅ Read Message History
 
@@ -732,11 +968,13 @@ When inviting the bot, ensure these permissions are enabled:
 - **Groq API**: Has request limits based on your plan
 - **0.6s Cooldown**: Built-in to prevent hitting limits
 - **Message Truncation**: Long messages truncated to 8000 tokens
+- **Top.gg API**: Rate limited, handled by webhook
 
 ### Data Retention
 - **Interaction Logs**: Stored indefinitely (use `/clearlogs` to purge)
 - **Admin Logs**: Stored indefinitely (use `/clearadminlogs` to purge)
 - **Daily Backups**: Last 24h interactions only
+- **Vote Logs**: Stored permanently
 - **Database**: No automatic cleanup (manual management required)
 
 ### Privacy Considerations
@@ -744,6 +982,12 @@ When inviting the bot, ensure these permissions are enabled:
 - Admins can view interaction logs
 - Reports are visible to all bot admins
 - DMs to users notify them of moderation actions
+- Vote data tracked per user
+
+### Port Requirements
+- **Port 8080**: Required for Top.gg webhook (configurable)
+- Must be accessible from internet if using voting features
+- Use ngrok or similar for testing
 
 ---
 
@@ -751,6 +995,9 @@ When inviting the bot, ensure these permissions are enabled:
 
 ### Planned Features
 - [ ] Web dashboard for bot management
+- [x] Top.gg voting integration with rewards ✅
+- [x] Patreon promotion system ✅
+- [x] Updates channel requirement ✅
 - [ ] Advanced analytics and visualizations
 - [ ] Custom AI model fine-tuning options
 - [ ] Multi-server configuration sync
@@ -770,6 +1017,9 @@ When inviting the bot, ensure these permissions are enabled:
 - [ ] Suggestion system
 - [ ] Poll/voting system
 - [ ] Custom triggers/responses
+- [ ] Vote streak rewards
+- [ ] Monthly top voters leaderboard
+- [ ] Patreon role rewards
 
 ---
 
@@ -780,6 +1030,9 @@ When inviting the bot, ensure these permissions are enabled:
 - **Meta AI** - Llama model development
 - **SQLite** - Reliable embedded database
 - **Python Community** - Excellent libraries and support
+- **Top.gg** - Discord bot listing and voting platform
+- **Patreon** - Supporting bot development and hosting
+- **aiohttp** - Async HTTP for webhooks
 - All contributors and supporters who help improve this project
 
 ---
@@ -791,11 +1044,14 @@ When inviting the bot, ensure these permissions are enabled:
 - [Groq API Documentation](https://console.groq.com/docs)
 - [Discord Developer Portal](https://discord.com/developers/docs)
 - [Python SQLite Documentation](https://docs.python.org/3/library/sqlite3.html)
+- [Top.gg API Documentation](https://docs.top.gg/)
+- [aiohttp Documentation](https://docs.aiohttp.org/)
 
 ### Tutorials
 - [How to create a Discord bot](https://discordpy.readthedocs.io/en/stable/discord.html)
 - [Getting started with Groq](https://console.groq.com/docs/quickstart)
 - [SQLite basics](https://www.sqlitetutorial.net/)
+- [Setting up Top.gg webhooks](https://docs.top.gg/resources/webhooks/)
 
 ---
 
@@ -805,10 +1061,14 @@ When inviting the bot, ensure these permissions are enabled:
 
 ⭐ Star this repository if you found it helpful!
 
+🗳️ **[Vote for this bot on Top.gg!](https://top.gg/bot/1379152032358858762/vote)**
+
+💎 **[Support on Patreon](https://patreon.com/flexedAI/membership)**
+
 [![Discord](https://img.shields.io/discord/1460574191072972913?color=7289da&label=Discord&logo=discord&logoColor=white&style=for-the-badge)](https://discord.com/invite/XMvPq7W5N4)
 [![GitHub stars](https://img.shields.io/github/stars/flexed-commits/flexedai?style=for-the-badge)](https://github.com/flexed-commits/flexedai/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/flexed-commits/flexedai?style=for-the-badge)](https://github.com/flexed-commits/flexedai/issues)
 
-**Version 2.0** | Last Updated: January 2025
+**Version 2.1** | Last Updated: January 2025
 
 </div>
