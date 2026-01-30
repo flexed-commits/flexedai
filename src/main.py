@@ -445,6 +445,17 @@ The bot has automatically left your server. You cannot re-add this bot while bla
             await guild.leave()
             return
     
+    # Get the user who added the bot (inviter)
+    inviter = None
+    try:
+        # Fetch audit logs to find who added the bot
+        async for entry in guild.audit_logs(limit=10, action=discord.AuditLogAction.bot_add):
+            if entry.target.id == bot.user.id:
+                inviter = entry.user
+                break
+    except:
+        pass
+    
     # Original join logic continues below...
     embed = discord.Embed(
         title="🟢 Bot Joined Server",
@@ -455,6 +466,10 @@ The bot has automatically left your server. You cannot re-add this bot while bla
     embed.add_field(name="📋 Server Name", value=guild.name, inline=True)
     embed.add_field(name="🆔 Server ID", value=f"`{guild.id}`", inline=True)
     embed.add_field(name="👑 Server Owner", value=f"{guild.owner.mention} (`{guild.owner.id}`)", inline=False)
+    
+    if inviter:
+        embed.add_field(name="➕ Added By", value=f"{inviter.mention} (`{inviter.id}`)", inline=False)
+    
     embed.add_field(name="👥 Member Count", value=guild.member_count, inline=True)
     embed.add_field(name="📅 Server Created", value=guild.created_at.strftime("%Y-%m-%d"), inline=True)
     embed.add_field(name="📊 Total Servers", value=len(bot.guilds), inline=True)
@@ -470,9 +485,8 @@ The bot has automatically left your server. You cannot re-add this bot while bla
     db_query("INSERT INTO admin_logs (log) VALUES (?)", 
              (f"Bot joined server: {guild.name} (ID: {guild.id}, Owner: {guild.owner.name} - {guild.owner.id})",))
     
-    # Try to send welcome message to server owner
-    try:
-        welcome_msg = f"""👋 **Hello {guild.owner.name}!**
+    # Welcome message content
+    welcome_msg = f"""👋 **Hello!**
 
 Thank you for adding **{BOT_NAME} Bot** to **{guild.name}**!
 
@@ -502,9 +516,49 @@ Join the Support Server: {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.co
 
 Enjoy using {BOT_NAME}! 🎉
 """
+    
+    # Try to send welcome message to server owner
+    owner_dm_sent = False
+    try:
         await guild.owner.send(welcome_msg)
+        owner_dm_sent = True
     except:
         pass  # Owner has DMs disabled
+    
+    # Try to send welcome message to inviter (if different from owner)
+    inviter_dm_sent = False
+    if inviter and inviter.id != guild.owner.id:
+        try:
+            inviter_welcome = f"""👋 **Hello {inviter.name}!**
+
+Thank you for adding **{BOT_NAME} Bot** to **{guild.name}**!
+
+🚀 **Quick Start Guide:**
+• Use `/help` to see all available commands
+• Use `/start` in a channel to enable automatic responses
+• Use `/stop` to make the bot respond only when mentioned
+• Use `/lang` to set the bot's language for a channel
+
+📚 **Key Features:**
+• AI-powered conversations with context memory
+• Multi-language support (15+ languages)
+• Moderation tools (strikes, blacklist, word filter)
+• Customizable command prefix
+• Channel-specific response modes
+
+⏱️ **Response Cooldown:**
+The bot has a 0.6-second cooldown between responses to prevent API rate limiting and ensure stable service.
+
+💡 **Need Help?**
+Contact the bot owner: <@{OWNER_ID}>
+Join the Support Server: {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
+
+Enjoy using {BOT_NAME}! 🎉
+"""
+            await inviter.send(inviter_welcome)
+            inviter_dm_sent = True
+        except:
+            pass  # Inviter has DMs disabled
     
     # Try to find a general/system channel to send welcome message
     try:
@@ -554,11 +608,31 @@ Enjoy using {BOT_NAME}! 🎉
                 inline=False
             )
             
+            # Add notification about DMs
+            dm_status = []
+            if owner_dm_sent:
+                dm_status.append(f"✅ Server owner {guild.owner.mention} has been notified via DM")
+            else:
+                dm_status.append(f"⚠️ Server owner {guild.owner.mention} - DM failed (DMs disabled)")
+            
+            if inviter and inviter.id != guild.owner.id:
+                if inviter_dm_sent:
+                    dm_status.append(f"✅ Bot inviter {inviter.mention} has been notified via DM")
+                else:
+                    dm_status.append(f"⚠️ Bot inviter {inviter.mention} - DM failed (DMs disabled)")
+            
+            welcome_embed.add_field(
+                name="📬 Notifications Sent",
+                value="\n".join(dm_status),
+                inline=False
+            )
+            
             welcome_embed.set_footer(text="⚠️ Setup updates channel first using /setupupdates")
             
             await target_channel.send(embed=welcome_embed)
     except Exception as e:
         print(f"⚠️ Could not send welcome message to server {guild.name}: {e}")
+
 
 
 @bot.event
