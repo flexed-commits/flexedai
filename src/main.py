@@ -375,6 +375,8 @@ class AIBot(commands.Bot):
         asyncio.create_task(start_webhook_server(self, port=8080))
         # Start vote reminder loop
         asyncio.create_task(vote_reminder_loop(self))
+        asyncio.create_task(role_expiration_loop(self))
+        print(f"⏰ Role expiration loop started")
         print(f"✅ {self.user} Online | All Commands Locked & Loaded")
         print(f"🔄 Daily backup task started")
         print(f"🗳️ Top.gg webhook server starting...")
@@ -638,15 +640,28 @@ Enjoy using {BOT_NAME}! 🎉
 
 @bot.event
 async def on_member_join(member):
-    """Check if member voted recently and assign voter role with remaining time"""
+    """
+    Handle new member joins to support server
+    - Check if they voted within last 12 hours
+    - Assign voter role for remaining time if applicable
+    - Send DM notification about role
+    """
     
-    # Only check in support server
-    if member.guild.id != int(os.getenv('SUPPORT_SERVER_ID', 0)):
+    # Only process joins in support server
+    support_server_id = int(os.getenv('SUPPORT_SERVER_ID', 0))
+    
+    if not support_server_id:
+        print("⚠️ SUPPORT_SERVER_ID not configured in .env")
         return
-
-    # Check and assign role
-    await check_and_assign_voter_role_on_join
-
+    
+    if member.guild.id != support_server_id:
+        # Not support server, ignore
+        return
+    
+    print(f"👤 New member joined support server: {member.name} ({member.id})")
+    
+    # Check if user voted recently and assign role with remaining time
+    await check_and_assign_voter_role_on_join(bot, member)
 @bot.event
 async def on_guild_remove(guild):
     """Log when bot leaves a server"""
