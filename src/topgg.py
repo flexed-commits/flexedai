@@ -33,7 +33,7 @@ def init_vote_db():
         
         c.execute('''CREATE TABLE IF NOT EXISTS vote_reminders (
             user_id TEXT PRIMARY KEY,
-            enabled INTEGER DEFAULT 1,
+            enabled INTEGER DEFAULT 0,
             last_vote DATETIME,
             next_reminder DATETIME,
             total_votes INTEGER DEFAULT 0
@@ -227,11 +227,13 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
         
         # Update vote count (only for non-test votes)
         total_votes = 0
+        reminder_enabled = False
+        
         if not is_test:
             debug_log("📊 Processing non-test vote - updating vote count", "INFO")
             try:
                 existing = db_query(
-                    "SELECT total_votes FROM vote_reminders WHERE user_id = ?",
+                    "SELECT total_votes, enabled FROM vote_reminders WHERE user_id = ?",
                     (str(user_id),),
                     fetch=True
                 )
@@ -239,7 +241,8 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                 
                 if existing and len(existing) > 0:
                     total_votes = existing[0][0] + 1
-                    debug_log(f"📈 Updating existing record. New total: {total_votes}", "INFO")
+                    reminder_enabled = bool(existing[0][1]) if len(existing[0]) > 1 else False
+                    debug_log(f"📈 Updating existing record. New total: {total_votes}, Reminders enabled: {reminder_enabled}", "INFO")
                     db_query(
                         "UPDATE vote_reminders SET last_vote = ?, total_votes = ? WHERE user_id = ?",
                         (datetime.utcnow().isoformat(), total_votes, str(user_id))
@@ -247,10 +250,11 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                     debug_log(f"✅ Vote count updated to {total_votes}", "SUCCESS")
                 else:
                     total_votes = 1
-                    debug_log("📝 Creating new vote record with count 1", "INFO")
+                    reminder_enabled = False
+                    debug_log("📝 Creating new vote record with count 1, reminders disabled", "INFO")
                     db_query(
-                        "INSERT INTO vote_reminders (user_id, last_vote, total_votes) VALUES (?, ?, ?)",
-                        (str(user_id), datetime.utcnow().isoformat(), total_votes)
+                        "INSERT INTO vote_reminders (user_id, last_vote, total_votes, enabled) VALUES (?, ?, ?, ?)",
+                        (str(user_id), datetime.utcnow().isoformat(), total_votes, 0)
                     )
                     debug_log("✅ New vote record created", "SUCCESS")
             except Exception as update_error:
@@ -260,12 +264,17 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
             debug_log("🧪 Test vote - skipping vote count update", "INFO")
             try:
                 existing = db_query(
-                    "SELECT total_votes FROM vote_reminders WHERE user_id = ?",
+                    "SELECT total_votes, enabled FROM vote_reminders WHERE user_id = ?",
                     (str(user_id),),
                     fetch=True
                 )
-                total_votes = existing[0][0] if existing and len(existing) > 0 else 0
-                debug_log(f"📊 User's current vote count: {total_votes}", "INFO")
+                if existing and len(existing) > 0:
+                    total_votes = existing[0][0]
+                    reminder_enabled = bool(existing[0][1]) if len(existing[0]) > 1 else False
+                else:
+                    total_votes = 0
+                    reminder_enabled = False
+                debug_log(f"📊 User's current vote count: {total_votes}, Reminders: {reminder_enabled}", "INFO")
             except Exception as fetch_error:
                 debug_log(f"⚠️ Failed to fetch existing vote count: {fetch_error}", "WARNING")
         
@@ -369,6 +378,7 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
         # Send DM to user
         if user:
             debug_log(f"💌 Preparing DM for user {user.name}", "INFO")
+            debug_log(f"🔔 Reminder status: enabled={reminder_enabled}", "INFO")
             try:
                 dm_embed = discord.Embed(
                     title="🎉 Thank you for voting!" if not is_test else "🧪 Test Vote Received!",
@@ -377,26 +387,37 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                     timestamp=datetime.utcnow()
                 )
                 
+                view = None
+                
                 if not is_test:
                     dm_embed.add_field(
                         name="🎁 Rewards",
                         value="• Voter role assigned\n• Helping the bot grow!\n• Your vote matters! ❤️" + ("\n• **Weekend Bonus!** 🎊" if is_weekend else ""),
                         inline=False
                     )
-                    dm_embed.add_field(
-                        name="⏰ Vote Again",
-                        value="You can vote again in 12 hours!\nClick below to enable reminders.",
-                        inline=False
-                    )
-                    view = VoteReminderView(user_id)
-                    debug_log("🔔 Created reminder view for DM", "DEBUG")
+                    
+                    # Only show reminder button if reminders are NOT already enabled
+                    if not reminder_enabled:
+                        dm_embed.add_field(
+                            name="⏰ Vote Again",
+                            value="You can vote again in 12 hours!\nClick below to enable reminders.",
+                            inline=False
+                        )
+                        view = VoteReminderView(user_id)
+                        debug_log("🔔 Created reminder view for DM (reminders not enabled)", "DEBUG")
+                    else:
+                        dm_embed.add_field(
+                            name="⏰ Vote Again",
+                            value="You can vote again in 12 hours!\n✅ Reminders are already enabled.",
+                            inline=False
+                        )
+                        debug_log("✅ Reminders already enabled, not showing button", "DEBUG")
                 else:
                     dm_embed.add_field(
                         name="ℹ️ About Test Votes",
                         value="Test votes are used to verify the webhook is working correctly. They don't count toward your total or give rewards.",
                         inline=False
                     )
-                    view = None
                     debug_log("🧪 No view for test vote DM", "DEBUG")
                 
                 dm_embed.set_footer(text="Vote every 12 hours" if not is_test else "Test vote from Top.gg")
@@ -490,7 +511,7 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
         raise
 
 class VoteReminderView(discord.ui.View):
-    """View with reminder button"""
+    """View with reminder enable button"""
     def __init__(self, user_id):
         super().__init__(timeout=None)
         self.user_id = user_id
@@ -509,6 +530,7 @@ class VoteReminderView(discord.ui.View):
             next_reminder = datetime.utcnow() + timedelta(hours=12)
             debug_log(f"⏰ Setting next reminder for {next_reminder.isoformat()}", "DEBUG")
             
+            # Enable reminders in database
             db_query(
                 "UPDATE vote_reminders SET enabled = 1, next_reminder = ? WHERE user_id = ?",
                 (next_reminder.isoformat(), str(self.user_id))
@@ -531,6 +553,51 @@ class VoteReminderView(discord.ui.View):
             try:
                 await interaction.response.send_message(
                     "❌ An error occurred while enabling reminders. Please try again.",
+                    ephemeral=True
+                )
+            except:
+                pass
+
+class VoteReminderDisableView(discord.ui.View):
+    """View with reminder disable button for reminder messages"""
+    def __init__(self, user_id):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+        debug_log(f"VoteReminderDisableView created for user {user_id}", "DEBUG")
+    
+    @discord.ui.button(label="Disable Reminders", style=discord.ButtonStyle.danger, emoji="🔕", custom_id="disable_vote_reminder")
+    async def disable_reminder(self, interaction: discord.Interaction, button: discord.ui.Button):
+        debug_log(f"🔕 Disable reminder button clicked by {interaction.user.id}", "DEBUG")
+        
+        if str(interaction.user.id) != str(self.user_id):
+            debug_log(f"⚠️ Wrong user clicked button. Expected {self.user_id}, got {interaction.user.id}", "WARNING")
+            await interaction.response.send_message("❌ This button is not for you!", ephemeral=True)
+            return
+        
+        try:
+            # Disable reminders in database
+            db_query(
+                "UPDATE vote_reminders SET enabled = 0, next_reminder = NULL WHERE user_id = ?",
+                (str(self.user_id),)
+            )
+            
+            button.disabled = True
+            button.label = "Reminders Disabled ✅"
+            button.style = discord.ButtonStyle.secondary
+            
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(
+                "🔕 **Vote reminders disabled!**\n\nYou won't receive any more reminders. You can re-enable them anytime by voting again.",
+                ephemeral=True
+            )
+            debug_log(f"✅ Vote reminders disabled for user {self.user_id}", "SUCCESS")
+            
+        except Exception as e:
+            debug_log(f"❌ Error disabling reminders: {e}", "ERROR")
+            tb.print_exc()
+            try:
+                await interaction.response.send_message(
+                    "❌ An error occurred while disabling reminders. Please try again.",
                     ephemeral=True
                 )
             except:
@@ -579,9 +646,10 @@ async def vote_reminder_loop(bot):
                         inline=False
                     )
                     
-                    embed.set_footer(text="Disable with /votereminder disable")
+                    embed.set_footer(text="Click 'Disable Reminders' if you want to stop receiving these")
                     
-                    view = discord.ui.View()
+                    # Create view with both vote button and disable button
+                    view = discord.ui.View(timeout=None)
                     view.add_item(discord.ui.Button(
                         label="Vote on Top.gg",
                         url=f"https://top.gg/bot/{bot.user.id}/vote",
@@ -589,8 +657,14 @@ async def vote_reminder_loop(bot):
                         emoji="🗳️"
                     ))
                     
+                    # Add disable button
+                    disable_view = VoteReminderDisableView(user_id)
+                    for item in disable_view.children:
+                        view.add_item(item)
+                    
                     await user.send(embed=embed, view=view)
                     
+                    # Set next reminder for 12 hours from now
                     next_reminder = now + timedelta(hours=12)
                     db_query(
                         "UPDATE vote_reminders SET next_reminder = ? WHERE user_id = ?",
@@ -600,6 +674,7 @@ async def vote_reminder_loop(bot):
                     debug_log(f"✅ Reminder sent successfully to {user.name}", "SUCCESS")
                     
                 except discord.Forbidden:
+                    # If DMs are closed, disable reminders
                     db_query("UPDATE vote_reminders SET enabled = 0 WHERE user_id = ?", (str(user_id),))
                     debug_log(f"⚠️ DMs closed for user {user_id}, disabled reminders", "WARNING")
                 except Exception as e:
