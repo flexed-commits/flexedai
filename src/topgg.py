@@ -1,4 +1,3 @@
-```python
 from aiohttp import web
 import discord
 import sqlite3
@@ -483,4 +482,287 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                         )
                 
                 dm_embed.set_footer(text="Vote every 12 hours!" if not is_test else "Test vote")
-           
+                
+                if view:
+                    await user.send(embed=dm_embed, view=view)
+                else:
+                    await user.send(embed=dm_embed)
+                debug_log("✅ DM sent successfully", "SUCCESS")
+                
+            except Exception as e:
+                debug_log(f"⚠️ DM failed: {e}", "WARNING")
+        
+        # Assign voter role
+        if not is_test:
+            role_assigned = await assign_voter_role(bot, user_id, hours=12)
+            if role_assigned:
+                debug_log(f"✅ Voter role assigned", "SUCCESS")
+            else:
+                debug_log(f"⚠️ Role assignment failed (user may not be in server)", "WARNING")
+        
+        debug_log("✅✅✅ VOTE PROCESSING COMPLETED", "SUCCESS")
+        
+    except Exception as e:
+        debug_log(f"❌ ERROR in process_vote: {e}", "ERROR")
+        tb.print_exc()
+        raise
+
+class VoteReminderView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+    
+    @discord.ui.button(label="Remind me every 12 hours", style=discord.ButtonStyle.primary, emoji="🔔", custom_id="enable_vote_reminder")
+    async def enable_reminder(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != str(self.user_id):
+            await interaction.response.send_message("❌ This button is not for you!", ephemeral=True)
+            return
+        
+        try:
+            next_reminder = datetime.now(timezone.utc) + timedelta(hours=12)
+            db_query(
+                "UPDATE vote_reminders SET enabled = 1, next_reminder = ? WHERE user_id = ?",
+                (next_reminder.isoformat(), str(self.user_id))
+            )
+            
+            button.disabled = True
+            button.label = "Reminders Enabled ✅"
+            button.style = discord.ButtonStyle.success
+            
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send("🔔 Vote reminders enabled! I'll remind you in 12 hours.", ephemeral=True)
+        except Exception as e:
+            debug_log(f"❌ Error enabling reminders: {e}", "ERROR")
+
+class VoteReminderDisableView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+    
+    @discord.ui.button(label="Disable Reminders", style=discord.ButtonStyle.danger, emoji="🔕", custom_id="disable_vote_reminder")
+    async def disable_reminder(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != str(self.user_id):
+            await interaction.response.send_message("❌ This button is not for you!", ephemeral=True)
+            return
+        
+        try:
+            db_query(
+                "UPDATE vote_reminders SET enabled = 0, next_reminder = NULL WHERE user_id = ?",
+                (str(self.user_id),)
+            )
+            
+            button.disabled = True
+            button.label = "Reminders Disabled ✅"
+            
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send("🔕 Reminders disabled.", ephemeral=True)
+        except Exception as e:
+            debug_log(f"❌ Error disabling reminders: {e}", "ERROR")
+
+async def vote_reminder_loop(bot):
+    """Background task to send vote reminders"""
+    await bot.wait_until_ready()
+    debug_log("✅ Vote reminder loop started", "SUCCESS")
+    
+    while not bot.is_closed():
+        try:
+            now = datetime.now(timezone.utc)
+            
+            reminders = db_query(
+                "SELECT user_id, total_votes FROM vote_reminders WHERE enabled = 1 AND next_reminder <= ?",
+                (now.isoformat(),),
+                fetch=True
+            )
+            
+            if reminders:
+                debug_log(f"📬 Found {len(reminders)} reminder(s)", "INFO")
+            
+            for user_id, total_votes in reminders:
+                try:
+                    user = await bot.fetch_user(int(user_id))
+                    
+                    embed = discord.Embed(
+                        title="🔔 Vote Reminder",
+                        description="Time to vote again!",
+                        color=discord.Color.blue(),
+                        timestamp=now
+                    )
+                    
+                    embed.add_field(
+                        name="📊 Your Stats",
+                        value=f"**Total Votes:** {total_votes}",
+                        inline=False
+                    )
+                    
+                    view = discord.ui.View(timeout=None)
+                    view.add_item(discord.ui.Button(
+                        label="Vote on Top.gg",
+                        url=f"https://top.gg/bot/{bot.user.id}/vote",
+                        style=discord.ButtonStyle.link,
+                        emoji="🗳️"
+                    ))
+                    
+                    disable_view = VoteReminderDisableView(user_id)
+                    for item in disable_view.children:
+                        view.add_item(item)
+                    
+                    await user.send(embed=embed, view=view)
+                    
+                    next_reminder = now + timedelta(hours=12)
+                    db_query(
+                        "UPDATE vote_reminders SET next_reminder = ? WHERE user_id = ?",
+                        (next_reminder.isoformat(), str(user_id))
+                    )
+                    
+                except discord.Forbidden:
+                    db_query("UPDATE vote_reminders SET enabled = 0 WHERE user_id = ?", (str(user_id),))
+                except Exception as e:
+                    debug_log(f"❌ Reminder error: {e}", "ERROR")
+                
+                await asyncio.sleep(1)
+            
+            await asyncio.sleep(300)
+            
+        except Exception as e:
+            debug_log(f"❌ Reminder loop error: {e}", "ERROR")
+            await asyncio.sleep(300)
+
+async def role_expiration_loop(bot):
+    """Background task to remove expired voter roles"""
+    await bot.wait_until_ready()
+    debug_log("✅ Role expiration loop started", "SUCCESS")
+    
+    while not bot.is_closed():
+        try:
+            now = datetime.now(timezone.utc)
+            
+            expired = db_query(
+                "SELECT user_id, role_expires_at FROM vote_reminders WHERE role_expires_at IS NOT NULL AND role_expires_at <= ?",
+                (now.isoformat(),),
+                fetch=True
+            )
+            
+            if expired:
+                debug_log(f"⏰ Found {len(expired)} expired role(s)", "INFO")
+            
+            for user_id, expires_at in expired:
+                try:
+                    if not SUPPORT_SERVER_ID:
+                        continue
+                    
+                    guild = bot.get_guild(SUPPORT_SERVER_ID)
+                    if not guild:
+                        guild = await bot.fetch_guild(SUPPORT_SERVER_ID)
+                    
+                    if not guild:
+                        continue
+                    
+                    member = guild.get_member(int(user_id))
+                    if not member:
+                        try:
+                            member = await guild.fetch_member(int(user_id))
+                        except discord.NotFound:
+                            db_query("UPDATE vote_reminders SET role_expires_at = NULL WHERE user_id = ?", (str(user_id),))
+                            continue
+                    
+                    if not member:
+                        continue
+                    
+                    role = guild.get_role(VOTER_ROLE_ID)
+                    if not role:
+                        continue
+                    
+                    if role in member.roles:
+                        await member.remove_roles(role, reason="Voter role expired (12 hours)")
+                        debug_log(f"✅ Removed voter role from {member.name}", "SUCCESS")
+                        
+                        db_query("UPDATE vote_reminders SET role_expires_at = NULL WHERE user_id = ?", (str(user_id),))
+                        
+                        try:
+                            user = await bot.fetch_user(int(user_id))
+                            embed = discord.Embed(
+                                title="⏰ Voter Role Expired",
+                                description="Your Voter role has expired after 12 hours.",
+                                color=discord.Color.orange(),
+                                timestamp=now
+                            )
+                            
+                            embed.add_field(
+                                name="🗳️ Vote Again",
+                                value="Vote now to get your role back!",
+                                inline=False
+                            )
+                            
+                            view = discord.ui.View(timeout=None)
+                            view.add_item(discord.ui.Button(
+                                label="Vote on Top.gg",
+                                url=f"https://top.gg/bot/{bot.user.id}/vote",
+                                style=discord.ButtonStyle.link,
+                                emoji="🗳️"
+                            ))
+                            
+                            await user.send(embed=embed, view=view)
+                        except:
+                            pass
+                    else:
+                        db_query("UPDATE vote_reminders SET role_expires_at = NULL WHERE user_id = ?", (str(user_id),))
+                    
+                except Exception as e:
+                    debug_log(f"❌ Error removing role: {e}", "ERROR")
+                
+                await asyncio.sleep(0.5)
+            
+            await asyncio.sleep(60)
+            
+        except Exception as e:
+            debug_log(f"❌ Role expiration loop error: {e}", "ERROR")
+            await asyncio.sleep(60)
+
+async def start_webhook_server(bot, port=8080):
+    """Start the webhook server"""
+    debug_log("🚀 INITIALIZING WEBHOOK SERVER", "INFO")
+    
+    try:
+        app = web.Application()
+        app['bot'] = bot
+        
+        app.router.add_post('/topgg/webhook', handle_vote)
+        app.router.add_post('/webhook', handle_vote)
+        app.router.add_post('/topgg', handle_vote)
+        app.router.add_post('/', handle_vote)
+        
+        async def health_check(request):
+            bot_status = "ready" if bot.is_ready() else "not ready"
+            return web.Response(text=f"Webhook running! Bot: {bot_status}", status=200)
+        
+        async def test_vote(request):
+            test_data = {
+                "user": "1081876265683927080",
+                "bot": "1379152032358858762",
+                "type": "test",
+                "isWeekend": False
+            }
+            
+            bot = request.app.get('bot')
+            if bot:
+                try:
+                    await process_vote(bot, test_data['user'], test_data['isWeekend'], test_data['type'])
+                    return web.Response(text="Test vote processed!", status=200)
+                except Exception as e:
+                    return web.Response(text=f"Test failed: {str(e)}", status=500)
+            return web.Response(text="Bot not initialized", status=500)
+        
+        app.router.add_get('/health', health_check)
+        app.router.add_get('/test', test_vote)
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        
+        debug_log(f"✅ WEBHOOK SERVER RUNNING ON PORT {port}", "SUCCESS")
+        
+    except Exception as e:
+        debug_log(f"❌ FAILED TO START SERVER: {e}", "ERROR")
+        tb.print_exc()
+        raise
