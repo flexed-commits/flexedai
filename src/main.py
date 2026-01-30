@@ -8,7 +8,8 @@ from groq import AsyncGroq
 from collections import deque
 import random
 from patreon import PatreonPromoter
-from topgg import init_vote_db, start_webhook_server, vote_reminder_loop
+from topgg import init_vote_db, start_webhook_server, vote_reminder_loop, role_expiration_loop, check_and_assign_voter_role_on_join
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -634,6 +635,17 @@ Enjoy using {BOT_NAME}! 🎉
         print(f"⚠️ Could not send welcome message to server {guild.name}: {e}")
 
 
+
+@bot.event
+async def on_member_join(member):
+    """Check if member voted recently and assign voter role with remaining time"""
+    
+    # Only check in support server
+    if member.guild.id != int(os.getenv('SUPPORT_SERVER_ID', 0)):
+        return
+
+    # Check and assign role
+    await check_and_assign_voter_role_on_join
 
 @bot.event
 async def on_guild_remove(guild):
