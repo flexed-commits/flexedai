@@ -11,6 +11,7 @@ DB_FILE = "bot_data.db"
 TOPGG_WEBHOOK_SECRET = os.getenv('TOPGG_WEBHOOK_SECRET')
 VOTE_LOG_CHANNEL_ID = 1466059183052034193
 VOTER_ROLE_ID = 1466059698666213427
+SUPPORT_SERVER_ID = int(os.getenv('SUPPORT_SERVER_ID')) if os.getenv('SUPPORT_SERVER_ID') else None
 
 def debug_log(message, level="INFO"):
     """Enhanced debug logging with timestamps"""
@@ -36,7 +37,8 @@ def init_vote_db():
             enabled INTEGER DEFAULT 0,
             last_vote DATETIME,
             next_reminder DATETIME,
-            total_votes INTEGER DEFAULT 0
+            total_votes INTEGER DEFAULT 0,
+            role_expires_at DATETIME
         )''')
         
         c.execute('''CREATE TABLE IF NOT EXISTS vote_logs (
@@ -71,6 +73,155 @@ def db_query(query, params=(), fetch=False):
         debug_log(f"Params were: {params}", "ERROR")
         tb.print_exc()
         return None
+
+async def assign_voter_role(bot, user_id, hours=12):
+    """Assign voter role to a user with expiration time"""
+    debug_log(f"🎭 Attempting to assign voter role to {user_id} for {hours} hours...", "INFO")
+    
+    if not SUPPORT_SERVER_ID:
+        debug_log("⚠️ SUPPORT_SERVER_ID not configured", "WARNING")
+        return False
+    
+    try:
+        guild = bot.get_guild(SUPPORT_SERVER_ID)
+        if not guild:
+            guild = await bot.fetch_guild(SUPPORT_SERVER_ID)
+        
+        if not guild:
+            debug_log(f"❌ Guild {SUPPORT_SERVER_ID} not found", "ERROR")
+            return False
+        
+        debug_log(f"✅ Guild found: {guild.name}", "SUCCESS")
+        
+        member = guild.get_member(int(user_id))
+        if not member:
+            try:
+                member = await guild.fetch_member(int(user_id))
+            except discord.NotFound:
+                debug_log(f"⚠️ User {user_id} is not a member of {guild.name}", "WARNING")
+                return False
+        
+        if not member:
+            debug_log(f"❌ Member {user_id} not found in guild", "ERROR")
+            return False
+        
+        debug_log(f"✅ Member found: {member.name}", "SUCCESS")
+        
+        role = guild.get_role(VOTER_ROLE_ID)
+        if not role:
+            debug_log(f"❌ Voter role {VOTER_ROLE_ID} not found", "ERROR")
+            return False
+        
+        debug_log(f"✅ Voter role found: {role.name}", "SUCCESS")
+        
+        # Calculate expiration time
+        expires_at = datetime.utcnow() + timedelta(hours=hours)
+        
+        # Add role
+        if role not in member.roles:
+            await member.add_roles(role, reason=f"Voted on Top.gg - expires in {hours}h")
+            debug_log(f"✅ Voter role assigned to {member.name} until {expires_at.isoformat()}", "SUCCESS")
+        else:
+            debug_log(f"ℹ️ Member {member.name} already has voter role", "INFO")
+        
+        # Update expiration in database
+        db_query(
+            "UPDATE vote_reminders SET role_expires_at = ? WHERE user_id = ?",
+            (expires_at.isoformat(), str(user_id))
+        )
+        
+        return True
+        
+    except Exception as e:
+        debug_log(f"❌ Role assignment error: {e}", "ERROR")
+        tb.print_exc()
+        return False
+
+async def check_and_assign_voter_role_on_join(bot, member):
+    """Check if user voted recently and assign role with remaining time"""
+    debug_log(f"🔍 Checking recent vote for {member.name} ({member.id})", "INFO")
+    
+    try:
+        # Get user's last vote
+        vote_data = db_query(
+            "SELECT last_vote, role_expires_at FROM vote_reminders WHERE user_id = ?",
+            (str(member.id),),
+            fetch=True
+        )
+        
+        if not vote_data:
+            debug_log(f"ℹ️ {member.name} has never voted", "INFO")
+            return
+        
+        last_vote_str, expires_at_str = vote_data[0]
+        
+        if not last_vote_str:
+            debug_log(f"ℹ️ {member.name} has no recent vote", "INFO")
+            return
+        
+        # Parse timestamps
+        last_vote = datetime.fromisoformat(last_vote_str)
+        now = datetime.utcnow()
+        
+        # Calculate time since vote
+        time_since_vote = now - last_vote
+        hours_since_vote = time_since_vote.total_seconds() / 3600
+        
+        debug_log(f"⏰ {member.name} voted {hours_since_vote:.2f} hours ago", "INFO")
+        
+        # If voted within last 12 hours, assign role with remaining time
+        if hours_since_vote < 12:
+            remaining_hours = 12 - hours_since_vote
+            debug_log(f"✅ Vote is recent! Assigning role for remaining {remaining_hours:.2f} hours", "SUCCESS")
+            
+            # Assign role with remaining time
+            success = await assign_voter_role(bot, member.id, remaining_hours)
+            
+            if success:
+                # Send DM notification
+                try:
+                    embed = discord.Embed(
+                        title="🎭 Voter Role Assigned!",
+                        description=f"Welcome to **{member.guild.name}**!\n\nYou recently voted for the bot, so you've been granted the Voter role!",
+                        color=discord.Color.green(),
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    embed.add_field(
+                        name="⏰ Role Duration",
+                        value=f"Your Voter role will expire in **{remaining_hours:.1f} hours**\n({expires_at_str if expires_at_str else 'N/A'})",
+                        inline=False
+                    )
+                    
+                    embed.add_field(
+                        name="🗳️ Vote Again",
+                        value="Vote again after 12 hours to keep your Voter role!",
+                        inline=False
+                    )
+                    
+                    embed.set_footer(text="Thank you for supporting the bot!")
+                    
+                    view = discord.ui.View(timeout=None)
+                    view.add_item(discord.ui.Button(
+                        label="Vote on Top.gg",
+                        url=f"https://top.gg/bot/{bot.user.id}/vote",
+                        style=discord.ButtonStyle.link,
+                        emoji="🗳️"
+                    ))
+                    
+                    await member.send(embed=embed, view=view)
+                    debug_log(f"✅ Sent role notification DM to {member.name}", "SUCCESS")
+                    
+                except discord.Forbidden:
+                    debug_log(f"⚠️ Cannot DM {member.name}", "WARNING")
+                except Exception as dm_error:
+                    debug_log(f"❌ DM error: {dm_error}", "ERROR")
+        else:
+            debug_log(f"⏱️ Vote is too old ({hours_since_vote:.2f}h), not assigning role", "INFO")
+            
+    except Exception as e:
+        debug_log(f"❌ Error checking voter role on join: {e}", "ERROR")
+        tb.print_exc()
 
 async def handle_vote(request):
     """Handle Top.gg vote webhook with extensive debugging"""
@@ -111,7 +262,6 @@ async def handle_vote(request):
                 debug_log("❌ AUTHORIZATION MISMATCH!", "ERROR")
                 debug_log(f"Expected: {TOPGG_WEBHOOK_SECRET[:10]}...", "ERROR")
                 debug_log(f"Received: {auth_header[:10]}...", "ERROR")
-                # ALLOW IT ANYWAY FOR DEBUGGING
                 debug_log("⚠️⚠️⚠️ ALLOWING ANYWAY FOR DEBUGGING ⚠️⚠️⚠️", "WARNING")
             else:
                 debug_log("✅ Authorization validated successfully", "SUCCESS")
@@ -225,9 +375,10 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
             debug_log(f"❌ Database insert failed: {db_error}", "ERROR")
             tb.print_exc()
         
-        # Update vote count (only for non-test votes)
+        # Update vote count and expiration
         total_votes = 0
         reminder_enabled = False
+        expires_at = datetime.utcnow() + timedelta(hours=12)
         
         if not is_test:
             debug_log("📊 Processing non-test vote - updating vote count", "INFO")
@@ -244,17 +395,17 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                     reminder_enabled = bool(existing[0][1]) if len(existing[0]) > 1 else False
                     debug_log(f"📈 Updating existing record. New total: {total_votes}, Reminders enabled: {reminder_enabled}", "INFO")
                     db_query(
-                        "UPDATE vote_reminders SET last_vote = ?, total_votes = ? WHERE user_id = ?",
-                        (datetime.utcnow().isoformat(), total_votes, str(user_id))
+                        "UPDATE vote_reminders SET last_vote = ?, total_votes = ?, role_expires_at = ? WHERE user_id = ?",
+                        (datetime.utcnow().isoformat(), total_votes, expires_at.isoformat(), str(user_id))
                     )
-                    debug_log(f"✅ Vote count updated to {total_votes}", "SUCCESS")
+                    debug_log(f"✅ Vote count updated to {total_votes}, expires at {expires_at.isoformat()}", "SUCCESS")
                 else:
                     total_votes = 1
                     reminder_enabled = False
                     debug_log("📝 Creating new vote record with count 1, reminders disabled", "INFO")
                     db_query(
-                        "INSERT INTO vote_reminders (user_id, last_vote, total_votes, enabled) VALUES (?, ?, ?, ?)",
-                        (str(user_id), datetime.utcnow().isoformat(), total_votes, 0)
+                        "INSERT INTO vote_reminders (user_id, last_vote, total_votes, enabled, role_expires_at) VALUES (?, ?, ?, ?, ?)",
+                        (str(user_id), datetime.utcnow().isoformat(), total_votes, 0, expires_at.isoformat())
                     )
                     debug_log("✅ New vote record created", "SUCCESS")
             except Exception as update_error:
@@ -354,6 +505,14 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                 )
                 embed.add_field(name="🎁 Weekend Bonus", value="Yes ✨" if is_weekend else "No", inline=True)
                 embed.add_field(name="🔖 Vote Type", value=vote_type.capitalize(), inline=True)
+                
+                if not is_test:
+                    embed.add_field(
+                        name="⏰ Voter Role Expiry",
+                        value=f"<t:{int(expires_at.timestamp())}:R>",
+                        inline=True
+                    )
+                
                 embed.set_footer(text="Vote on Top.gg" if not is_test else "Test vote - count not incremented")
                 
                 debug_log("📤 Embed created, attempting to send to channel...", "INFO")
@@ -392,14 +551,20 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                 if not is_test:
                     dm_embed.add_field(
                         name="🎁 Rewards",
-                        value="• Voter role assigned\n• Helping the bot grow!\n• Your vote matters! ❤️" + ("\n• **Weekend Bonus!** 🎊" if is_weekend else ""),
+                        value="• Voter role assigned (12 hours)\n• Helping the bot grow!\n• Your vote matters! ❤️" + ("\n• **Weekend Bonus!** 🎊" if is_weekend else ""),
+                        inline=False
+                    )
+                    
+                    dm_embed.add_field(
+                        name="⏰ Voter Role Expires",
+                        value=f"<t:{int(expires_at.timestamp())}:R>\n\n*If you're not in the server yet and join within 12 hours, you'll get the role for the remaining time!*",
                         inline=False
                     )
                     
                     # Only show reminder button if reminders are NOT already enabled
                     if not reminder_enabled:
                         dm_embed.add_field(
-                            name="⏰ Vote Again",
+                            name="🔔 Vote Reminders",
                             value="You can vote again in 12 hours!\nClick below to enable reminders.",
                             inline=False
                         )
@@ -407,8 +572,8 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                         debug_log("🔔 Created reminder view for DM (reminders not enabled)", "DEBUG")
                     else:
                         dm_embed.add_field(
-                            name="⏰ Vote Again",
-                            value="You can vote again in 12 hours!\n✅ Reminders are already enabled.",
+                            name="🔔 Vote Reminders",
+                            value="✅ Reminders are already enabled.",
                             inline=False
                         )
                         debug_log("✅ Reminders already enabled, not showing button", "DEBUG")
@@ -420,7 +585,7 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
                     )
                     debug_log("🧪 No view for test vote DM", "DEBUG")
                 
-                dm_embed.set_footer(text="Vote every 12 hours" if not is_test else "Test vote from Top.gg")
+                dm_embed.set_footer(text="Vote every 12 hours to keep your Voter role!" if not is_test else "Test vote from Top.gg")
                 
                 debug_log("📨 Attempting to send DM...", "INFO")
                 if view:
@@ -441,64 +606,11 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
         
         # Assign voter role (only for non-test votes)
         if not is_test:
-            debug_log("🎭 Attempting to assign voter role...", "INFO")
-            try:
-                support_server_id = os.getenv('SUPPORT_SERVER_ID')
-                debug_log(f"🏰 SUPPORT_SERVER_ID from env: {support_server_id}", "DEBUG")
-                
-                if not support_server_id:
-                    debug_log("⚠️ SUPPORT_SERVER_ID not set in environment variables", "WARNING")
-                else:
-                    support_server_id = int(support_server_id)
-                    debug_log(f"🏰 Support server ID (int): {support_server_id}", "DEBUG")
-                    
-                    guild = bot.get_guild(support_server_id)
-                    if not guild:
-                        debug_log(f"⚠️ Guild {support_server_id} not in cache, fetching...", "WARNING")
-                        try:
-                            guild = await bot.fetch_guild(support_server_id)
-                            debug_log(f"✅ Guild fetched: {guild.name}", "SUCCESS")
-                        except Exception as guild_err:
-                            debug_log(f"❌ Failed to fetch guild: {guild_err}", "ERROR")
-                    else:
-                        debug_log(f"✅ Guild found: {guild.name}", "SUCCESS")
-                    
-                    if guild:
-                        member = guild.get_member(int(user_id))
-                        if not member:
-                            debug_log(f"⚠️ Member {user_id} not in cache, fetching...", "DEBUG")
-                            try:
-                                member = await guild.fetch_member(int(user_id))
-                                debug_log(f"✅ Member fetched: {member.name}", "SUCCESS")
-                            except discord.NotFound:
-                                debug_log(f"⚠️ User {user_id} is not a member of {guild.name}", "WARNING")
-                            except Exception as member_err:
-                                debug_log(f"❌ Failed to fetch member: {member_err}", "ERROR")
-                        else:
-                            debug_log(f"✅ Member found: {member.name}", "SUCCESS")
-                        
-                        if member:
-                            role = guild.get_role(VOTER_ROLE_ID)
-                            if role:
-                                debug_log(f"✅ Voter role found: {role.name}", "SUCCESS")
-                                if role in member.roles:
-                                    debug_log(f"ℹ️ Member already has voter role", "INFO")
-                                else:
-                                    debug_log(f"➕ Adding voter role to member...", "INFO")
-                                    await member.add_roles(role, reason="Voted on Top.gg")
-                                    debug_log(f"✅ Voter role assigned successfully!", "SUCCESS")
-                            else:
-                                debug_log(f"❌ Voter role {VOTER_ROLE_ID} not found in guild", "ERROR")
-                        else:
-                            debug_log("⚠️ Member object is None after fetch attempts", "WARNING")
-                    else:
-                        debug_log("❌ Guild object is None", "ERROR")
-                        
-            except ValueError as ve:
-                debug_log(f"❌ Invalid SUPPORT_SERVER_ID format: {ve}", "ERROR")
-            except Exception as role_error:
-                debug_log(f"❌ Role assignment error: {role_error}", "ERROR")
-                tb.print_exc()
+            role_assigned = await assign_voter_role(bot, user_id, hours=12)
+            if role_assigned:
+                debug_log(f"✅ Voter role assigned to user {user_id}", "SUCCESS")
+            else:
+                debug_log(f"⚠️ Failed to assign voter role to user {user_id}", "WARNING")
         else:
             debug_log("🧪 Test vote - skipping role assignment", "INFO")
         
@@ -642,7 +754,7 @@ async def vote_reminder_loop(bot):
                     
                     embed.add_field(
                         name="🗳️ Vote Now",
-                        value="Click below to vote!",
+                        value="Click below to vote and get your Voter role again!",
                         inline=False
                     )
                     
@@ -689,6 +801,108 @@ async def vote_reminder_loop(bot):
             debug_log(f"❌ Reminder loop error: {e}", "ERROR")
             tb.print_exc()
             await asyncio.sleep(300)
+
+async def role_expiration_loop(bot):
+    """Background task to remove expired voter roles"""
+    await bot.wait_until_ready()
+    debug_log("✅ Role expiration loop started", "SUCCESS")
+    
+    while not bot.is_closed():
+        try:
+            now = datetime.utcnow()
+            debug_log(f"🔍 Checking for expired voter roles at {now.isoformat()}", "DEBUG")
+            
+            # Find expired roles
+            expired = db_query(
+                "SELECT user_id, role_expires_at FROM vote_reminders WHERE role_expires_at IS NOT NULL AND role_expires_at <= ?",
+                (now.isoformat(),),
+                fetch=True
+            )
+            
+            if expired:
+                debug_log(f"⏰ Found {len(expired)} expired role(s) to remove", "INFO")
+            
+            for user_id, expires_at in expired:
+                try:
+                    debug_log(f"🔄 Removing expired voter role from user {user_id}", "DEBUG")
+                    
+                    if not SUPPORT_SERVER_ID:
+                        continue
+                    
+                    guild = bot.get_guild(SUPPORT_SERVER_ID)
+                    if not guild:
+                        guild = await bot.fetch_guild(SUPPORT_SERVER_ID)
+                    
+                    if not guild:
+                        continue
+                    
+                    member = guild.get_member(int(user_id))
+                    if not member:
+                        try:
+                            member = await guild.fetch_member(int(user_id))
+                        except discord.NotFound:
+                            # User left server, clear expiration
+                            db_query("UPDATE vote_reminders SET role_expires_at = NULL WHERE user_id = ?", (str(user_id),))
+                            continue
+                    
+                    if not member:
+                        continue
+                    
+                    role = guild.get_role(VOTER_ROLE_ID)
+                    if not role:
+                        continue
+                    
+                    if role in member.roles:
+                        await member.remove_roles(role, reason="Voter role expired (12 hours)")
+                        debug_log(f"✅ Removed voter role from {member.name}", "SUCCESS")
+                        
+                        # Clear expiration
+                        db_query("UPDATE vote_reminders SET role_expires_at = NULL WHERE user_id = ?", (str(user_id),))
+                        
+                        # Try to send DM notification
+                        try:
+                            user = await bot.fetch_user(int(user_id))
+                            embed = discord.Embed(
+                                title="⏰ Voter Role Expired",
+                                description="Your Voter role has expired after 12 hours.",
+                                color=discord.Color.orange(),
+                                timestamp=datetime.utcnow()
+                            )
+                            
+                            embed.add_field(
+                                name="🗳️ Vote Again",
+                                value="Vote now to get your Voter role back for another 12 hours!",
+                                inline=False
+                            )
+                            
+                            view = discord.ui.View(timeout=None)
+                            view.add_item(discord.ui.Button(
+                                label="Vote on Top.gg",
+                                url=f"https://top.gg/bot/{bot.user.id}/vote",
+                                style=discord.ButtonStyle.link,
+                                emoji="🗳️"
+                            ))
+                            
+                            await user.send(embed=embed, view=view)
+                            debug_log(f"✅ Sent expiration notification DM to {user.name}", "SUCCESS")
+                        except:
+                            pass
+                    else:
+                        # Role already removed manually, just clear expiration
+                        db_query("UPDATE vote_reminders SET role_expires_at = NULL WHERE user_id = ?", (str(user_id),))
+                    
+                except Exception as e:
+                    debug_log(f"❌ Error removing role from user {user_id}: {e}", "ERROR")
+                    tb.print_exc()
+                
+                await asyncio.sleep(0.5)
+            
+            await asyncio.sleep(60)  # Check every minute
+            
+        except Exception as e:
+            debug_log(f"❌ Role expiration loop error: {e}", "ERROR")
+            tb.print_exc()
+            await asyncio.sleep(60)
 
 async def start_webhook_server(bot, port=8080):
     """Start the webhook server"""
