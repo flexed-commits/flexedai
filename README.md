@@ -109,7 +109,7 @@ All actions are logged to dedicated channels with rich embeds:
 1. **Clone the repository**
 ```bash
 git clone https://github.com/flexed-commits/flexedai
-cd flexedai
+cd flexedai/src
 ```
 
 2. **Install dependencies**
