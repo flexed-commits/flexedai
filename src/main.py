@@ -9,7 +9,7 @@ from collections import deque
 import random
 from patreon import PatreonPromoter
 from topgg import init_vote_db, start_webhook_server, vote_reminder_loop, role_expiration_loop, check_and_assign_voter_role_on_join
-
+import hashlib
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -50,6 +50,23 @@ OWNER_INFO = {
     'id': int(os.getenv('OWNER_ID')),
     'bio': os.getenv('OWNER_BIO', f'Creator and core maintainer of {BOT_NAME} Discord Bot')
 }
+
+# --- Timezone Adjustments ---
+def get_discord_timestamp(dt, style='f'):
+    """
+    Convert datetime to Discord timestamp format
+    Styles: t=time, T=time+sec, d=date, D=date+full, f=datetime, F=datetime+full, R=relative
+    """
+    if not dt:
+        return "Unknown"
+    
+    # Ensure datetime is timezone-aware (UTC)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    
+    timestamp = int(dt.timestamp())
+    return f"<t:{timestamp}:{style}>"
+    
 # --- DATABASE SETUP ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -3668,75 +3685,134 @@ async def command_ids(ctx):
 
 
 def generate_encoding_map():
-    """Generate a random character mapping with unique 3-char codes"""
-    # Characters to be encoded
+    """Generate a random character mapping for encoding with salt"""
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits + ' .,!?\n\t'
+    base_symbols = string.ascii_letters + string.digits + '=&/'
     
-    # Available symbols for second and third position (avoid X)
-    symbols = string.ascii_letters.replace('X', '').replace('x', '') + string.digits + '=&/'
+    # Generate a random salt for this encoding session
+    salt = ''.join(random.choices(base_symbols, k=8))
     
     encoding_map = {}
     decoding_map = {}
-    
     used_codes = set()
     
     for char in chars:
-        # Generate unique 3-char code starting with 'X'
+        # Create hash-based code that varies with position
         while True:
-            # Format: X + 2 random chars
-            code = 'X' + random.choice(symbols) + random.choice(symbols)
-            if code not in used_codes:
+            # Use hash to generate unique codes
+            hash_input = f"{char}{salt}{random.randint(1000, 9999)}"
+            hash_obj = hashlib.md5(hash_input.encode())
+            code = base_symbols[int(hash_obj.hexdigest()[:2], 16) % len(base_symbols)] + \
+                   base_symbols[int(hash_obj.hexdigest()[2:4], 16) % len(base_symbols)] + \
+                   base_symbols[int(hash_obj.hexdigest()[4:6], 16) % len(base_symbols)]
+            
+            if code not in used_codes and code != '&&&':
                 used_codes.add(code)
                 encoding_map[char] = code
                 decoding_map[code] = char
                 break
     
-    return encoding_map, decoding_map
+    return encoding_map, decoding_map, salt
+
+def load_or_generate_maps():
+    """Load existing encoding map or generate a new one"""
+    if os.path.exists(ENCODING_FILE):
+        try:
+            with open(ENCODING_FILE, 'r') as f:
+                data = json.load(f)
+                return data['encode'], data['decode'], data.get('salt', '')
+        except:
+            pass
+    
+    encode_map, decode_map, salt = generate_encoding_map()
+    
+    try:
+        with open(ENCODING_FILE, 'w') as f:
+            json.dump({'encode': encode_map, 'decode': decode_map, 'salt': salt}, f)
+    except:
+        pass
+    
+    return encode_map, decode_map, salt
+
+# Update at module level
+ENCODE_MAP, DECODE_MAP, ENCODING_SALT = load_or_generate_maps()
 
 def encode_text(text):
-    """Encode text using unique 3-character codes"""
+    """Encode text with position-dependent scrambling"""
     result = []
-    for char in text:
+    position_salt = 0
+    
+    for i, char in enumerate(text):
         if char in ENCODE_MAP:
-            result.append(ENCODE_MAP[char])
+            # Add position-dependent variation
+            base_code = ENCODE_MAP[char]
+            # Insert position marker every 5 characters
+            if i > 0 and i % 5 == 0:
+                position_salt = (position_salt + 1) % 10
+                result.append(f"#{position_salt}")
+            result.append(base_code)
         else:
-            # For emojis/special chars, use 'XX' prefix with hex (different from normal X)
+            # For emojis/special chars
             hex_val = char.encode('utf-8').hex()
-            result.append(f"XX{hex_val}XX")
-    return ''.join(result)
+            result.append(f"&&&{hex_val}&&")
+    
+    # Add final checksum
+    checksum = hashlib.md5(''.join(result).encode()).hexdigest()[:4]
+    return f"${checksum}${''.join(result)}"
 
 def decode_text(text):
-    """Decode text by identifying X-prefixed codes"""
-    result = []
-    i = 0
+    """Decode text with checksum validation"""
+    if not text.startswith('$'):
+        return "Invalid encoding format"
     
-    while i < len(text):
-        # Check for special character encoding (XX...XX)
-        if i + 1 < len(text) and text[i:i+2] == 'XX':
-            # Find closing XX
-            end = text.find('XX', i + 2)
-            if end != -1 and end != i:
-                hex_code = text[i+2:end]
-                try:
-                    char = bytes.fromhex(hex_code).decode('utf-8')
-                    result.append(char)
-                    i = end + 2
-                    continue
-                except:
-                    pass
+    try:
+        # Extract and validate checksum
+        parts = text[1:].split('$', 1)
+        if len(parts) != 2:
+            return "Invalid encoding format"
         
-        # Check for normal 3-character code (X + 2 chars)
-        if text[i] == 'X' and i + 2 < len(text):
-            code = text[i:i+3]
-            if code in DECODE_MAP:
-                result.append(DECODE_MAP[code])
-                i += 3
+        checksum, encoded = parts
+        calculated_checksum = hashlib.md5(encoded.encode()).hexdigest()[:4]
+        
+        if checksum != calculated_checksum:
+            return "Corrupted or tampered message"
+        
+        result = []
+        i = 0
+        
+        while i < len(encoded):
+            # Skip position markers
+            if i < len(encoded) and encoded[i] == '#':
+                i += 2  # Skip #N
                 continue
+            
+            # Check for hex-encoded special characters (&&&...&&)
+            if i + 2 < len(encoded) and encoded[i:i+3] == '&&&':
+                end = encoded.find('&&', i + 3)
+                if end != -1:
+                    hex_code = encoded[i+3:end]
+                    try:
+                        char = bytes.fromhex(hex_code).decode('utf-8')
+                        result.append(char)
+                        i = end + 2
+                        continue
+                    except:
+                        pass
+            
+            # Try to decode 3-character code
+            if i + 2 < len(encoded):
+                code = encoded[i:i+3]
+                if code in DECODE_MAP:
+                    result.append(DECODE_MAP[code])
+                    i += 3
+                    continue
+            
+            i += 1
         
-        # Skip unrecognized character
-        i += 1
-    
-    return ''.join(result)
+        return ''.join(result)
+        
+    except Exception as e:
+        return f"Decoding error: {str(e)}"
 
 @bot.hybrid_command(name="encode", description="Encode a message using custom cipher")
 async def encode_message(ctx, *, message: str):
