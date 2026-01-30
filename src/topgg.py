@@ -26,12 +26,13 @@ def debug_log(message, level="INFO"):
     print(f"[{timestamp}] {prefix} {message}", flush=True)
 
 def init_vote_db():
-    """Initialize vote reminder database"""
+    """Initialize vote reminder database with migration support"""
     try:
         debug_log("Initializing vote database...", "INFO")
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
         
+        # Create tables if they don't exist
         c.execute('''CREATE TABLE IF NOT EXISTS vote_reminders (
             user_id TEXT PRIMARY KEY,
             enabled INTEGER DEFAULT 0,
@@ -49,12 +50,21 @@ def init_vote_db():
             vote_type TEXT DEFAULT 'upvote'
         )''')
         
+        # --- MIGRATION: Add role_expires_at if it's missing from an old DB ---
+        try:
+            c.execute('ALTER TABLE vote_reminders ADD COLUMN role_expires_at DATETIME')
+            debug_log("Migrated database: added role_expires_at column", "SUCCESS")
+        except sqlite3.OperationalError:
+            # If the column already exists, sqlite throws an error. We can safely ignore it.
+            debug_log("Column role_expires_at already exists, skipping migration", "DEBUG")
+        
         conn.commit()
         conn.close()
         debug_log("Vote database initialized successfully", "SUCCESS")
     except Exception as e:
         debug_log(f"Database initialization error: {e}", "ERROR")
         tb.print_exc()
+
 
 def db_query(query, params=(), fetch=False):
     """Execute database query with error handling"""
