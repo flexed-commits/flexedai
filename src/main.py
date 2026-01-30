@@ -3684,140 +3684,349 @@ async def command_ids(ctx):
         await ctx.send(f"❌ **Error fetching command IDs:**\n```\n{str(e)}\n```")
 
 
-def generate_encoding_map():
-    """Generate a random character mapping for encoding with salt"""
-    chars = string.ascii_lowercase + string.ascii_uppercase + string.digits + ' .,!?\n\t'
-    base_symbols = string.ascii_letters + string.digits + '=&/'
-    
-    # Generate a random salt for this encoding session
-    salt = ''.join(random.choices(base_symbols, k=8))
-    
-    encoding_map = {}
-    decoding_map = {}
-    used_codes = set()
-    
-    for char in chars:
-        # Create hash-based code that varies with position
-        while True:
-            # Use hash to generate unique codes
-            hash_input = f"{char}{salt}{random.randint(1000, 9999)}"
-            hash_obj = hashlib.md5(hash_input.encode())
-            code = base_symbols[int(hash_obj.hexdigest()[:2], 16) % len(base_symbols)] + \
-                   base_symbols[int(hash_obj.hexdigest()[2:4], 16) % len(base_symbols)] + \
-                   base_symbols[int(hash_obj.hexdigest()[4:6], 16) % len(base_symbols)]
-            
-            if code not in used_codes and code != '&&&':
-                used_codes.add(code)
-                encoding_map[char] = code
-                decoding_map[code] = char
-                break
-    
-    return encoding_map, decoding_map, salt
+# Allowed characters only
+ALLOWED_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789&,-/.!?="
 
-def load_or_generate_maps():
-    """Load existing encoding map or generate a new one"""
-    if os.path.exists(ENCODING_FILE):
-        try:
-            with open(ENCODING_FILE, 'r') as f:
-                data = json.load(f)
-                return data['encode'], data['decode'], data.get('salt', '')
-        except:
-            pass
+# ==================== ENCODING FUNCTIONS ====================
+
+def generate_key_lvl0(text_length):
+    """Level 0: Simple timestamp-based key (2 chars)"""
+    timestamp = str(int(time.time()))
+    seed = f"{timestamp}{text_length}"
+    hash_val = hashlib.md5(seed.encode()).hexdigest()
+    result = ""
+    for i in range(2):
+        idx = int(hash_val[i*4:i*4+4], 16) % len(ALLOWED_CHARS)
+        result += ALLOWED_CHARS[idx]
+    return result
+
+def generate_key_lvl1(text_length):
+    """Level 1: Timestamp + random (4 chars)"""
+    timestamp = str(int(time.time() * 1000))
+    seed = f"{timestamp}{text_length}{random.randint(10, 99)}"
+    hash_val = hashlib.md5(seed.encode()).hexdigest()
+    result = ""
+    for i in range(4):
+        idx = int(hash_val[i*4:i*4+4], 16) % len(ALLOWED_CHARS)
+        result += ALLOWED_CHARS[idx]
+    return result
+
+def generate_key_lvl2(text_length):
+    """Level 2: More random (6 chars)"""
+    timestamp = str(int(time.time() * 1000))
+    seed = f"{timestamp}{text_length}{random.randint(1000, 9999)}"
+    hash_val = hashlib.md5(seed.encode()).hexdigest()
+    result = ""
+    for i in range(6):
+        idx = int(hash_val[i*2:i*2+2], 16) % len(ALLOWED_CHARS)
+        result += ALLOWED_CHARS[idx]
+    return result
+
+def generate_key_lvl3(text_length):
+    """Level 3: Maximum randomness (8 chars)"""
+    timestamp = str(int(time.time() * 10000))
+    seed = f"{timestamp}{text_length}{random.randint(10000, 99999)}{random.random()}"
+    hash_val = hashlib.sha256(seed.encode()).hexdigest()
+    result = ""
+    for i in range(8):
+        idx = int(hash_val[i*2:i*2+2], 16) % len(ALLOWED_CHARS)
+        result += ALLOWED_CHARS[idx]
+    return result
+
+def encode_base(text, key):
+    """Base encoding function used by all levels"""
+    if not text:
+        return ""
     
-    encode_map, decode_map, salt = generate_encoding_map()
+    # Convert entire text to single large number
+    text_bytes = text.encode('utf-8')
+    big_num = int.from_bytes(text_bytes, 'big')
+    
+    # Mix with key
+    key_num = sum(ord(c) * (i + 1) for i, c in enumerate(key))
+    mixed = big_num + key_num
+    
+    # Convert to base using allowed chars
+    base = len(ALLOWED_CHARS)
+    encoded = ""
+    while mixed > 0:
+        encoded = ALLOWED_CHARS[mixed % base] + encoded
+        mixed //= base
+    
+    if not encoded:
+        encoded = ALLOWED_CHARS[0]
+    
+    return encoded
+
+def encode_text_lvl0(text):
+    """
+    Level 0: Simple encoding (minimal)
+    Format: key.data
+    Length: ~original + 3-4 chars
+    """
+    key = generate_key_lvl0(len(text))
+    encoded = encode_base(text, key)
+    return f"{key}.{encoded}"
+
+def encode_text_lvl1(text):
+    """
+    Level 1: Standard encoding
+    Format: key.data.checksum
+    Length: ~original + 6-8 chars (guaranteed 5+ total)
+    """
+    key = generate_key_lvl1(len(text))
+    encoded = encode_base(text, key)
+    
+    # Add 2-char checksum
+    checksum_hash = hashlib.md5(f"{text}{key}".encode()).hexdigest()
+    checksum = ""
+    for i in range(2):
+        idx = int(checksum_hash[i*2:i*2+2], 16) % len(ALLOWED_CHARS)
+        checksum += ALLOWED_CHARS[idx]
+    
+    result = f"{key}.{encoded}.{checksum}"
+    
+    # Ensure minimum 5 chars total
+    if len(result) < 5:
+        padding = ALLOWED_CHARS[0] * (5 - len(result))
+        result += padding
+    
+    return result
+
+def encode_text_lvl2(text):
+    """
+    Level 2: Enhanced encoding with noise
+    Format: key.noise.data.checksum
+    Length: ~original + 10-12 chars (guaranteed 7+ total)
+    """
+    key = generate_key_lvl2(len(text))
+    encoded = encode_base(text, key)
+    
+    # Add 2-char noise
+    noise = ""
+    for i in range(2):
+        noise += ALLOWED_CHARS[random.randint(0, len(ALLOWED_CHARS) - 1)]
+    
+    # Add 3-char checksum
+    checksum_hash = hashlib.md5(f"{text}{key}{noise}".encode()).hexdigest()
+    checksum = ""
+    for i in range(3):
+        idx = int(checksum_hash[i*2:i*2+2], 16) % len(ALLOWED_CHARS)
+        checksum += ALLOWED_CHARS[idx]
+    
+    result = f"{key}.{noise}.{encoded}.{checksum}"
+    
+    # Ensure minimum 7 chars total
+    if len(result) < 7:
+        padding = ALLOWED_CHARS[0] * (7 - len(result))
+        result += padding
+    
+    return result
+
+def encode_text_lvl3(text):
+    """
+    Level 3: Maximum security with salt and extended checksum
+    Format: key.salt.data.checksum
+    Length: ~original + 18-22 chars (guaranteed 12+ total)
+    """
+    key = generate_key_lvl3(len(text))
+    encoded = encode_base(text, key)
+    
+    # Add 4-char salt
+    salt = ""
+    for i in range(4):
+        salt += ALLOWED_CHARS[random.randint(0, len(ALLOWED_CHARS) - 1)]
+    
+    # Add 5-char checksum
+    checksum_hash = hashlib.sha256(f"{text}{key}{salt}".encode()).hexdigest()
+    checksum = ""
+    for i in range(5):
+        idx = int(checksum_hash[i*2:i*2+2], 16) % len(ALLOWED_CHARS)
+        checksum += ALLOWED_CHARS[idx]
+    
+    result = f"{key}.{salt}.{encoded}.{checksum}"
+    
+    # Ensure minimum 12 chars total
+    if len(result) < 12:
+        padding = ALLOWED_CHARS[0] * (12 - len(result))
+        result += padding
+    
+    return result
+
+# ==================== DECODING FUNCTION ====================
+
+def decode_text_universal(encoded):
+    """Universal decoder - works for all encoding levels"""
+    if not encoded or "." not in encoded:
+        return "Invalid format - missing separator"
     
     try:
-        with open(ENCODING_FILE, 'w') as f:
-            json.dump({'encode': encode_map, 'decode': decode_map, 'salt': salt}, f)
-    except:
-        pass
-    
-    return encode_map, decode_map, salt
-
-# Update at module level
-ENCODE_MAP, DECODE_MAP, ENCODING_SALT = load_or_generate_maps()
-
-def encode_text(text):
-    """Encode text with position-dependent scrambling"""
-    result = []
-    position_salt = 0
-    
-    for i, char in enumerate(text):
-        if char in ENCODE_MAP:
-            # Add position-dependent variation
-            base_code = ENCODE_MAP[char]
-            # Insert position marker every 5 characters
-            if i > 0 and i % 5 == 0:
-                position_salt = (position_salt + 1) % 10
-                result.append(f"#{position_salt}")
-            result.append(base_code)
-        else:
-            # For emojis/special chars
-            hex_val = char.encode('utf-8').hex()
-            result.append(f"&&&{hex_val}&&")
-    
-    # Add final checksum
-    checksum = hashlib.md5(''.join(result).encode()).hexdigest()[:4]
-    return f"${checksum}${''.join(result)}"
-
-def decode_text(text):
-    """Decode text with checksum validation"""
-    if not text.startswith('$'):
-        return "Invalid encoding format"
-    
-    try:
-        # Extract and validate checksum
-        parts = text[1:].split('$', 1)
-        if len(parts) != 2:
-            return "Invalid encoding format"
+        parts = encoded.split(".")
         
-        checksum, encoded = parts
-        calculated_checksum = hashlib.md5(encoded.encode()).hexdigest()[:4]
-        
-        if checksum != calculated_checksum:
-            return "Corrupted or tampered message"
-        
-        result = []
-        i = 0
-        
-        while i < len(encoded):
-            # Skip position markers
-            if i < len(encoded) and encoded[i] == '#':
-                i += 2  # Skip #N
-                continue
+        # Detect encoding level by number of parts and key length
+        if len(parts) == 2:
+            # Level 0: key.data
+            key, data = parts
+            if len(key) != 2:
+                return "Invalid Level 0 format"
             
-            # Check for hex-encoded special characters (&&&...&&)
-            if i + 2 < len(encoded) and encoded[i:i+3] == '&&&':
-                end = encoded.find('&&', i + 3)
-                if end != -1:
-                    hex_code = encoded[i+3:end]
-                    try:
-                        char = bytes.fromhex(hex_code).decode('utf-8')
-                        result.append(char)
-                        i = end + 2
-                        continue
-                    except:
-                        pass
-            
-            # Try to decode 3-character code
-            if i + 2 < len(encoded):
-                code = encoded[i:i+3]
-                if code in DECODE_MAP:
-                    result.append(DECODE_MAP[code])
-                    i += 3
+            # Decode
+            base = len(ALLOWED_CHARS)
+            mixed = 0
+            for char in data:
+                if char not in ALLOWED_CHARS:
                     continue
+                mixed = mixed * base + ALLOWED_CHARS.index(char)
             
-            i += 1
+            # Unmix with key
+            key_num = sum(ord(c) * (i + 1) for i, c in enumerate(key))
+            big_num = mixed - key_num
+            
+            if big_num < 0:
+                return "Invalid encoding"
+            
+            # Convert back to bytes
+            byte_length = max(1, (big_num.bit_length() + 7) // 8)
+            text_bytes = big_num.to_bytes(byte_length, 'big')
+            return text_bytes.decode('utf-8', errors='ignore')
         
-        return ''.join(result)
+        elif len(parts) == 3:
+            # Level 1: key.data.checksum
+            key, data, checksum = parts
+            if len(key) != 4 or len(checksum) != 2:
+                return "Invalid Level 1 format"
+            
+            # Remove padding
+            data = data.rstrip(ALLOWED_CHARS[0])
+            
+            # Decode
+            base = len(ALLOWED_CHARS)
+            mixed = 0
+            for char in data:
+                if char not in ALLOWED_CHARS:
+                    continue
+                mixed = mixed * base + ALLOWED_CHARS.index(char)
+            
+            # Unmix with key
+            key_num = sum(ord(c) * (i + 1) for i, c in enumerate(key))
+            big_num = mixed - key_num
+            
+            if big_num < 0:
+                return "Invalid encoding"
+            
+            # Convert back to bytes
+            byte_length = max(1, (big_num.bit_length() + 7) // 8)
+            text_bytes = big_num.to_bytes(byte_length, 'big')
+            result = text_bytes.decode('utf-8', errors='ignore')
+            
+            # Verify checksum
+            checksum_hash = hashlib.md5(f"{result}{key}".encode()).hexdigest()
+            expected_checksum = ""
+            for i in range(2):
+                idx = int(checksum_hash[i*2:i*2+2], 16) % len(ALLOWED_CHARS)
+                expected_checksum += ALLOWED_CHARS[idx]
+            
+            if checksum != expected_checksum:
+                return f"{result} (Warning: Checksum mismatch)"
+            
+            return result
+        
+        elif len(parts) == 4:
+            # Could be Level 2 or Level 3
+            key, noise_or_salt, data, checksum = parts
+            
+            if len(key) == 6 and len(noise_or_salt) == 2 and len(checksum) == 3:
+                # Level 2: key(6).noise(2).data.checksum(3)
+                key, noise, data, checksum = parts
+                
+                # Remove padding
+                data = data.rstrip(ALLOWED_CHARS[0])
+                
+                # Decode
+                base = len(ALLOWED_CHARS)
+                mixed = 0
+                for char in data:
+                    if char not in ALLOWED_CHARS:
+                        continue
+                    mixed = mixed * base + ALLOWED_CHARS.index(char)
+                
+                # Unmix with key
+                key_num = sum(ord(c) * (i + 1) for i, c in enumerate(key))
+                big_num = mixed - key_num
+                
+                if big_num < 0:
+                    return "Invalid encoding"
+                
+                # Convert back to bytes
+                byte_length = max(1, (big_num.bit_length() + 7) // 8)
+                text_bytes = big_num.to_bytes(byte_length, 'big')
+                result = text_bytes.decode('utf-8', errors='ignore')
+                
+                # Verify checksum
+                checksum_hash = hashlib.md5(f"{result}{key}{noise}".encode()).hexdigest()
+                expected_checksum = ""
+                for i in range(3):
+                    idx = int(checksum_hash[i*2:i*2+2], 16) % len(ALLOWED_CHARS)
+                    expected_checksum += ALLOWED_CHARS[idx]
+                
+                if checksum != expected_checksum:
+                    return f"{result} (Warning: Checksum mismatch)"
+                
+                return result
+            
+            elif len(key) == 8 and len(noise_or_salt) == 4 and len(checksum) == 5:
+                # Level 3: key(8).salt(4).data.checksum(5)
+                key, salt, data, checksum = parts
+                
+                # Remove padding
+                data = data.rstrip(ALLOWED_CHARS[0])
+                
+                # Decode
+                base = len(ALLOWED_CHARS)
+                mixed = 0
+                for char in data:
+                    if char not in ALLOWED_CHARS:
+                        continue
+                    mixed = mixed * base + ALLOWED_CHARS.index(char)
+                
+                # Unmix with key
+                key_num = sum(ord(c) * (i + 1) for i, c in enumerate(key))
+                big_num = mixed - key_num
+                
+                if big_num < 0:
+                    return "Invalid encoding"
+                
+                # Convert back to bytes
+                byte_length = max(1, (big_num.bit_length() + 7) // 8)
+                text_bytes = big_num.to_bytes(byte_length, 'big')
+                result = text_bytes.decode('utf-8', errors='ignore')
+                
+                # Verify checksum
+                checksum_hash = hashlib.sha256(f"{result}{key}{salt}".encode()).hexdigest()
+                expected_checksum = ""
+                for i in range(5):
+                    idx = int(checksum_hash[i*2:i*2+2], 16) % len(ALLOWED_CHARS)
+                    expected_checksum += ALLOWED_CHARS[idx]
+                
+                if checksum != expected_checksum:
+                    return f"{result} (Warning: Checksum mismatch)"
+                
+                return result
+            else:
+                return "Invalid format - unknown level"
+        else:
+            return "Invalid format - too many parts"
         
     except Exception as e:
         return f"Decoding error: {str(e)}"
 
-@bot.hybrid_command(name="encode", description="Encode a message using custom cipher")
-async def encode_message(ctx, *, message: str):
-    """Encode a message using the bot's custom encoding"""
+# ==================== DISCORD COMMANDS ====================
+
+@bot.hybrid_command(name="encode", description="Encode text (Level 0 - Simple)")
+async def encode_cmd(ctx, *, message: str):
+    """Encode a message using Level 0 encoding (simple, minimal length)"""
     
+    # Check for banned words if not bypass user
     if not is_bypass_user(ctx.author.id):
         banned = db_query("SELECT word FROM banned_words", fetch=True)
         content_low = message.lower()
@@ -3826,9 +4035,9 @@ async def encode_message(ctx, *, message: str):
             return
     
     try:
-        encoded = encode_text(message)
+        encoded = encode_text_lvl0(message)
         
-        embed = discord.Embed(title="🔐 Message Encoded", color=discord.Color.green())
+        embed = discord.Embed(title="🔐 Message Encoded (Level 0)", color=discord.Color.green())
         
         original_display = (message[:100] + "...") if len(message) > 100 else message
         embed.add_field(name="📝 Original", value=f"`{original_display}`", inline=False)
@@ -3836,31 +4045,149 @@ async def encode_message(ctx, *, message: str):
         encoded_display = (encoded[:1000] + "...") if len(encoded) > 1000 else encoded
         embed.add_field(name="🔒 Encoded", value=f"`{encoded_display}`", inline=False)
         
+        embed.add_field(name="ℹ️ Level", value="**Level 0** - Simple encoding", inline=True)
+        embed.add_field(name="📏 Length", value=f"{len(encoded)} chars", inline=True)
+        
+        embed.set_footer(text="Use /decode to decrypt • Level 0: Minimal security")
+        
         await ctx.send(embed=embed)
         
-        # Send full encoded message in single backticks
+        # Send full encoded message
         if len(encoded) <= 1990:
             await ctx.send(f"`{encoded}`")
             
     except Exception as e:
         await ctx.send(f"❌ **Encoding failed:** `{str(e)}`", ephemeral=True)
 
-@bot.hybrid_command(name="decode", description="Decode a message using custom cipher")
-async def decode_message(ctx, *, encoded_message: str):
-    """Decode a message using the bot's custom encoding"""
+@bot.hybrid_command(name="encode-lvl-1", description="Encode text (Level 1 - Standard)")
+async def encode_lvl1_cmd(ctx, *, message: str):
+    """Encode a message using Level 1 encoding (standard with checksum)"""
+    
+    # Check for banned words if not bypass user
+    if not is_bypass_user(ctx.author.id):
+        banned = db_query("SELECT word FROM banned_words", fetch=True)
+        content_low = message.lower()
+        if banned and any(bw[0].lower() in content_low for bw in banned):
+            await ctx.send("❌ **Cannot encode** - Message contains banned words.", ephemeral=True)
+            return
+    
+    try:
+        encoded = encode_text_lvl1(message)
+        
+        embed = discord.Embed(title="🔐 Message Encoded (Level 1)", color=discord.Color.blue())
+        
+        original_display = (message[:100] + "...") if len(message) > 100 else message
+        embed.add_field(name="📝 Original", value=f"`{original_display}`", inline=False)
+        
+        encoded_display = (encoded[:1000] + "...") if len(encoded) > 1000 else encoded
+        embed.add_field(name="🔒 Encoded", value=f"`{encoded_display}`", inline=False)
+        
+        embed.add_field(name="ℹ️ Level", value="**Level 1** - Standard encoding", inline=True)
+        embed.add_field(name="📏 Length", value=f"{len(encoded)} chars (min 5+)", inline=True)
+        
+        embed.set_footer(text="Use /decode to decrypt • Level 1: Standard security with checksum")
+        
+        await ctx.send(embed=embed)
+        
+        # Send full encoded message
+        if len(encoded) <= 1990:
+            await ctx.send(f"`{encoded}`")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Encoding failed:** `{str(e)}`", ephemeral=True)
+
+@bot.hybrid_command(name="encode-lvl-2", description="Encode text (Level 2 - Enhanced)")
+async def encode_lvl2_cmd(ctx, *, message: str):
+    """Encode a message using Level 2 encoding (enhanced with noise)"""
+    
+    # Check for banned words if not bypass user
+    if not is_bypass_user(ctx.author.id):
+        banned = db_query("SELECT word FROM banned_words", fetch=True)
+        content_low = message.lower()
+        if banned and any(bw[0].lower() in content_low for bw in banned):
+            await ctx.send("❌ **Cannot encode** - Message contains banned words.", ephemeral=True)
+            return
+    
+    try:
+        encoded = encode_text_lvl2(message)
+        
+        embed = discord.Embed(title="🔐 Message Encoded (Level 2)", color=discord.Color.purple())
+        
+        original_display = (message[:100] + "...") if len(message) > 100 else message
+        embed.add_field(name="📝 Original", value=f"`{original_display}`", inline=False)
+        
+        encoded_display = (encoded[:1000] + "...") if len(encoded) > 1000 else encoded
+        embed.add_field(name="🔒 Encoded", value=f"`{encoded_display}`", inline=False)
+        
+        embed.add_field(name="ℹ️ Level", value="**Level 2** - Enhanced encoding", inline=True)
+        embed.add_field(name="📏 Length", value=f"{len(encoded)} chars (min 7+)", inline=True)
+        
+        embed.set_footer(text="Use /decode to decrypt • Level 2: Enhanced security with noise")
+        
+        await ctx.send(embed=embed)
+        
+        # Send full encoded message
+        if len(encoded) <= 1990:
+            await ctx.send(f"`{encoded}`")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Encoding failed:** `{str(e)}`", ephemeral=True)
+
+@bot.hybrid_command(name="encode-lvl-3", description="Encode text (Level 3 - Maximum)")
+async def encode_lvl3_cmd(ctx, *, message: str):
+    """Encode a message using Level 3 encoding (maximum security)"""
+    
+    # Check for banned words if not bypass user
+    if not is_bypass_user(ctx.author.id):
+        banned = db_query("SELECT word FROM banned_words", fetch=True)
+        content_low = message.lower()
+        if banned and any(bw[0].lower() in content_low for bw in banned):
+            await ctx.send("❌ **Cannot encode** - Message contains banned words.", ephemeral=True)
+            return
+    
+    try:
+        encoded = encode_text_lvl3(message)
+        
+        embed = discord.Embed(title="🔐 Message Encoded (Level 3)", color=discord.Color.gold())
+        
+        original_display = (message[:100] + "...") if len(message) > 100 else message
+        embed.add_field(name="📝 Original", value=f"`{original_display}`", inline=False)
+        
+        encoded_display = (encoded[:1000] + "...") if len(encoded) > 1000 else encoded
+        embed.add_field(name="🔒 Encoded", value=f"`{encoded_display}`", inline=False)
+        
+        embed.add_field(name="ℹ️ Level", value="**Level 3** - Maximum encoding", inline=True)
+        embed.add_field(name="📏 Length", value=f"{len(encoded)} chars (min 12+)", inline=True)
+        
+        embed.set_footer(text="Use /decode to decrypt • Level 3: Maximum security with salt")
+        
+        await ctx.send(embed=embed)
+        
+        # Send full encoded message
+        if len(encoded) <= 1990:
+            await ctx.send(f"`{encoded}`")
+            
+    except Exception as e:
+        await ctx.send(f"❌ **Encoding failed:** `{str(e)}`", ephemeral=True)
+
+@bot.hybrid_command(name="decode", description="Decode message (works for all levels)")
+async def decode_cmd(ctx, *, encoded_message: str):
+    """Universal decoder - works for all encoding levels (0, 1, 2, 3)"""
     try:
         # Strip backticks if present
         encoded_clean = encoded_message.strip().strip('`')
-        decoded = decode_text(encoded_clean)
+        decoded = decode_text_universal(encoded_clean)
         
-        if not decoded:
-            await ctx.send("❌ **Invalid encoded message**", ephemeral=True)
+        if not decoded or decoded.startswith("Invalid") or decoded.startswith("Decoding error"):
+            await ctx.send(f"❌ **Decoding failed:** {decoded}", ephemeral=True)
             return
         
+        # Check for banned words if not bypass user
         if not is_bypass_user(ctx.author.id):
             banned = db_query("SELECT word FROM banned_words", fetch=True)
             decoded_low = decoded.lower()
             if banned and any(bw[0].lower() in decoded_low for bw in banned):
+                # Issue strike
                 res = db_query("SELECT strikes FROM users WHERE user_id = ?", (str(ctx.author.id),), fetch=True)
                 current = res[0][0] if res else 0
                 new_strikes = current + 1
@@ -3870,13 +4197,85 @@ async def decode_message(ctx, *, encoded_message: str):
                 await ctx.send(f"⚠️ **Decoded message contains banned words**\n⚡ Strike issued: {new_strikes}/3", ephemeral=True)
                 return
         
-        embed = discord.Embed(title="🔓 Message Decoded", color=discord.Color.blue())
+        # Detect level
+        parts = encoded_clean.split(".")
+        if len(parts) == 2:
+            level = "Level 0"
+            level_color = discord.Color.green()
+        elif len(parts) == 3:
+            level = "Level 1"
+            level_color = discord.Color.blue()
+        elif len(parts) == 4:
+            key = parts[0]
+            if len(key) == 6:
+                level = "Level 2"
+                level_color = discord.Color.purple()
+            else:
+                level = "Level 3"
+                level_color = discord.Color.gold()
+        else:
+            level = "Unknown"
+            level_color = discord.Color.greyple()
+        
+        embed = discord.Embed(title="🔓 Message Decoded", color=level_color)
         decoded_display = (decoded[:1000] + "...") if len(decoded) > 1000 else decoded
         embed.add_field(name="📝 Decoded Message", value=f"`{decoded_display}`", inline=False)
+        embed.add_field(name="ℹ️ Detected Level", value=level, inline=True)
+        embed.add_field(name="📏 Original Length", value=f"{len(decoded)} chars", inline=True)
+        
         await ctx.send(embed=embed)
         
     except Exception as e:
         await ctx.send(f"❌ **Decoding failed:** `{str(e)}`", ephemeral=True)
+
+# ==================== TEST CODE ====================
+if __name__ == "__main__":
+    print("=== ENCODING LEVEL TESTS ===\n")
+    
+    test_text = "Hello World!"
+    
+    print(f"Original text: {test_text} ({len(test_text)} chars)\n")
+    
+    # Test Level 0
+    print("--- LEVEL 0 (Simple) ---")
+    for i in range(3):
+        enc = encode_text_lvl0(test_text)
+        dec = decode_text_universal(enc)
+        print(f"{i+1}. Encoded ({len(enc)} chars): {enc}")
+        print(f"   Decoded: {dec} - Match: {dec == test_text}\n")
+    
+    # Test Level 1
+    print("--- LEVEL 1 (Standard, 5+ chars) ---")
+    for i in range(3):
+        enc = encode_text_lvl1(test_text)
+        dec = decode_text_universal(enc)
+        print(f"{i+1}. Encoded ({len(enc)} chars): {enc}")
+        print(f"   Decoded: {dec} - Match: {dec == test_text}\n")
+    
+    # Test Level 2
+    print("--- LEVEL 2 (Enhanced, 7+ chars) ---")
+    for i in range(3):
+        enc = encode_text_lvl2(test_text)
+        dec = decode_text_universal(enc)
+        print(f"{i+1}. Encoded ({len(enc)} chars): {enc}")
+        print(f"   Decoded: {dec} - Match: {dec == test_text}\n")
+    
+    # Test Level 3
+    print("--- LEVEL 3 (Maximum, 12+ chars) ---")
+    for i in range(3):
+        enc = encode_text_lvl3(test_text)
+        dec = decode_text_universal(enc)
+        print(f"{i+1}. Encoded ({len(enc)} chars): {enc}")
+        print(f"   Decoded: {dec} - Match: {dec == test_text}\n")
+    
+    # Test short text
+    print("--- SHORT TEXT TEST ('ab') ---")
+    short = "ab"
+    print(f"Original: {short}\n")
+    print(f"Level 0: {encode_text_lvl0(short)} ({len(encode_text_lvl0(short))} chars)")
+    print(f"Level 1: {encode_text_lvl1(short)} ({len(encode_text_lvl1(short))} chars)")
+    print(f"Level 2: {encode_text_lvl2(short)} ({len(encode_text_lvl2(short))} chars)")
+    print(f"Level 3: {encode_text_lvl3(short)} ({len(encode_text_lvl3(short))} chars)")
 
 
         
