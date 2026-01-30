@@ -423,7 +423,7 @@ The bot has automatically left your server. You cannot re-add this bot while bla
 **Appeal:** Contact <@{OWNER_ID}>
 **Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
                 )
             except:
@@ -1153,7 +1153,7 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"🚫 **You have been blacklisted from {BOT_NAME} Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        f"🚫 **You have been blacklisted from {BOT_NAME} Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     )
     
     # Log to dedicated blacklist channel
@@ -1167,7 +1167,7 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     log_embed.add_field(name="⚖️ Actioned By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Notification", value="✅ Delivered" if dm_sent else "❌ Failed (DMs closed)", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
@@ -1194,7 +1194,7 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"✅ **Your blacklist has been removed**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can now use the bot again\n• All bot features are now accessible to you\n• Your previous violations have been reviewed\n\n**Welcome back!** Please follow the community guidelines to maintain your access.\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        f"✅ **Your blacklist has been removed**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can now use the bot again\n• All bot features are now accessible to you\n• Your previous violations have been reviewed\n\n**Welcome back!** Please follow the community guidelines to maintain your access.\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     )
     
     # Log to dedicated blacklist channel
@@ -1208,7 +1208,7 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     log_embed.add_field(name="⚖️ Actioned By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Notification", value="✅ Delivered" if dm_sent else "❌ Failed (DMs closed)", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
@@ -1298,7 +1298,7 @@ Your server **{guild_name}** has been blacklisted from using {BOT_NAME} Bot.
 If you believe this is a mistake, contact: <@{OWNER_ID}>
 **Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
                 await guild.owner.send(dm_message)
                 owner_notified = True
@@ -1428,7 +1428,7 @@ async def add_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No re
         strikes_remaining = 3 - new_strikes
         dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Avoid using banned words\n• Be respectful to others\n• Follow server and bot rules"
     
-    dm_message += f"\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+    dm_message += f"\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1494,7 +1494,7 @@ async def remove_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No
     else:
         dm_message += "**Status:** Your account is in good standing. Keep following the rules to avoid future strikes."
     
-    dm_message += f"\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+    dm_message += f"\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1564,7 +1564,7 @@ async def clear_strike(ctx, user_id: str, *, reason: str = "Strikes cleared by a
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"All strikes cleared for {user_id} by {ctx.author.name} ({ctx.author.id}). Previous strikes: {previous_strikes}. Reason: {reason}",))
     
     # Send DM to user
-    dm_message = f"✅ **All Strikes Cleared**\n\n**Your account has been fully restored**\n\n**Previous Strikes:** {previous_strikes}/3\n**Current Strikes:** 0/3\n**Reason:** {reason}\n\n🎉 You now have a clean slate! Your account is in good standing.\n\n**Remember to:**\n• Follow all community guidelines\n• Respect other users\n• Avoid banned words and inappropriate behavior\n\nThank you for being part of the community!\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+    dm_message = f"✅ **All Strikes Cleared**\n\n**Your account has been fully restored**\n\n**Previous Strikes:** {previous_strikes}/3\n**Current Strikes:** 0/3\n**Reason:** {reason}\n\n🎉 You now have a clean slate! Your account is in good standing.\n\n**Remember to:**\n• Follow all community guidelines\n• Respect other users\n• Avoid banned words and inappropriate behavior\n\nThank you for being part of the community!\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1736,7 +1736,7 @@ You have been granted permission to bypass the word filter in {BOT_NAME} Bot.
 • Don't abuse this permission
 • Follow all other server and bot rules
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1751,7 +1751,7 @@ You have been granted permission to bypass the word filter in {BOT_NAME} Bot.
     log_embed.add_field(name="⚖️ Granted By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Sent", value="✅ Delivered" if dm_sent else "❌ Failed", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'banned_words', log_embed)
     
@@ -1803,7 +1803,7 @@ Your word filter bypass privileges have been revoked.
 • Avoid using banned words
 • Repeated violations may result in strikes
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1818,7 +1818,7 @@ Your word filter bypass privileges have been revoked.
     log_embed.add_field(name="⚖️ Revoked By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Sent", value="✅ Delivered" if dm_sent else "❌ Failed", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'banned_words', log_embed)
     
@@ -2447,7 +2447,7 @@ async def report_clear(ctx, user_id: str, *, reason: str = "No reason provided")
     log_embed.add_field(name="📊 Reports Cleared", value=str(count), inline=True)
     log_embed.add_field(name="⚖️ Cleared By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     log_embed.add_field(name="ℹ️ Note", value="Reports are archived and can still be viewed with /reportview", inline=False)
     
     await log_to_channel(bot, 'admin_logs', log_embed)
@@ -2503,7 +2503,7 @@ async def report_remove(ctx, report_id: int, *, reason: str = "No reason provide
     log_embed.add_field(name="📝 Original Reason", value=report_reason, inline=False)
     log_embed.add_field(name="🗑️ Removal Reason", value=reason, inline=False)
     log_embed.add_field(name="⚖️ Removed By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     log_embed.add_field(name="ℹ️ Note", value="Report is archived and can still be viewed with /reportview", inline=False)
     
     await log_to_channel(bot, 'admin_logs', log_embed)
@@ -2729,7 +2729,7 @@ Your **Bot Admin** privileges for {BOT_NAME} Bot have been removed by {ctx.autho
 
 Thank you for your service! 🙏
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
     dm_sent = await send_user_dm(str(user.id), dm_message)
     
@@ -2752,7 +2752,7 @@ Thank you for your service! 🙏
     )
     log_embed.add_field(
         name="📅 Removal Date", 
-        value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), 
+        value=get_discord_timestamp(style='F'), 
         inline=True
     )
     log_embed.add_field(
@@ -3137,7 +3137,7 @@ async def change_updates(ctx, channel: discord.TextChannel = None):
         )
         notification_embed.add_field(name="Previous Channel", value=f"<#{old_channel_id}>", inline=True)
         notification_embed.add_field(name="Changed By", value=ctx.author.mention, inline=True)
-        notification_embed.set_footer(text=f"Changed at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        notification_embed.set_footer(text=f"Changed at {get_discord_timestamp(style='F')}")
         await channel.send(embed=notification_embed)
     except Exception as e:
         print(f"Failed to send notification to new updates channel: {e}")
@@ -3161,7 +3161,7 @@ async def announce(ctx, *, message: str):
         color=discord.Color.blue(),
         timestamp=datetime.datetime.utcnow()
     )
-    announcement_embed.set_footer(text=f"Announcement from {ctx.author.name} • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    announcement_embed.set_footer(text=f"Announcement from {ctx.author.name} • {get_discord_timestamp(style='F')}")
     announcement_embed.set_author(name=BOT_NAME, icon_url=bot.user.display_avatar.url)
     
     # Statistics
@@ -3668,24 +3668,24 @@ async def command_ids(ctx):
 
 
 def generate_encoding_map():
-    """Generate a random character mapping for encoding"""
+    """Generate a random character mapping with unique 3-char codes"""
     # Characters to be encoded
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits + ' .,!?\n\t'
     
-    # Available symbols for creating codes (alphanumeric + =&/)
-    base_symbols = string.ascii_letters + string.digits + '=&/'
+    # Available symbols for second and third position (avoid X)
+    symbols = string.ascii_letters.replace('X', '').replace('x', '') + string.digits + '=&/'
     
     encoding_map = {}
     decoding_map = {}
     
-    # Generate all possible 2-character combinations
     used_codes = set()
     
     for char in chars:
-        # Keep generating random codes until we get a unique one
+        # Generate unique 3-char code starting with 'X'
         while True:
-            code = random.choice(base_symbols) + random.choice(base_symbols)
-            if code not in used_codes and code != '&&':  # Reserve && for special chars
+            # Format: X + 2 random chars
+            code = 'X' + random.choice(symbols) + random.choice(symbols)
+            if code not in used_codes:
                 used_codes.add(code)
                 encoding_map[char] = code
                 decoding_map[code] = char
@@ -3693,68 +3693,44 @@ def generate_encoding_map():
     
     return encoding_map, decoding_map
 
-def load_or_generate_maps():
-    """Load existing encoding map or generate a new one"""
-    if os.path.exists(ENCODING_FILE):
-        try:
-            with open(ENCODING_FILE, 'r') as f:
-                data = json.load(f)
-                return data['encode'], data['decode']
-        except:
-            pass
-    
-    # Generate new maps
-    encode_map, decode_map = generate_encoding_map()
-    
-    # Save to file
-    try:
-        with open(ENCODING_FILE, 'w') as f:
-            json.dump({'encode': encode_map, 'decode': decode_map}, f)
-    except:
-        pass
-    
-    return encode_map, decode_map
-
-# Generate maps at module level
-ENCODE_MAP, DECODE_MAP = load_or_generate_maps()
-
 def encode_text(text):
-    """Encode text using custom encoding"""
+    """Encode text using unique 3-character codes"""
     result = []
     for char in text:
         if char in ENCODE_MAP:
             result.append(ENCODE_MAP[char])
         else:
-            # For emojis/special chars, use '&&' prefix with hex
+            # For emojis/special chars, use 'XX' prefix with hex (different from normal X)
             hex_val = char.encode('utf-8').hex()
-            result.append(f"&&{hex_val}&")
+            result.append(f"XX{hex_val}XX")
     return ''.join(result)
 
 def decode_text(text):
-    """Decode text from custom encoding"""
+    """Decode text by identifying X-prefixed codes"""
     result = []
     i = 0
     
     while i < len(text):
-        # Check for hex-encoded special characters (&&...&)
-        if i + 1 < len(text) and text[i:i+2] == '&&':
-            end = text.find('&', i + 2)
-            if end != -1:
+        # Check for special character encoding (XX...XX)
+        if i + 1 < len(text) and text[i:i+2] == 'XX':
+            # Find closing XX
+            end = text.find('XX', i + 2)
+            if end != -1 and end != i:
                 hex_code = text[i+2:end]
                 try:
                     char = bytes.fromhex(hex_code).decode('utf-8')
                     result.append(char)
-                    i = end + 1
+                    i = end + 2
                     continue
                 except:
                     pass
         
-        # Try to decode 2-character code
-        if i + 1 < len(text):
-            code = text[i:i+2]
+        # Check for normal 3-character code (X + 2 chars)
+        if text[i] == 'X' and i + 2 < len(text):
+            code = text[i:i+3]
             if code in DECODE_MAP:
                 result.append(DECODE_MAP[code])
-                i += 2
+                i += 3
                 continue
         
         # Skip unrecognized character

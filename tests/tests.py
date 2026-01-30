@@ -382,7 +382,7 @@ The bot has automatically left your server. You cannot re-add this bot while bla
 **Appeal:** Contact <@{OWNER_ID}>
 **Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
                 )
             except:
@@ -993,7 +993,7 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     )
     
     # Log to dedicated blacklist channel
@@ -1007,7 +1007,7 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     log_embed.add_field(name="⚖️ Actioned By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Notification", value="✅ Delivered" if dm_sent else "❌ Failed (DMs closed)", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
@@ -1034,7 +1034,7 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"✅ **Your blacklist has been removed**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can now use the bot again\n• All bot features are now accessible to you\n• Your previous violations have been reviewed\n\n**Welcome back!** Please follow the community guidelines to maintain your access.\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        f"✅ **Your blacklist has been removed**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can now use the bot again\n• All bot features are now accessible to you\n• Your previous violations have been reviewed\n\n**Welcome back!** Please follow the community guidelines to maintain your access.\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     )
     
     # Log to dedicated blacklist channel
@@ -1048,7 +1048,7 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     log_embed.add_field(name="⚖️ Actioned By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Notification", value="✅ Delivered" if dm_sent else "❌ Failed (DMs closed)", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
@@ -1138,7 +1138,7 @@ Your server **{guild_name}** has been blacklisted from using flexedAI Bot.
 If you believe this is a mistake, contact: <@{OWNER_ID}>
 **Join the Support Server:** https://discord.com/invite/XMvPq7W5N4
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
                 await guild.owner.send(dm_message)
                 owner_notified = True
@@ -1268,7 +1268,7 @@ async def add_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No re
         strikes_remaining = 3 - new_strikes
         dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Avoid using banned words\n• Be respectful to others\n• Follow server and bot rules"
     
-    dm_message += f"\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+    dm_message += f"\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1334,7 +1334,7 @@ async def remove_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No
     else:
         dm_message += "**Status:** Your account is in good standing. Keep following the rules to avoid future strikes."
     
-    dm_message += f"\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+    dm_message += f"\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1404,7 +1404,7 @@ async def clear_strike(ctx, user_id: str, *, reason: str = "Strikes cleared by a
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (f"All strikes cleared for {user_id} by {ctx.author.name} ({ctx.author.id}). Previous strikes: {previous_strikes}. Reason: {reason}",))
     
     # Send DM to user
-    dm_message = f"✅ **All Strikes Cleared**\n\n**Your account has been fully restored**\n\n**Previous Strikes:** {previous_strikes}/3\n**Current Strikes:** 0/3\n**Reason:** {reason}\n\n🎉 You now have a clean slate! Your account is in good standing.\n\n**Remember to:**\n• Follow all community guidelines\n• Respect other users\n• Avoid banned words and inappropriate behavior\n\nThank you for being part of the community!\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+    dm_message = f"✅ **All Strikes Cleared**\n\n**Your account has been fully restored**\n\n**Previous Strikes:** {previous_strikes}/3\n**Current Strikes:** 0/3\n**Reason:** {reason}\n\n🎉 You now have a clean slate! Your account is in good standing.\n\n**Remember to:**\n• Follow all community guidelines\n• Respect other users\n• Avoid banned words and inappropriate behavior\n\nThank you for being part of the community!\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1576,7 +1576,7 @@ You have been granted permission to bypass the word filter in flexedAI Bot.
 • Don't abuse this permission
 • Follow all other server and bot rules
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1591,7 +1591,7 @@ You have been granted permission to bypass the word filter in flexedAI Bot.
     log_embed.add_field(name="⚖️ Granted By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Sent", value="✅ Delivered" if dm_sent else "❌ Failed", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'banned_words', log_embed)
     
@@ -1643,7 +1643,7 @@ Your word filter bypass privileges have been revoked.
 • Avoid using banned words
 • Repeated violations may result in strikes
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
     dm_sent = await send_user_dm(user_id, dm_message)
     
@@ -1658,7 +1658,7 @@ Your word filter bypass privileges have been revoked.
     log_embed.add_field(name="⚖️ Revoked By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Sent", value="✅ Delivered" if dm_sent else "❌ Failed", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'banned_words', log_embed)
     
@@ -1802,7 +1802,7 @@ class ReportActionView(discord.ui.View):
             strikes_remaining = 3 - new_strikes
             dm_message += f"⚠️ **Warning:** You are {strikes_remaining} strike(s) away from being blacklisted.\n\n**How to avoid more strikes:**\n• Follow community guidelines\n• Be respectful to others\n• Follow server and bot rules"
         
-        dm_message += f"\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        dm_message += f"\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
         dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
         
         # Log to strikes channel
@@ -1847,7 +1847,7 @@ class ReportActionView(discord.ui.View):
         db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
         
         # Send DM
-        dm_message = f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4\n\n*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*"
+        dm_message = f"🚫 **You have been blacklisted from flexedAI Bot**\n\n**Reason:** Action taken from user report #{self.report_id}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** https://discord.com/invite/XMvPq7W5N4\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
         dm_sent = await send_user_dm(str(self.reported_user_id), dm_message)
         
         # Log to blacklist channel
@@ -2141,7 +2141,7 @@ async def report_clear(ctx, user_id: str, *, reason: str = "No reason provided")
     log_embed.add_field(name="📊 Reports Cleared", value=str(count), inline=True)
     log_embed.add_field(name="⚖️ Cleared By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'admin_logs', log_embed)
     
@@ -2191,7 +2191,7 @@ async def report_remove(ctx, report_id: int, *, reason: str = "No reason provide
     log_embed.add_field(name="📝 Original Reason", value=report_reason, inline=False)
     log_embed.add_field(name="🗑️ Removal Reason", value=reason, inline=False)
     log_embed.add_field(name="⚖️ Removed By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
     
     await log_to_channel(bot, 'admin_logs', log_embed)
     
@@ -2262,7 +2262,7 @@ You have been promoted to **Bot Admin** for flexedAI Bot by {ctx.author.name}!
 
 **Welcome to the admin team! 🚀**
 
-*Granted: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Granted: {get_discord_timestamp(style='F')}*
 """
     
     dm_sent = await send_user_dm(str(user.id), dm_message)
@@ -2292,7 +2292,7 @@ You have been promoted to **Bot Admin** for flexedAI Bot by {ctx.author.name}!
     # Timestamp
     log_embed.add_field(
         name="📅 Appointment Date",
-        value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'),
+        value=get_discord_timestamp(style='F'),
         inline=True
     )
     
@@ -2415,7 +2415,7 @@ Your **Bot Admin** privileges for flexedAI Bot have been removed by {ctx.author.
 
 Thank you for your service! 🙏
 
-*Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}*
+*Timestamp: {get_discord_timestamp(style='F')}*
 """
     dm_sent = await send_user_dm(str(user.id), dm_message)
     
@@ -2428,7 +2428,7 @@ Thank you for your service! 🙏
     )
     log_embed.add_field(name="👤 Removed Admin", value=f"{user.mention}\n**Username:** {user.name}\n**ID:** `{user.id}`", inline=True)
     log_embed.add_field(name="⚖️ Removed By", value=f"{ctx.author.mention}\n**Username:** {ctx.author.name}\n**ID:** `{ctx.author.id}`", inline=True)
-    log_embed.add_field(name="📅 Removal Date", value=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="📅 Removal Date", value=get_discord_timestamp(style='F'), inline=True)
     log_embed.add_field(name="📜 Admin History", value=f"**Originally Added:** {added_at}\n**Added By:** <@{added_by}>", inline=True)
     log_embed.add_field(name="📬 DM Notification", value="✅ Sent successfully" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
     
