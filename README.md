@@ -302,11 +302,28 @@ After starting the bot:
 | `/forget` | Clear AI conversation memory for your context | `/forget` |
 | `/report <user> <proof> <reason>` | Report a user for misbehavior | `/report @BadUser https://proof.com Spamming` |
 | `/invite` | Get bot invite link | `/invite` |
-| `/encode <message>` | Encode a message using custom cipher | `/encode Hello World` |
-| `/decode <encoded>` | Decode an encoded message | `/decode Ke3r...` |
 | `/votereminder [action]` | Manage vote reminder settings | `/votereminder enable` |
 
-### 🗳️ Voting Commands (NEW!)
+### 🔐 Encoding Commands (All Users)
+
+| Command | Description | Output Length | Example |
+|---------|-------------|---------------|---------|
+| `/encode <message>` | Level 0 encoding (simple) | ~original + 3-4 chars | `/encode Hello World!` |
+| `/encode-lvl-1 <message>` | Level 1 encoding (standard) | ~original + 6-8 chars | `/encode-lvl-1 Secret message` |
+| `/encode-lvl-2 <message>` | Level 2 encoding (enhanced) | ~original + 10-12 chars | `/encode-lvl-2 Private data` |
+| `/encode-lvl-3 <message>` | Level 3 encoding (maximum) | ~original + 18-22 chars | `/encode-lvl-3 Top secret` |
+| `/decode <encoded>` | Universal decoder (all levels) | Detects level automatically | `/decode AB.kJ9mN2pQ` |
+
+**Encoding Level Comparison:**
+
+| Level | Security | Format | Key | Checksum | Use Case |
+|-------|----------|--------|-----|----------|----------|
+| 0 | Minimal | `key.data` | 2 chars | None | Quick obfuscation |
+| 1 | Standard | `key.data.checksum` | 4 chars | 2 chars | General privacy |
+| 2 | Enhanced | `key.noise.data.checksum` | 6 chars | 3 chars | Sensitive data |
+| 3 | Maximum | `key.salt.data.checksum` | 8 chars | 5 chars | Critical security |
+
+### 🗳️ Voting Commands
 
 | Command | Description | Example |
 |---------|-------------|---------|
@@ -315,11 +332,11 @@ After starting the bot:
 | `/votereminder disable` | Disable vote reminders | `/votereminder disable` |
 
 **Voting Features:**
-- Vote on [Top.gg](https://top.gg/bot/1379152032358858762/vote) every 12 hours
-- Get exclusive Voter role for 12 hours
-- Enable reminders to never miss a vote
-- Weekend votes get special recognition
-- If you join the support server within 12 hours of voting, you'll automatically get the Voter role
+- 🗳️ Vote on [Top.gg](https://top.gg/bot/1379152032358858762/vote) every 12 hours
+- 🎖️ Get exclusive Voter role for 12 hours
+- 🔔 Enable reminders to never miss a vote
+- 🎉 Weekend votes get special recognition
+- ✨ Auto-assign role if joining support server within 12 hours of voting
 
 ### ⚙️ Configuration Commands (Admin/Owner)
 
@@ -327,14 +344,31 @@ After starting the bot:
 |---------|-------------|-------------|---------|
 | `/start` | Bot responds to all messages in channel | Admin/Owner | `/start` |
 | `/stop` | Bot responds only to mentions/triggers | Admin/Owner | `/stop` |
-| `/lang [language]` | Set channel language (dropdown UI) | Admin/Owner | `/lang Spanish` |
+| `/lang [language]` | Set channel language (16 languages) | Admin/Owner | `/lang Spanish` |
 | `/prefix <new_prefix>` | Change command prefix for server | Admin/Owner | `/prefix !` |
 | `/setupupdates [#channel]` | **REQUIRED** - Setup updates channel | Admin/Owner | `/setupupdates #announcements` |
 | `/changeupdates [#channel]` | Change existing updates channel | Admin/Owner | `/changeupdates #news` |
 | `/viewupdates` | View current updates channel | Any User | `/viewupdates` |
 
-**Available Languages:**
-English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese, Korean, Chinese, Russian, Arabic, Turkish, Dutch, Marathi
+**⚠️ Important:** `/setupupdates` is **REQUIRED** for bot functionality in new servers!
+
+**Available Languages (16 Total):**
+- 🇬🇧 English
+- 🇮🇳 Hindi
+- 🇮🇳 Hinglish
+- 🇪🇸 Spanish
+- 🇫🇷 French
+- 🇩🇪 German
+- 🇵🇹 Portuguese
+- 🇮🇹 Italian
+- 🇯🇵 Japanese
+- 🇰🇷 Korean
+- 🇨🇳 Chinese
+- 🇷🇺 Russian
+- 🇸🇦 Arabic
+- 🇹🇷 Turkish
+- 🇳🇱 Dutch
+- 🇮🇳 Marathi
 
 ### 🔨 Moderation Commands (Bot Admin/Owner)
 
@@ -345,12 +379,24 @@ English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese
 | `/blacklist add <user_id> <reason>` | Blacklist a user (sends DM notification) | `/blacklist add 123456789 Harassment` |
 | `/blacklist remove <user_id> <reason>` | Remove user from blacklist | `/blacklist remove 123456789 Appeal approved` |
 
+**Features:**
+- 📬 Automatic DM notifications to affected users
+- 📊 Logged to dedicated blacklist channel
+- ⏰ Timestamped with Discord format
+- 🔍 All actions tracked in admin logs
+
 #### Guild Blacklist Management
 | Command | Description | Example |
 |---------|-------------|---------|
 | `/blacklist-guild` | View all blacklisted guilds | `/blacklist-guild` |
 | `/blacklist-guild add <guild_id> <reason>` | Blacklist server (bot auto-leaves) | `/blacklist-guild add 987654321 ToS violation` |
 | `/blacklist-guild remove <guild_id> <reason>` | Unblacklist server | `/blacklist-guild remove 987654321 Resolved` |
+
+**Features:**
+- 🚪 Bot automatically leaves blacklisted servers
+- 📧 Owner receives DM notification before removal
+- 🛡️ Prevents re-adding blacklisted servers
+- 📝 Comprehensive logging with guild details
 
 #### Strike System
 | Command | Description | Example |
@@ -360,6 +406,13 @@ English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese
 | `/clearstrike <user_id> <reason>` | Clear all strikes for user | `/clearstrike 123456789 Clean slate` |
 | `/strikelist` | View all users with strikes | `/strikelist` |
 
+**Strike System Features:**
+- ⚡ 3 strikes = automatic blacklist
+- 📬 DM notifications for all strike actions
+- 🔄 Auto-unban when strikes drop below 3
+- 📊 Detailed logging with user context
+- ⚠️ Strike warnings sent to users
+
 #### Word Filter Management
 | Command | Description | Example |
 |---------|-------------|---------|
@@ -368,6 +421,13 @@ English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese
 | `/bannedword remove <word>` | Remove word from filter | `/bannedword remove badword` |
 | `/listwords` | Alias for `/bannedword` | `/listwords` |
 
+**Features:**
+- 🔇 Automatic message deletion
+- ⚡ Strike integration (bypass users exempt)
+- 📝 All additions/removals logged
+- ⚠️ 10-second warning messages to users
+- 🔒 Case-insensitive matching
+
 #### Filter Bypass Management
 | Command | Description | Example |
 |---------|-------------|---------|
@@ -375,18 +435,33 @@ English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese
 | `/bypass add <user_id> <reason>` | Grant filter bypass permission | `/bypass add 123456789 Trusted moderator` |
 | `/bypass remove <user_id> <reason>` | Revoke filter bypass | `/bypass remove 123456789 No longer needed` |
 
+**Features:**
+- 🔓 Bypass word filter restrictions
+- 📬 DM notifications on grant/revoke
+- 📋 Reason tracking for accountability
+- 🔍 Full audit trail in logs
+- 👑 Owner has automatic bypass
+
 #### Report System
 | Command | Description | Example |
 |---------|-------------|---------|
 | `/reports [status]` | View reports (pending/reviewed/dismissed/all) | `/reports pending` |
 | `/reportview <report_id>` | View detailed report information | `/reportview 5` |
-| `/reportremove <report_id> <reason>` | Delete a specific report | `/reportremove 5 Duplicate` |
-| `/reportclear <user_id> <reason>` | Clear all reports for a user | `/reportclear 123456789 Resolved` |
+| `/reportremove <report_id> <reason>` | Soft-delete a specific report (archived) | `/reportremove 5 Duplicate` |
+| `/reportclear <user_id> <reason>` | Soft-delete all reports for a user | `/reportclear 123456789 Resolved` |
 
-**Report Action Buttons** (appear in log channel):
-- **Claim Report** - Mark report as being reviewed
-- **Add Strike** - Add 1 strike to reported user
-- **Blacklist** - Immediately blacklist reported user
+**Report Action Buttons** (Interactive - appear in log channel):
+- ✋ **Claim Report** - Mark report as being reviewed by admin
+- ⚡ **Add Strike** - Add 1 strike to reported user (auto-ban at 3)
+- 🚫 **Blacklist** - Immediately blacklist reported user
+
+**Report Features:**
+- 📊 Rich embeds with full context
+- 🖼️ Attachment support (proof images/videos)
+- 📈 User history and strike status
+- 🔔 DM notifications on actions
+- 🗃️ Soft-delete system (archived, not destroyed)
+- 📝 Reporter credibility tracking
 
 ### 📊 Data Management (Bot Admin/Owner)
 
@@ -403,7 +478,21 @@ English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese
 | `/clearadminlogs` | Clear all admin logs | No | `/clearadminlogs` |
 | `/searchlogs <keyword>` | Search interaction logs | No | `/searchlogs username` |
 | `ids` | List all slash command IDs | No | `!ids` |
-| `/announce <message>` | Broadcast to all servers (NEW!) | No | `/announce Important update!` |
+| `/announce <message>` | Broadcast to all servers' updates channels + owner DMs | No | `/announce Important update!` |
+
+**Data Export Features:**
+- 📦 JSON format exports
+- 📊 Comprehensive statistics
+- 🔐 DM-only for security
+- ⏰ 24-hour auto-backups to owner
+- 🗂️ Includes user data, settings, logs, reports, etc.
+
+**Announcement System:**
+- 📢 Sends to ALL configured updates channels
+- 📧 Also sends DM to every server owner
+- 💡 Includes setup tip for servers without updates channel
+- 📊 Detailed delivery statistics
+- ✅ Success rate tracking
 
 ### 👑 Owner-Only Commands
 
@@ -414,10 +503,47 @@ English, Hindi, Hinglish, Spanish, French, German, Portuguese, Italian, Japanese
 | `list-admins` | List all bot admins | `!list-admins` |
 | `leave <server_id> [reason]` | Force bot to leave a server | `!leave 123456789 Owner request` |
 
+**Admin Management Features:**
+- 📬 Comprehensive DM notifications to promoted/demoted users
+- 📋 Detailed permission lists in notifications
+- 🔍 Full audit trail with appointer tracking
+- 📊 Admin count statistics
+- ⏰ Timestamp tracking for all changes
+
 **Note:** Owner commands use prefix (default `!`), not slash commands.
 
 ---
 
+## 🔒 Permission System
+
+### Permission Hierarchy
+
+1. **👑 Owner** (`OWNER_ID` in .env)
+   - Full bot control
+   - Can manage bot admins
+   - Can force-leave servers
+   - All admin permissions
+
+2. **✨ Bot Admins** (set by owner)
+   - User moderation (strikes, blacklist)
+   - Word filter management
+   - Report review & actions
+   - Data & log exports
+   - Server configuration
+   - Cannot manage other admins
+
+3. **🔧 Server Admins** (Discord Administrator permission)
+   - Configuration commands (`/start`, `/stop`, `/lang`, `/prefix`)
+   - Server-specific settings
+   - Updates channel setup
+
+4. **👤 Regular Users**
+   - Basic commands (`/help`, `/whoami`, `/stats`, etc.)
+   - Encoding/decoding
+   - Report submission
+   - Vote reminders
+
+---
 ## 🗄️ Database Structure
 
 The bot uses SQLite (`bot_data.db`) with **10 tables**:
