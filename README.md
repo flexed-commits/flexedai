@@ -74,11 +74,113 @@ All actions are logged to dedicated channels with rich embeds:
 - **Vote logs** - Track all Top.gg votes with user stats
 - **Updates tracking** - Monitor announcement delivery
 
-### 🔐 Custom Encoding System
-- **Message Encoder/Decoder** - Custom cipher for encoding messages
-- **Randomized Character Mapping** - Unique encoding map generated per bot instance
-- **Banned Word Protection** - Encoded messages are still checked for violations
-- Commands: `/encode` and `/decode`
+### 🔐 Advanced Multi-Level Encoding System
+
+A sophisticated custom cipher system for secure message encoding with 4 distinct security levels, each offering different trade-offs between security and message length.
+
+#### **Encoding Levels**
+
+**Level 0 - Simple Encoding** (`/encode`)
+- **Security:** Minimal
+- **Length Impact:** ~original + 3-4 chars
+- **Format:** `key.data`
+- **Key Length:** 2 characters
+- **Best For:** Quick, casual encoding with minimal overhead
+- **Use Case:** Simple obfuscation for short messages
+
+**Level 1 - Standard Encoding** (`/encode-lvl-1`)
+- **Security:** Standard with integrity verification
+- **Length Impact:** ~original + 6-8 chars (min 5+ total)
+- **Format:** `key.data.checksum`
+- **Key Length:** 4 characters
+- **Checksum:** 2 characters
+- **Best For:** General-purpose secure encoding
+- **Use Case:** Standard message privacy with tamper detection
+
+**Level 2 - Enhanced Encoding** (`/encode-lvl-2`)
+- **Security:** Enhanced with noise injection
+- **Length Impact:** ~original + 10-12 chars (min 7+ total)
+- **Format:** `key.noise.data.checksum`
+- **Key Length:** 6 characters
+- **Noise:** 2 characters (random)
+- **Checksum:** 3 characters
+- **Best For:** Improved security against pattern analysis
+- **Use Case:** Sensitive conversations requiring obfuscation
+
+**Level 3 - Maximum Security** (`/encode-lvl-3`)
+- **Security:** Maximum with cryptographic salt
+- **Length Impact:** ~original + 18-22 chars (min 12+ total)
+- **Format:** `key.salt.data.checksum`
+- **Key Length:** 8 characters
+- **Salt:** 4 characters (random)
+- **Checksum:** 5 characters (SHA-256 based)
+- **Best For:** Critical security needs
+- **Use Case:** Highly sensitive information requiring maximum protection
+
+#### **Features**
+
+✅ **Universal Decoder** - Single `/decode` command works for all encoding levels  
+✅ **Automatic Level Detection** - Decoder identifies encoding level automatically  
+✅ **Checksum Verification** - Levels 1-3 include integrity checks  
+✅ **Timestamp-Based Keys** - Time-seeded key generation for uniqueness  
+✅ **Banned Word Protection** - Encoded messages still checked for violations  
+✅ **Strike System Integration** - Decoding banned content issues strikes  
+✅ **Character Set:** `A-Z, a-z, 0-9, &, -, /, ., !, ?, =` (68 characters)  
+✅ **UTF-8 Support** - Handles international characters and emojis  
+
+#### **Security Features**
+
+- **Randomized Keys:** Each encoding generates unique time-based keys
+- **Hash-Based Generation:** MD5/SHA-256 for key and checksum generation
+- **Anti-Pattern Design:** Random noise/salt prevents pattern recognition
+- **Tamper Detection:** Checksums verify message integrity
+- **No Static Mapping:** Key changes with every encode operation
+
+#### **Usage Examples**
+
+```
+User: /encode Hello World!
+Bot: 🔐 Encoded (Level 0): AB.kJ9mN2pQ
+     Length: 11 chars | Level: Simple
+
+User: /encode-lvl-1 Secret Message
+Bot: 🔐 Encoded (Level 1): xY4z.mN8pQ2rT5.aB
+     Length: 18 chars | Level: Standard (checksum verified)
+
+User: /decode xY4z.mN8pQ2rT5.aB
+Bot: 🔓 Decoded: Secret Message
+     Detected Level: Level 1 | Checksum: Valid ✅
+```
+
+#### **Moderation Integration**
+
+⚠️ **Important:** Encoded messages bypass word filter during encoding, but:
+- Decoded content is **always checked** for banned words
+- Users without bypass permissions receive **strikes** for decoding violations
+- Bypass users exempt from strikes but content still logged
+- All encode/decode actions are recorded in interaction logs
+
+#### **Commands**
+
+| Command | Description | Output Length |
+|---------|-------------|---------------|
+| `/encode <message>` | Level 0 encoding | ~original + 3-4 |
+| `/encode-lvl-1 <message>` | Level 1 encoding | ~original + 6-8 (min 5+) |
+| `/encode-lvl-2 <message>` | Level 2 encoding | ~original + 10-12 (min 7+) |
+| `/encode-lvl-3 <message>` | Level 3 encoding | ~original + 18-22 (min 12+) |
+| `/decode <encoded>` | Universal decoder | Works for all levels |
+
+#### **Technical Implementation**
+
+- **Algorithm:** Custom base-conversion cipher with timestamp seeding
+- **Key Generation:** Hash-based (MD5 for Levels 0-2, SHA-256 for Level 3)
+- **Encoding Method:** Big integer conversion → mixed with key → base-68 representation
+- **Checksum:** Hash of original text + key (+ noise/salt for higher levels)
+- **Character Set:** 68 alphanumeric + special characters for optimal encoding
+
+---
+
+**Note:** Remove backticks from encoded messages before decoding. The system automatically detects and strips them during the decode process.
 
 ### ⚙️ Customization
 - **Custom Prefix** - Set per-server command prefix (default: `/`)
