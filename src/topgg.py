@@ -102,68 +102,138 @@ async def assign_voter_role(bot, user_id, hours=12):
         debug_log("⚠️ SUPPORT_SERVER_ID not configured", "WARNING")
         return False
     
+    if not VOTER_ROLE_ID:
+        debug_log("⚠️ VOTER_ROLE_ID not configured", "WARNING")
+        return False
+    
     try:
+        # Wait for bot to be ready
+        if not bot.is_ready():
+            debug_log("⏳ Waiting for bot to be ready...", "INFO")
+            await bot.wait_until_ready()
+        
         guild = bot.get_guild(SUPPORT_SERVER_ID)
         if not guild:
             try:
+                debug_log(f"🔍 Attempting to fetch guild {SUPPORT_SERVER_ID}...", "INFO")
                 guild = await bot.fetch_guild(SUPPORT_SERVER_ID)
+            except discord.NotFound:
+                debug_log(f"❌ Guild {SUPPORT_SERVER_ID} not found - bot not in server?", "ERROR")
+                return False
+            except discord.Forbidden:
+                debug_log(f"❌ No permission to access guild {SUPPORT_SERVER_ID}", "ERROR")
+                return False
             except Exception as e:
                 debug_log(f"❌ Failed to fetch guild {SUPPORT_SERVER_ID}: {e}", "ERROR")
+                tb.print_exc()
                 return False
         
         if not guild:
-            debug_log(f"❌ Guild {SUPPORT_SERVER_ID} not found", "ERROR")
+            debug_log(f"❌ Guild {SUPPORT_SERVER_ID} still not accessible", "ERROR")
             return False
         
-        debug_log(f"✅ Guild found: {guild.name}", "SUCCESS")
+        debug_log(f"✅ Guild found: {guild.name} (ID: {guild.id})", "SUCCESS")
+        debug_log(f"📊 Guild members: {guild.member_count}", "INFO")
         
-        member = guild.get_member(int(user_id))
+        # Try to get member
+        member = None
+        try:
+            member = guild.get_member(int(user_id))
+            if member:
+                debug_log(f"✅ Member found in cache: {member.name}", "SUCCESS")
+        except Exception as e:
+            debug_log(f"⚠️ Error getting member from cache: {e}", "WARNING")
+        
+        # If not in cache, fetch
         if not member:
             try:
+                debug_log(f"🔍 Member not in cache, fetching {user_id}...", "INFO")
                 member = await guild.fetch_member(int(user_id))
+                debug_log(f"✅ Member fetched: {member.name}", "SUCCESS")
             except discord.NotFound:
                 debug_log(f"⚠️ User {user_id} is not a member of {guild.name}", "WARNING")
+                debug_log(f"💡 They will get the role when they join the server", "INFO")
+                return False
+            except discord.Forbidden:
+                debug_log(f"❌ No permission to fetch member {user_id}", "ERROR")
                 return False
             except discord.HTTPException as e:
                 debug_log(f"❌ HTTP error fetching member: {e}", "ERROR")
+                tb.print_exc()
+                return False
+            except Exception as e:
+                debug_log(f"❌ Unexpected error fetching member: {e}", "ERROR")
+                tb.print_exc()
                 return False
         
         if not member:
-            debug_log(f"❌ Member {user_id} not found in guild", "ERROR")
+            debug_log(f"❌ Member {user_id} could not be retrieved", "ERROR")
             return False
         
-        debug_log(f"✅ Member found: {member.name}", "SUCCESS")
+        debug_log(f"✅ Member confirmed: {member.name}#{member.discriminator} ({member.id})", "SUCCESS")
         
+        # Get the role
         role = guild.get_role(VOTER_ROLE_ID)
         if not role:
-            debug_log(f"❌ Voter role {VOTER_ROLE_ID} not found", "ERROR")
+            debug_log(f"❌ Voter role {VOTER_ROLE_ID} not found in guild", "ERROR")
+            debug_log(f"📋 Available roles: {[f'{r.name} ({r.id})' for r in guild.roles]}", "DEBUG")
             return False
         
-        debug_log(f"✅ Voter role found: {role.name}", "SUCCESS")
+        debug_log(f"✅ Voter role found: {role.name} (ID: {role.id})", "SUCCESS")
+        debug_log(f"🔐 Role position: {role.position}, Bot's top role position: {guild.me.top_role.position}", "INFO")
+        
+        # Check bot permissions
+        if not guild.me.guild_permissions.manage_roles:
+            debug_log(f"❌ Bot does not have MANAGE_ROLES permission!", "ERROR")
+            return False
+        
+        debug_log(f"✅ Bot has MANAGE_ROLES permission", "SUCCESS")
+        
+        # Check role hierarchy
+        if role.position >= guild.me.top_role.position:
+            debug_log(f"❌ Role {role.name} (pos {role.position}) is higher than or equal to bot's top role (pos {guild.me.top_role.position})", "ERROR")
+            debug_log(f"💡 Move the bot's role above the voter role in server settings", "INFO")
+            return False
         
         # Calculate expiration time (UTC timezone-aware)
         expires_at = datetime.now(timezone.utc) + timedelta(hours=hours)
         
-        # Add role
-        if role not in member.roles:
-            await member.add_roles(role, reason=f"Voted on Top.gg - expires in {hours}h")
-            debug_log(f"✅ Voter role assigned to {member.name} until {expires_at.isoformat()}", "SUCCESS")
+        # Check if member already has role
+        if role in member.roles:
+            debug_log(f"ℹ️ Member {member.name} already has voter role, updating expiration to {expires_at.isoformat()}", "INFO")
         else:
-            debug_log(f"ℹ️ Member {member.name} already has voter role, updating expiration", "INFO")
+            # Add role
+            try:
+                debug_log(f"🎭 Adding role {role.name} to {member.name}...", "INFO")
+                await member.add_roles(role, reason=f"Voted on Top.gg - expires in {hours}h", atomic=True)
+                debug_log(f"✅ Voter role assigned to {member.name} until {expires_at.isoformat()}", "SUCCESS")
+            except discord.Forbidden:
+                debug_log(f"❌ Missing permissions to assign role (Forbidden)", "ERROR")
+                debug_log(f"💡 Check: 1) Bot has Manage Roles, 2) Bot's role is above voter role, 3) Role is not managed by integration", "INFO")
+                return False
+            except discord.HTTPException as e:
+                debug_log(f"❌ HTTP error assigning role: {e}", "ERROR")
+                tb.print_exc()
+                return False
+            except Exception as e:
+                debug_log(f"❌ Unexpected error assigning role: {e}", "ERROR")
+                tb.print_exc()
+                return False
         
         # Update expiration in database
-        db_query(
-            "UPDATE vote_reminders SET role_expires_at = ? WHERE user_id = ?",
-            (expires_at.isoformat(), str(user_id))
-        )
+        try:
+            db_query(
+                "UPDATE vote_reminders SET role_expires_at = ? WHERE user_id = ?",
+                (expires_at.isoformat(), str(user_id))
+            )
+            debug_log(f"✅ Database updated with expiration time", "SUCCESS")
+        except Exception as e:
+            debug_log(f"⚠️ Failed to update database with expiration: {e}", "WARNING")
         
         return True
         
-    except discord.Forbidden as e:
-        debug_log(f"❌ Missing permissions to assign role: {e}", "ERROR")
-        return False
     except Exception as e:
-        debug_log(f"❌ Role assignment error: {e}", "ERROR")
+        debug_log(f"❌ Critical error in assign_voter_role: {e}", "ERROR")
         tb.print_exc()
         return False
 
@@ -206,6 +276,9 @@ async def check_and_assign_voter_role_on_join(bot, member):
         if hours_since_vote < 12:
             remaining_hours = 12 - hours_since_vote
             debug_log(f"✅ Vote is recent! Assigning role for remaining {remaining_hours:.2f} hours", "SUCCESS")
+            
+            # Small delay to ensure guild is fully loaded
+            await asyncio.sleep(2)
             
             # Assign role with remaining time
             success = await assign_voter_role(bot, member.id, remaining_hours)
@@ -252,6 +325,8 @@ async def check_and_assign_voter_role_on_join(bot, member):
                     debug_log(f"⚠️ Cannot DM {member.name}", "WARNING")
                 except Exception as dm_error:
                     debug_log(f"❌ DM error: {dm_error}", "ERROR")
+            else:
+                debug_log(f"❌ Failed to assign role to {member.name}", "ERROR")
         else:
             debug_log(f"⏱️ Vote is too old ({hours_since_vote:.2f}h), not assigning role", "INFO")
             
@@ -343,6 +418,7 @@ async def handle_vote(request):
             return web.Response(status=500, text="Bot not initialized")
         
         debug_log(f"🤖 Bot ready: {bot.is_ready()}", "INFO")
+        debug_log(f"🤖 Bot user: {bot.user.name if bot.user else 'Not logged in'}", "INFO")
         
         # Process the vote
         await process_vote(bot, user_id, is_weekend, vote_type)
@@ -450,15 +526,27 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
             except Exception as e:
                 debug_log(f"❌ Failed to send to channel: {e}", "ERROR")
         
-        # Assign voter role FIRST (before sending DM)
+        # Assign voter role (with retry logic)
         role_assigned = False
         if not is_test:
             debug_log("🎭 Starting role assignment process...", "INFO")
-            role_assigned = await assign_voter_role(bot, user_id, hours=12)
-            if role_assigned:
-                debug_log(f"✅ Voter role assigned successfully", "SUCCESS")
-            else:
-                debug_log(f"⚠️ Role assignment failed (user may not be in server yet)", "WARNING")
+            
+            # Try up to 3 times with delays
+            for attempt in range(3):
+                if attempt > 0:
+                    debug_log(f"🔄 Role assignment attempt {attempt + 1}/3", "INFO")
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                
+                role_assigned = await assign_voter_role(bot, user_id, hours=12)
+                
+                if role_assigned:
+                    debug_log(f"✅ Voter role assigned successfully on attempt {attempt + 1}", "SUCCESS")
+                    break
+                else:
+                    debug_log(f"⚠️ Role assignment attempt {attempt + 1} failed", "WARNING")
+            
+            if not role_assigned:
+                debug_log(f"⚠️ Role assignment failed after 3 attempts (user may not be in server)", "WARNING")
         
         # Send DM to user
         if user:
