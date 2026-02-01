@@ -4894,106 +4894,238 @@ async def on_reaction_add(reaction, user):
     """
     # Ignore bot's own reactions
     if user.bot:
+        print(f"❌ REACTION SKIP: Reaction from bot {user.name}")
         return
     
     # Check if user is blacklisted
     user_check = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(user.id),), fetch=True)
     if user_check and user_check[0][0] == 1:
+        print(f"❌ REACTION SKIP: User {user.id} is blacklisted")
         return
     
     # Check if message is within 14 days
     message = reaction.message
-    message_age = datetime.datetime.utcnow() - message.created_at
+    message_age = datetime.datetime.now(datetime.timezone.utc) - message.created_at
     if message_age.days > 14:
-        return  # Message too old
+        print(f"❌ REACTION SKIP: Message too old ({message_age.days} days)")
+        return
     
     # Check if server has configured updates channel (for guild messages)
     if message.guild and not has_updates_channel(message.guild.id):
+        print(f"❌ REACTION SKIP: Guild {message.guild.id} has no updates channel configured")
         return
     
     # Get channel mode
     mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
     mode = mode_check[0][0] if mode_check else "stop"
     
-    # Only respond in START mode or if it's the bot's message that got reacted to
-    if mode != "start" and message.author != bot.user:
+    # Check if reactions are enabled for this channel
+    try:
+        reactions_setting = db_query(
+            "SELECT reactions_enabled FROM settings WHERE id = ?",
+            (str(message.channel.id),),
+            fetch=True
+        )
+        reactions_enabled = reactions_setting[0][0] if reactions_setting else 1
+    except:
+        # Column might not exist yet
+        reactions_enabled = 1
+    
+    if not reactions_enabled:
+        print(f"❌ REACTION SKIP: Reactions disabled in channel {message.channel.id}")
         return
     
-    # Check if we already responded to this exact reaction
+    # Only respond in START mode or if it's the bot's message that got reacted to
+    if mode != "start" and message.author != bot.user:
+        print(f"❌ REACTION SKIP: Channel in STOP mode and message not from bot")
+        return
+    
+    # Don't respond to reactions on very old messages (avoid spam on reaction spam)
+    if message_age.days > 7:
+        # Still within 14 days but older than 7 - only respond to bot's messages
+        if message.author != bot.user:
+            print(f"⚠️ REACTION SKIP: Message is {message_age.days} days old (>7 days, not bot message)")
+            return
+    
+    # Check if we already responded to this exact reaction from this user
     existing = db_query(
         "SELECT message_id FROM reaction_responses WHERE message_id = ? AND reactor_id = ? AND reaction_emoji = ?",
         (str(message.id), str(user.id), str(reaction.emoji)),
         fetch=True
     )
     if existing:
-        return  # Already responded to this reaction
+        print(f"❌ REACTION SKIP: Already responded to this reaction")
+        return
+    
+    # Rate limiting - prevent spam (max 1 reaction response per 5 seconds per channel)
+    channel_key = f"reaction_cooldown_{message.channel.id}"
+    if not hasattr(bot, 'reaction_cooldowns'):
+        bot.reaction_cooldowns = {}
+    
+    current_time = time.time()
+    if channel_key in bot.reaction_cooldowns:
+        time_since_last = current_time - bot.reaction_cooldowns[channel_key]
+        if time_since_last < 5:
+            print(f"⏱️ REACTION SKIP: Cooldown active ({5 - time_since_last:.1f}s remaining)")
+            return
+    
+    bot.reaction_cooldowns[channel_key] = current_time
     
     # Get language setting
     lang = get_channel_language(message.channel.id)
     
     # Prepare context for AI
     try:
+        print(f"🎭 REACTION DETECTED: {user.name} reacted {reaction.emoji} to message {message.id}")
+        
         async with message.channel.typing():
             # Get message context
             original_author = message.author
             original_content = message.content if message.content else "[No text content]"
             
-            # Determine reaction type
+            # Handle attachments
+            attachment_info = ""
+            if message.attachments:
+                attachment_types = [att.content_type.split('/')[0] if att.content_type else 'file' for att in message.attachments]
+                attachment_info = f"\n• Attachments: {', '.join(attachment_types)}"
+            
+            # Handle embeds
+            embed_info = ""
+            if message.embeds:
+                embed_info = f"\n• Contains {len(message.embeds)} embed(s)"
+            
+            # Determine reaction type and sentiment
             reaction_emoji = str(reaction.emoji)
             reaction_count = reaction.count
             
-            # Get bot statistics
-            total_users = sum(g.member_count for g in bot.guilds)
+            # Get user's strike status for context
+            user_strikes = db_query("SELECT strikes FROM users WHERE user_id = ?", (str(user.id),), fetch=True)
+            user_strike_count = user_strikes[0][0] if user_strikes else 0
             
-            # Build AI prompt
-            system_prompt = f"""You are {BOT_NAME}, an AI Discord bot detecting and responding to reactions.
+            # Check if user is bot admin
+            user_is_admin = is_bot_admin(user.id)
+            
+            # Build comprehensive AI prompt
+            system_prompt = f"""You are {BOT_NAME}, an AI Discord bot with reaction detection capabilities.
 
-REACTION CONTEXT:
-• Someone reacted to a message
-• Reactor: {user.name} (ID: {user.id})
-• Original Message Author: {original_author.name} (ID: {original_author.id})
-• Original Message: "{original_content[:500]}"
-• Reaction: {reaction_emoji}
-• Total reactions of this type: {reaction_count}
-• Message age: {message_age.days} days, {message_age.seconds // 3600} hours old
-• Channel: #{message.channel.name if hasattr(message.channel, 'name') else 'DM'}
-• Server: {message.guild.name if message.guild else 'DM'}
+═══════════════════════════════════════════════════════════════
+🎭 REACTION EVENT CONTEXT
+═══════════════════════════════════════════════════════════════
+Reactor Information:
+├─ Name: {user.name}
+├─ Display Name: {user.display_name}
+├─ User ID: {user.id}
+├─ Strikes: {user_strike_count}/3
+├─ Bot Admin: {"Yes ✨" if user_is_admin else "No"}
+└─ Account Age: {(datetime.datetime.now(datetime.timezone.utc) - user.created_at).days} days
 
-LANGUAGE REQUIREMENT:
-⚠️ You MUST respond ONLY in {lang} language.
+Original Message:
+├─ Author: {original_author.name} (ID: {original_author.id})
+├─ Content: "{original_content[:500]}"
+├─ Message Age: {message_age.days} days, {message_age.seconds // 3600} hours{attachment_info}{embed_info}
+├─ Channel: #{message.channel.name if hasattr(message.channel, 'name') else 'DM'}
+└─ Server: {message.guild.name if message.guild else 'DM'}
 
-YOUR TASK:
-Generate a short, contextual response acknowledging the reaction. Consider:
-1. What the reaction might mean in context of the original message
-2. Whether it's a positive, negative, or neutral reaction
-3. The relationship between the reactor and the original author
-4. Keep it brief and natural (max 150 characters recommended)
+Reaction Details:
+├─ Emoji: {reaction_emoji}
+├─ Total Count: {reaction_count} (including this one)
+├─ Is First Reaction: {"Yes" if reaction_count == 1 else "No"}
+└─ Same Author: {"Yes (self-reaction)" if user.id == original_author.id else "No"}
 
-RESPONSE GUIDELINES:
-• Be conversational and match the tone of the reaction
-• Don't be overly verbose
-• Use emojis sparingly
-• Make it feel natural, not forced
-• If the reaction is simple (👍, ❤️, etc.), keep response minimal
-• For complex reactions, you can be slightly more descriptive
+Bot Context:
+├─ Total Servers: {len(bot.guilds)}
+├─ Channel Mode: {mode.upper()}
+└─ Language Setting: {lang}
 
-Generate your response:"""
+═══════════════════════════════════════════════════════════════
+⚠️ CRITICAL LANGUAGE REQUIREMENT
+═══════════════════════════════════════════════════════════════
+You MUST respond ONLY in {lang} language. This is non-negotiable.
+
+═══════════════════════════════════════════════════════════════
+🎯 YOUR TASK
+═══════════════════════════════════════════════════════════════
+Generate a SHORT, contextual response acknowledging the reaction.
+
+Consider these factors:
+1. What does the reaction emoji mean in this context?
+   • Positive reactions (👍, ❤️, 🔥, ✅, 🎉): Brief positive acknowledgment
+   • Negative reactions (👎, 😢, 😡, ❌): Supportive or understanding tone
+   • Confused reactions (❓, 🤔, 😕): Offer clarification or be playful
+   • Funny reactions (😂, 🤣, 💀): Match the humor
+   
+2. Relationship context:
+   • Self-reaction: Lightly tease or acknowledge self-appreciation
+   • First reaction: More enthusiastic acknowledgment
+   • Multiple reactions: More casual acknowledgment
+   
+3. Message age:
+   • Fresh (<1 hour): React with more energy
+   • Older (>1 day): Acknowledge the delayed reaction playfully
+   
+4. Message content:
+   • If it's a question: Don't try to answer, just acknowledge the reaction
+   • If it's a statement: Comment on the reaction sentiment
+   • If it's from the bot: Thank them or acknowledge their reaction
+   
+═══════════════════════════════════════════════════════════════
+📏 RESPONSE GUIDELINES
+═══════════════════════════════════════════════════════════════
+CRITICAL RULES:
+• Keep response SHORT: 50-120 characters ideal, MAX 150 characters
+• Be natural and conversational
+• Match the energy of the reaction emoji
+• Don't be overly verbose or explanatory
+• Use emojis sparingly (0-2 max)
+• Don't ask follow-up questions
+• Don't repeat the reaction emoji in your text (we show it separately)
+• Be contextually aware but concise
+• If the reaction is simple (👍, ❤️), keep response minimal (1 short sentence)
+
+TONE MATCHING:
+• Positive reaction → Upbeat, encouraging
+• Negative reaction → Understanding, supportive
+• Funny reaction → Playful, light
+• Confused reaction → Clarifying or playful
+• Appreciation reaction → Grateful, warm
+
+EXAMPLES OF GOOD RESPONSES:
+• "Glad you liked it!" (simple, effective)
+• "Haha, right?" (casual, matching humor)
+• "Thanks for the support! 💙" (grateful)
+• "Noted! 📝" (acknowledgment)
+• "You found that funny too? 😄" (engaging)
+
+EXAMPLES OF BAD RESPONSES (TOO LONG):
+• "Hey there! I see you've added a thumbs up reaction to this message which is really great and I appreciate your positive feedback on this topic!" ❌
+• "Interesting that you reacted with a thinking emoji - are you confused about something? Let me know if you need clarification!" ❌
+
+═══════════════════════════════════════════════════════════════
+Generate your response NOW (remember: SHORT and in {lang}):"""
 
             messages = [{"role": "system", "content": system_prompt}]
             
-            # Generate AI response
+            print(f"🤖 Generating AI reaction response...")
+            
+            # Generate AI response with shorter token limit
             res = await bot.groq_client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=messages,
-                max_tokens=200,
+                max_tokens=100,  # Shorter limit to encourage brevity
                 temperature=0.8
             )
             
             ai_response = res.choices[0].message.content.strip()
             
+            # Enforce max length (in case AI ignored instructions)
+            if len(ai_response) > 150:
+                ai_response = ai_response[:147] + "..."
+            
+            print(f"✅ Generated response: {ai_response}")
+            
             # Send response as a reply to the original message
             response_msg = await message.reply(
-                f"{reaction_emoji} **Reaction detected!** {user.mention}\n{ai_response}",
+                f"{reaction_emoji} {ai_response}",
                 mention_author=False
             )
             
@@ -5020,15 +5152,28 @@ Generate your response:"""
                     str(message.channel.id),
                     user.name,
                     str(user.id),
-                    f"[REACTION: {reaction_emoji}] on message: {original_content[:100]}",
+                    f"[REACTION: {reaction_emoji}] on message by {original_author.name}: {original_content[:100]}",
                     ai_response
                 )
             )
             
-            print(f"✅ Reaction response sent: {user.name} reacted {reaction_emoji} to {original_author.name}'s message")
+            # Log admin action if admin reacted
+            if user_is_admin or user.id == OWNER_ID:
+                db_query(
+                    "INSERT INTO admin_logs (log) VALUES (?)",
+                    (f"Admin/Owner {user.name} ({user.id}) reacted {reaction_emoji} - Bot responded with reaction detection",)
+                )
             
+            print(f"✅ Reaction response sent: {user.name} ({user.id}) reacted {reaction_emoji} to {original_author.name}'s message (ID: {message.id})")
+            
+    except discord.errors.Forbidden:
+        print(f"❌ REACTION ERROR: Missing permissions to send message in channel {message.channel.id}")
+    except discord.errors.HTTPException as e:
+        print(f"❌ REACTION ERROR: HTTP error while sending response: {e}")
     except Exception as e:
-        print(f"❌ Error handling reaction: {e}")
+        print(f"❌ REACTION ERROR: Unexpected error: {type(e).__name__}: {e}")
         # Silently fail - don't spam channels with error messages for reactions
+        import traceback
+        traceback.print_exc()
 
 bot.run(DISCORD_TOKEN)
