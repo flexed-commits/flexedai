@@ -16,7 +16,7 @@ load_dotenv()
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-MODEL_NAME = os.getenv('MODEL_NAME', "meta-llama/llama-4-maverick-17b-128e-instruct")
+MODEL_NAME = os.getenv('MODEL_NAME')
 OWNER_ID = int(os.getenv('OWNER_ID'))
 OWNER_NAME = os.getenv('OWNER_NAME')
 DB_FILE = "bot_data.db"
