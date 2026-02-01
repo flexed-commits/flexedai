@@ -14,7 +14,7 @@
 
 </div>
 
-**An advanced AI-powered Discord bot with comprehensive moderation, voting rewards, and conversation capabilities**
+**An advanced AI-powered Discord bot with comprehensive moderation, voting rewards, and natural conversation capabilities**
 
 [Invite Bot](https://discord.com/oauth2/authorize?client_id=1379152032358858762&permissions=4503599627488320&integration_type=0&scope=bot+applications.commands) • [Support Server](https://discord.com/invite/XMvPq7W5N4) • [Vote on Top.gg](https://top.gg/bot/1379152032358858762/vote) • [Support on Patreon](https://patreon.com/flexedAI/membership)
 
@@ -24,29 +24,29 @@
 
 ### 🧠 AI-Powered Conversations
 - **Multi-language support** - 16 languages including English, Hindi, Spanish, French, Japanese, and more
-- **Context memory** - Remembers last 6 messages per user/channel for natural conversations
+- **Context memory** - Remembers last 6 messages per context for natural conversations
 - **Smart emoji reactions** - AI-suggested reactions (10% chance) based on conversation context
 - **0.6s Response Cooldown** - Prevents API rate limiting while maintaining responsive service
 - **Powered by Groq API** - Using `meta-llama/llama-4-maverick-17b-128e-instruct` model
 
-### 🗳️ Top.gg Voting System (NEW!)
-- **Voter Role Rewards** - Get exclusive Voter role for 12 hours after voting
+### 🗳️ Top.gg Voting System
+- **Voter Role Rewards** - Exclusive Voter role for 12 hours after voting
 - **Vote Reminders** - Optional DM reminders every 12 hours
 - **Weekend Bonuses** - Special recognition for weekend votes
 - **Auto-Role Management** - Automatic role assignment and expiration
-- **Vote Tracking** - Track total votes per user
-- **Join Retention** - Users who voted recently get role when joining support server
+- **Vote Tracking** - Track total votes per member
+- **Join Retention** - Recent voters get role when joining support server
 - **Webhook Integration** - Real-time vote processing via Top.gg webhook
 - **Vote Logs** - Dedicated channel for vote notifications with detailed stats
 
-### 💎 Patreon Integration (NEW!)
+### 💎 Patreon Integration
 - **Smart Promotion** - Automatic Patreon messages every 15-20 messages per channel
 - **Non-Intrusive** - Randomized intervals prevent spam
 - **Beautiful Embeds** - Professional promotional messages
 - **One-Click Support** - Direct link to become a Patron
 - **Channel-Specific Tracking** - Independent counters per channel
 
-### 📢 Updates Channel System (NEW!)
+### 📢 Updates Channel System
 - **Required Setup** - Servers must configure updates channel to use bot
 - **Global Announcements** - Send announcements to all servers at once
 - **Dual Notification** - Sends to both configured channel AND server owner DM
@@ -55,12 +55,12 @@
 - **View Settings** - Check current updates channel with `/viewupdates`
 
 ### 🛡️ Advanced Moderation System
-- **Strike System** - 3-strike auto-blacklist with DM notifications to users
-- **User Blacklisting** - Permanent user bans with notification system
+- **Strike System** - 3-strike auto-blacklist with DM notifications
+- **User Blacklisting** - Permanent bans with notification system
 - **Guild Blacklisting** - Auto-leave and prevent blacklisted servers from re-adding bot
 - **Word Filter** - Customizable banned word list with automatic message deletion
-- **Filter Bypass System** - Grant trusted users permission to bypass word filters
-- **Report System** - User-generated reports with interactive admin action buttons
+- **Filter Bypass System** - Grant trusted members permission to bypass word filters
+- **Report System** - Member-generated reports with interactive admin action buttons
 - **Bot Admin System** - Multi-tier permission system (Owner → Bot Admins → Server Admins)
 
 ### 📊 Comprehensive Logging
@@ -69,10 +69,10 @@ All actions are logged to dedicated channels with rich embeds:
 - Strike and blacklist actions with timestamps and reasons
 - Banned word violations with automatic strike issuance
 - Admin actions (all moderation commands)
-- User reports with action tracking
+- Member reports with action tracking
 - Complete interaction logs (24h rolling + full export)
-- **Vote logs** - Track all Top.gg votes with user stats
-- **Updates tracking** - Monitor announcement delivery
+- Vote logs - Track all Top.gg votes with statistics
+- Updates tracking - Monitor announcement delivery
 
 ### 🔐 Advanced Multi-Level Encoding System
 
@@ -139,36 +139,36 @@ A sophisticated custom cipher system for secure message encoding with 4 distinct
 #### **Usage Examples**
 
 ```
-User: /encode Hello World!
-Bot: 🔐 Encoded (Level 0): AB.kJ9mN2pQ
-     Length: 11 chars | Level: Simple
+/encode Hello World!
+🔐 Encoded (Level 0): AB.kJ9mN2pQ
+Length: 11 chars | Level: Simple
 
-User: /encode-lvl-1 Secret Message
-Bot: 🔐 Encoded (Level 1): xY4z.mN8pQ2rT5.aB
-     Length: 18 chars | Level: Standard (checksum verified)
+/encode-lvl-1 Secret Message
+🔐 Encoded (Level 1): xY4z.mN8pQ2rT5.aB
+Length: 18 chars | Level: Standard (checksum verified)
 
-User: /decode xY4z.mN8pQ2rT5.aB
-Bot: 🔓 Decoded: Secret Message
-     Detected Level: Level 1 | Checksum: Valid ✅
+/decode xY4z.mN8pQ2rT5.aB
+🔓 Decoded: Secret Message
+Detected Level: Level 1 | Checksum: Valid ✅
 ```
 
 #### **Moderation Integration**
 
 ⚠️ **Important:** Encoded messages bypass word filter during encoding, but:
 - Decoded content is **always checked** for banned words
-- Users without bypass permissions receive **strikes** for decoding violations
-- Bypass users exempt from strikes but content still logged
+- Members without bypass permissions receive **strikes** for decoding violations
+- Bypass members exempt from strikes but content still logged
 - All encode/decode actions are recorded in interaction logs
 
 #### **Commands**
 
 | Command | Description | Output Length |
 |---------|-------------|---------------|
-| `/encode <message>` | Level 0 encoding | ~original + 3-4 |
-| `/encode-lvl-1 <message>` | Level 1 encoding | ~original + 6-8 (min 5+) |
-| `/encode-lvl-2 <message>` | Level 2 encoding | ~original + 10-12 (min 7+) |
-| `/encode-lvl-3 <message>` | Level 3 encoding | ~original + 18-22 (min 12+) |
-| `/decode <encoded>` | Universal decoder | Works for all levels |
+| `/encode <message>` | Level 0 encoding (simple) | ~original + 3-4 |
+| `/encode-lvl-1 <message>` | Level 1 encoding (standard) | ~original + 6-8 (min 5+) |
+| `/encode-lvl-2 <message>` | Level 2 encoding (enhanced) | ~original + 10-12 (min 7+) |
+| `/encode-lvl-3 <message>` | Level 3 encoding (maximum) | ~original + 18-22 (min 12+) |
+| `/decode <encoded>` | Universal decoder (all levels) | Works for all levels |
 
 #### **Technical Implementation**
 
@@ -193,7 +193,7 @@ Bot: 🔓 Decoded: Secret Message
 - **SQLite Database** - Persistent storage for all bot data
 - **JSON Migration** - Legacy JSON to SQLite migration support
 - **Export Tools** - Export logs, data, server lists, and complete configurations
-- **10 Database Tables** - Comprehensive data structure for all features (including vote_reminders, vote_logs, updates_channels)
+- **10 Database Tables** - Comprehensive data structure for all features
 
 ---
 
@@ -233,8 +233,8 @@ GROQ_API_KEY=your_groq_api_key_here
 # Required: Bot Configuration
 OWNER_ID=your_discord_user_id
 OWNER_NAME=Your Name
-BOT_NAME=flexedAI
-OWNER_BIO=Creator and core maintainer of flexedAI Discord Bot
+BOT_NAME=YourBotName
+OWNER_BIO=Creator and core maintainer of YourBotName Discord Bot
 
 # Optional: AI Model (default shown)
 MODEL_NAME=meta-llama/llama-4-maverick-17b-128e-instruct
@@ -248,7 +248,7 @@ LOG_CHANNEL_ADMIN_LOGS=channel_id_here
 LOG_CHANNEL_REPORTS=channel_id_here
 
 # Optional: Support Server
-SUPPORT_SERVER_INVITE=https://discord.com/invite/XMvPq7W5N4
+SUPPORT_SERVER_INVITE=https://discord.com/invite/your_invite
 
 # Optional: Top.gg Integration (for voting features)
 TOPGG_WEBHOOK_SECRET=your_topgg_webhook_secret
@@ -282,8 +282,8 @@ After starting the bot:
 1. The bot will automatically create `bot_data.db` (SQLite database)
 2. It will migrate any existing JSON data if present
 3. Daily backup task will start automatically
-4. **Top.gg webhook server starts on port 8080**
-5. **Vote reminder loop and role expiration loop start**
+4. Top.gg webhook server starts on port 8080
+5. Vote reminder loop and role expiration loop start
 6. Invite the bot to your server using the link generated
 7. **IMPORTANT**: Run `/setupupdates #channel` in your server to enable bot functionality
 
@@ -291,20 +291,20 @@ After starting the bot:
 
 ## 📋 Command Reference
 
-### 👥 User Commands
+### 👥 Member Commands
 
 | Command | Description | Example |
 |---------|-------------|---------|
 | `/help` | Display all available commands | `/help` |
 | `/whoami` | Show your Discord profile and bot status | `/whoami` |
-| `/stats` | Display bot statistics (latency, servers, users) | `/stats` |
+| `/stats` | Display bot statistics (latency, servers, members) | `/stats` |
 | `/ping` | Check bot latency and response time | `/ping` |
 | `/forget` | Clear AI conversation memory for your context | `/forget` |
-| `/report <user> <proof> <reason>` | Report a user for misbehavior | `/report @BadUser https://proof.com Spamming` |
+| `/report <user> <proof> <reason>` | Report a member for misbehavior | `/report @BadUser https://proof.com Spamming` |
 | `/invite` | Get bot invite link | `/invite` |
 | `/votereminder [action]` | Manage vote reminder settings | `/votereminder enable` |
 
-### 🔐 Encoding Commands (All Users)
+### 🔐 Encoding Commands (All Members)
 
 | Command | Description | Output Length | Example |
 |---------|-------------|---------------|---------|
@@ -332,7 +332,7 @@ After starting the bot:
 | `/votereminder disable` | Disable vote reminders | `/votereminder disable` |
 
 **Voting Features:**
-- 🗳️ Vote on [Top.gg](https://top.gg/bot/1379152032358858762/vote) every 12 hours
+- 🗳️ Vote on Top.gg every 12 hours
 - 🎖️ Get exclusive Voter role for 12 hours
 - 🔔 Enable reminders to never miss a vote
 - 🎉 Weekend votes get special recognition
@@ -348,7 +348,7 @@ After starting the bot:
 | `/prefix <new_prefix>` | Change command prefix for server | Admin/Owner | `/prefix !` |
 | `/setupupdates [#channel]` | **REQUIRED** - Setup updates channel | Admin/Owner | `/setupupdates #announcements` |
 | `/changeupdates [#channel]` | Change existing updates channel | Admin/Owner | `/changeupdates #news` |
-| `/viewupdates` | View current updates channel | Any User | `/viewupdates` |
+| `/viewupdates` | View current updates channel | Any Member | `/viewupdates` |
 
 **⚠️ Important:** `/setupupdates` is **REQUIRED** for bot functionality in new servers!
 
@@ -375,12 +375,12 @@ After starting the bot:
 #### Blacklist Management
 | Command | Description | Example |
 |---------|-------------|---------|
-| `/blacklist` | View all blacklisted users | `/blacklist` |
-| `/blacklist add <user_id> <reason>` | Blacklist a user (sends DM notification) | `/blacklist add 123456789 Harassment` |
-| `/blacklist remove <user_id> <reason>` | Remove user from blacklist | `/blacklist remove 123456789 Appeal approved` |
+| `/blacklist` | View all blacklisted members | `/blacklist` |
+| `/blacklist add <user_id> <reason>` | Blacklist a member (sends DM notification) | `/blacklist add 123456789 Harassment` |
+| `/blacklist remove <user_id> <reason>` | Remove member from blacklist | `/blacklist remove 123456789 Appeal approved` |
 
 **Features:**
-- 📬 Automatic DM notifications to affected users
+- 📬 Automatic DM notifications to affected members
 - 📊 Logged to dedicated blacklist channel
 - ⏰ Timestamped with Discord format
 - 🔍 All actions tracked in admin logs
@@ -402,16 +402,16 @@ After starting the bot:
 | Command | Description | Example |
 |---------|-------------|---------|
 | `/addstrike <user_id> [amount] <reason>` | Add strikes (3 = auto-blacklist) | `/addstrike 123456789 1 Spam` |
-| `/removestrike <user_id> [amount] <reason>` | Remove strikes from user | `/removestrike 123456789 1 False positive` |
-| `/clearstrike <user_id> <reason>` | Clear all strikes for user | `/clearstrike 123456789 Clean slate` |
-| `/strikelist` | View all users with strikes | `/strikelist` |
+| `/removestrike <user_id> [amount] <reason>` | Remove strikes from member | `/removestrike 123456789 1 False positive` |
+| `/clearstrike <user_id> <reason>` | Clear all strikes for member | `/clearstrike 123456789 Clean slate` |
+| `/strikelist` | View all members with strikes | `/strikelist` |
 
 **Strike System Features:**
 - ⚡ 3 strikes = automatic blacklist
 - 📬 DM notifications for all strike actions
 - 🔄 Auto-unban when strikes drop below 3
-- 📊 Detailed logging with user context
-- ⚠️ Strike warnings sent to users
+- 📊 Detailed logging with context
+- ⚠️ Strike warnings sent to members
 
 #### Word Filter Management
 | Command | Description | Example |
@@ -423,15 +423,15 @@ After starting the bot:
 
 **Features:**
 - 🔇 Automatic message deletion
-- ⚡ Strike integration (bypass users exempt)
+- ⚡ Strike integration (bypass members exempt)
 - 📝 All additions/removals logged
-- ⚠️ 10-second warning messages to users
+- ⚠️ 10-second warning messages
 - 🔒 Case-insensitive matching
 
 #### Filter Bypass Management
 | Command | Description | Example |
 |---------|-------------|---------|
-| `/bypass` | List users with filter bypass | `/bypass` |
+| `/bypass` | List members with filter bypass | `/bypass` |
 | `/bypass add <user_id> <reason>` | Grant filter bypass permission | `/bypass add 123456789 Trusted moderator` |
 | `/bypass remove <user_id> <reason>` | Revoke filter bypass | `/bypass remove 123456789 No longer needed` |
 
@@ -448,17 +448,17 @@ After starting the bot:
 | `/reports [status]` | View reports (pending/reviewed/dismissed/all) | `/reports pending` |
 | `/reportview <report_id>` | View detailed report information | `/reportview 5` |
 | `/reportremove <report_id> <reason>` | Soft-delete a specific report (archived) | `/reportremove 5 Duplicate` |
-| `/reportclear <user_id> <reason>` | Soft-delete all reports for a user | `/reportclear 123456789 Resolved` |
+| `/reportclear <user_id> <reason>` | Soft-delete all reports for a member | `/reportclear 123456789 Resolved` |
 
 **Report Action Buttons** (Interactive - appear in log channel):
 - ✋ **Claim Report** - Mark report as being reviewed by admin
-- ⚡ **Add Strike** - Add 1 strike to reported user (auto-ban at 3)
-- 🚫 **Blacklist** - Immediately blacklist reported user
+- ⚡ **Add Strike** - Add 1 strike to reported member (auto-ban at 3)
+- 🚫 **Blacklist** - Immediately blacklist reported member
 
 **Report Features:**
 - 📊 Rich embeds with full context
 - 🖼️ Attachment support (proof images/videos)
-- 📈 User history and strike status
+- 📈 Member history and strike status
 - 🔔 DM notifications on actions
 - 🗃️ Soft-delete system (archived, not destroyed)
 - 📝 Reporter credibility tracking
@@ -485,7 +485,7 @@ After starting the bot:
 - 📊 Comprehensive statistics
 - 🔐 DM-only for security
 - ⏰ 24-hour auto-backups to owner
-- 🗂️ Includes user data, settings, logs, reports, etc.
+- 🗂️ Includes member data, settings, logs, reports, etc.
 
 **Announcement System:**
 - 📢 Sends to ALL configured updates channels
@@ -498,13 +498,13 @@ After starting the bot:
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `add-admin <user>` | Promote user to bot admin | `!add-admin @User` |
+| `add-admin <user>` | Promote member to bot admin | `!add-admin @User` |
 | `remove-admin <user>` | Remove bot admin privileges | `!remove-admin @User` |
 | `list-admins` | List all bot admins | `!list-admins` |
 | `leave <server_id> [reason]` | Force bot to leave a server | `!leave 123456789 Owner request` |
 
 **Admin Management Features:**
-- 📬 Comprehensive DM notifications to promoted/demoted users
+- 📬 Comprehensive DM notifications to promoted/demoted members
 - 📋 Detailed permission lists in notifications
 - 🔍 Full audit trail with appointer tracking
 - 📊 Admin count statistics
@@ -525,7 +525,7 @@ After starting the bot:
    - All admin permissions
 
 2. **✨ Bot Admins** (set by owner)
-   - User moderation (strikes, blacklist)
+   - Member moderation (strikes, blacklist)
    - Word filter management
    - Report review & actions
    - Data & log exports
@@ -537,20 +537,21 @@ After starting the bot:
    - Server-specific settings
    - Updates channel setup
 
-4. **👤 Regular Users**
+4. **👤 Regular Members**
    - Basic commands (`/help`, `/whoami`, `/stats`, etc.)
    - Encoding/decoding
    - Report submission
    - Vote reminders
 
 ---
+
 ## 🗄️ Database Structure
 
 The bot uses SQLite (`bot_data.db`) with **10 tables**:
 
 ### Core Tables
 
-**users** - User moderation data
+**users** - Member moderation data
 ```sql
 user_id TEXT PRIMARY KEY
 strikes INTEGER DEFAULT 0
@@ -604,7 +605,7 @@ reason TEXT
 added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ```
 
-**reports** - User-submitted reports
+**reports** - Member-submitted reports
 ```sql
 report_id INTEGER PRIMARY KEY AUTOINCREMENT
 reporter_id TEXT
@@ -629,9 +630,9 @@ reason TEXT
 blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ```
 
-### New Tables (Voting & Updates)
+### Voting & Updates Tables
 
-**vote_reminders** - Top.gg voting system (NEW!)
+**vote_reminders** - Top.gg voting system
 ```sql
 user_id TEXT PRIMARY KEY
 enabled INTEGER DEFAULT 0
@@ -641,7 +642,7 @@ total_votes INTEGER DEFAULT 0
 role_expires_at DATETIME
 ```
 
-**vote_logs** - Vote history tracking (NEW!)
+**vote_logs** - Vote history tracking
 ```sql
 id INTEGER PRIMARY KEY AUTOINCREMENT
 user_id TEXT
@@ -650,7 +651,7 @@ is_weekend INTEGER DEFAULT 0
 vote_type TEXT DEFAULT 'upvote'
 ```
 
-**updates_channels** - Server updates configuration (NEW!)
+**updates_channels** - Server updates configuration
 ```sql
 guild_id TEXT PRIMARY KEY
 channel_id TEXT NOT NULL
@@ -662,7 +663,7 @@ setup_at TEXT DEFAULT CURRENT_TIMESTAMP
 
 ## 🔧 Advanced Configuration
 
-### Top.gg Webhook Server (NEW!)
+### Top.gg Webhook Server
 
 The bot automatically starts a webhook server on port 8080 to receive vote notifications:
 
@@ -690,29 +691,29 @@ GET /test            # Test vote simulation
 2. Set webhook URL on Top.gg to your public URL
 3. Add authorization secret to `.env`
 
-### Voter Role System (NEW!)
+### Voter Role System
 
-When users vote on Top.gg:
+When members vote on Top.gg:
 1. They receive the Voter role immediately (12-hour duration)
 2. DM sent with vote thank you and role info
 3. Vote logged to database and log channel
 4. After 12 hours, role automatically removed
 5. DM sent when role expires
-6. If user joins support server within 12 hours of voting, role is assigned automatically
+6. If member joins support server within 12 hours of voting, role is assigned automatically
 
 **Role Expiration:**
 - Background task checks every minute for expired roles
 - Automatic removal with DM notification
-- Users can vote again to renew role
+- Members can vote again to renew role
 
-### Patreon Promotion System (NEW!)
+### Patreon Promotion System
 
 The bot includes smart Patreon promotion:
 
 ```python
 # Configuration
 patreon_promoter = PatreonPromoter(
-    patreon_url="https://patreon.com/flexedAI/membership",
+    patreon_url="https://patreon.com/your_patreon",
     min_messages=15,    # Minimum messages before promotion
     max_messages=20     # Maximum messages before promotion
 )
@@ -725,7 +726,7 @@ patreon_promoter = PatreonPromoter(
 - One-click "Become a Patron" button
 - Non-intrusive, appears occasionally
 
-### Updates Channel System (NEW!)
+### Updates Channel System
 
 **Required Setup:**
 Every server MUST configure an updates channel to use the bot:
@@ -752,7 +753,7 @@ When admins use `/announce`:
 The bot implements a **0.6-second cooldown** between responses to prevent API rate limiting:
 
 ```python
-# If another user sends a message within 0.6 seconds of the last response:
+# If another member sends a message within 0.6 seconds of the last response:
 # → Bot remains silent (no response)
 
 # After 0.6 seconds have passed:
@@ -762,8 +763,8 @@ The bot implements a **0.6-second cooldown** between responses to prevent API ra
 **Why this exists:**
 - Groq API has rate limits
 - Prevents cost overruns
-- Ensures stable service for all users
-- Users are notified of this in the welcome message
+- Ensures stable service for all servers
+- Members are notified of this in the welcome message
 
 ### Response Modes
 
@@ -774,7 +775,7 @@ The bot implements a **0.6-second cooldown** between responses to prevent API ra
 
 **STOP Mode** (`/stop`) - Default
 - Bot responds only to:
-  - Direct mentions (`@flexedAI`)
+  - Direct mentions (`@BotName`)
   - Messages containing bot name
   - Replies to bot messages
   - Messages with attachments
@@ -800,77 +801,43 @@ Create **6 dedicated channels** in your server for different log types:
 LOG_CHANNELS = {
     'server_join_leave': 1234567890,    # Bot joins/leaves servers
     'strikes': 1234567890,               # Strike additions/removals
-    'blacklist': 1234567890,             # User/guild blacklists
+    'blacklist': 1234567890,             # Member/guild blacklists
     'banned_words': 1234567890,          # Word filter violations
     'admin_logs': 1234567890,            # All admin actions
-    'reports': 1234567890                # User reports
+    'reports': 1234567890                # Member reports
 }
 ```
 
 **All logs include:**
 - Rich embeds with color coding
 - Timestamps
-- User/Admin information
+- Member/Admin information
 - Action reasons
 - DM delivery status
 - Relevant IDs for tracking
 
 ---
 
-## 🎯 Permission Hierarchy
-
-### Owner (You)
-- All permissions
-- Can manage bot admins
-- Can force-leave servers
-- Receives daily backups
-- Can send global announcements
-
-### Bot Admins
-- User moderation (blacklist, strikes)
-- Word filter management
-- Report review and actions
-- Data exports
-- Server configuration
-- Global announcements
-- **Cannot:** Manage other admins, force-leave servers
-
-### Server Administrators
-- Configure response mode (`/start`, `/stop`)
-- Set channel language
-- Change server prefix
-- Setup/change updates channel
-- **Cannot:** Moderate globally, access logs
-
-### Regular Users
-- Use AI conversations
-- Submit reports
-- Use utility commands
-- Enable vote reminders
-- **Cannot:** Moderation or configuration
-
----
-
 ## 🛡️ Moderation Workflow
 
 ### Strike System Flow
-1. User violates rules (banned word, etc.)
+1. Member violates rules (banned word, etc.)
 2. Bot adds strike (1/3, 2/3, or 3/3)
-3. User receives DM notification
+3. Member receives DM notification
 4. Logged to strikes channel
 5. At 3 strikes: **Auto-blacklist**
-   - User blacklisted automatically
+   - Member blacklisted automatically
    - DM sent explaining suspension
    - Logged to blacklist channel
 
 ### Report System Flow
-1. User submits `/report @user proof reason`
+1. Member submits `/report @user proof reason`
 2. Report logged to database
 3. Rich embed sent to reports channel with action buttons
 4. Admin clicks button:
    - **Claim** → Marks as being reviewed
-   - **Add Strike** → Adds 1 strike to reported user
-   - **Blacklist** → Immediately blacklists user
+   - **Add Strike** → Adds 1 strike to reported member
+   - **Blacklist** → Immediately blacklists member
 5. Report status updated
 6. All actions logged to admin_logs
 
@@ -885,25 +852,25 @@ LOG_CHANNELS = {
    - Owner notified of attempt
    - Logged to blacklist channel
 
-### Voting Workflow (NEW!)
-1. User votes on Top.gg
+### Voting Workflow
+1. Member votes on Top.gg
 2. Webhook received by bot
 3. Vote logged to database and channel
 4. Voter role assigned (12 hours)
-5. DM sent to user with thank you
+5. DM sent to member with thank you
 6. Background task monitors expiration
 7. After 12 hours:
    - Role automatically removed
-   - DM sent to user
-   - User can vote again
+   - DM sent to member
+   - Member can vote again
 
-### Updates Channel Workflow (NEW!)
+### Updates Channel Workflow
 1. Server admin runs `/setupupdates #channel`
 2. Bot verifies permissions in channel
 3. Configuration saved to database
 4. Test message sent to channel
 5. All bot features now enabled
-6. When owner sends `/announce`:
+6. When admin sends `/announce`:
    - Message to all updates channels
    - DM to all server owners
    - Statistics reported back
@@ -917,19 +884,19 @@ The bot tracks comprehensive statistics shown in `/stats`:
 - **Live Stats:**
   - Current latency (ms)
   - Total servers
-  - Total users across all servers
+  - Total members across all servers
   
 - **Moderation Stats** (shown in `/data` export):
-  - Total blacklisted users
+  - Total blacklisted members
   - Total strikes issued
   - Total banned words
   - Total blacklisted guilds
   - Total bot admins
   - Total pending reports
   - Total interactions logged
-  - **Total votes received (NEW!)**
-  - **Total active voters (NEW!)**
-  - **Total servers with updates channels (NEW!)**
+  - Total votes received
+  - Total active voters
+  - Total servers with updates channels
 
 ---
 
@@ -940,42 +907,42 @@ The bot tracks comprehensive statistics shown in `/stats`:
 - Exports complete database to JSON
 - Sends to owner via DM
 - Includes:
-  - All users and strikes
+  - All members and strikes
   - Banned words
   - Bot admins
-  - Filter bypass users
+  - Filter bypass members
   - Settings
   - Last 24h interactions
   - Recent admin logs
-  - **Vote statistics (NEW!)**
-  - **Updates channel configs (NEW!)**
+  - Vote statistics
+  - Updates channel configs
 
-### Vote Reminder Loop (NEW!)
+### Vote Reminder Loop
 - Runs every 5 minutes
-- Checks for users with reminders enabled
+- Checks for members with reminders enabled
 - Sends DM when 12 hours have passed since last vote
 - Includes vote button and disable button
 - Auto-disables if DMs are closed
 
-### Role Expiration Loop (NEW!)
+### Role Expiration Loop
 - Runs every minute
 - Checks for expired voter roles
 - Automatically removes role after 12 hours
-- Sends DM notification to user
-- Handles users who left server
+- Sends DM notification to member
+- Handles members who left server
 
 ### Auto-Blacklist on 3 Strikes
-- Automatic when user reaches 3 strikes
-- User receives detailed DM
+- Automatic when member reaches 3 strikes
+- Member receives detailed DM
 - Logged to both strikes and blacklist channels
 - Can be reversed with `/blacklist remove`
 
 ### Word Filter Auto-Delete
 - Messages containing banned words are deleted
-- User strike added (unless has bypass)
+- Member strike added (unless has bypass)
 - Warning message sent (auto-deletes in 10s)
 - Logged to banned_words channel
-- DM sent to user
+- DM sent to member
 
 ### Guild Blacklist Auto-Leave
 - Bot leaves immediately when blacklisted
@@ -983,7 +950,7 @@ The bot tracks comprehensive statistics shown in `/stats`:
 - Owner notified of server details
 - Logged to blacklist channel
 
-### Patreon Promotion (NEW!)
+### Patreon Promotion
 - Tracks messages per channel
 - Sends promotion every 15-20 messages
 - Randomized intervals
@@ -994,8 +961,8 @@ The bot tracks comprehensive statistics shown in `/stats`:
 
 ## 🔐 Security Features
 
-### User Privacy
-- User IDs are hashed in exports
+### Privacy
+- Member IDs are hashed in exports
 - DM failures are handled gracefully
 - Personal data only visible to admins
 - Reports are logged securely
@@ -1062,7 +1029,7 @@ The bot tracks comprehensive statistics shown in `/stats`:
 - Ensure SQLite is installed
 
 ### DM notifications failing
-- User has DMs disabled (expected behavior)
+- Member has DMs disabled (expected behavior)
 - Bot logs will show "DM Failed" status
 - Notifications still logged to channels
 
@@ -1077,7 +1044,7 @@ The bot tracks comprehensive statistics shown in `/stats`:
 4. Use `/stop` mode in general channels
 5. Regularly review `/reports`
 6. Grant `/bypass` to trusted moderators only
-7. Encourage users to vote on Top.gg
+7. Encourage members to vote on Top.gg
 8. Check updates channel configuration: `/viewupdates`
 
 ### For Bot Admins
@@ -1085,16 +1052,16 @@ The bot tracks comprehensive statistics shown in `/stats`:
 2. Review reports before taking action
 3. Use `/reportview` for full context
 4. Export logs regularly with `/data`
-5. Communicate with users via DMs when possible
+5. Communicate with members via DMs when possible
 6. Use `/announce` sparingly for important updates
 
-### For Users
+### For Developers
 1. Use `/forget` to clear conversation context
 2. Submit `/report` with proof for violations
 3. Check your status with `/whoami`
 4. Respect the 0.6s cooldown
 5. Use `/help` to discover features
-6. Vote on Top.gg to support the bot
+6. Vote on Top.gg to support development
 7. Enable vote reminders: `/votereminder enable`
 
 ---
@@ -1129,7 +1096,7 @@ Contributions are welcome! Please follow these steps:
 ### Code Guidelines
 - Use async/await for Discord operations
 - Include error handling with try/except
-- Add DM notifications for user-facing actions
+- Add DM notifications for member-facing actions
 - Log all moderation actions
 - Use embeds for rich responses
 - Follow PEP 8 style guide
@@ -1188,7 +1155,7 @@ When inviting the bot, ensure these permissions are enabled:
 - ✅ Attach Files
 - ✅ Add Reactions
 - ✅ Manage Messages (for word filter deletion)
-- ✅ **Manage Roles (for voter role - NEW!)**
+- ✅ Manage Roles (for voter role)
 - ✅ Use Slash Commands
 - ✅ Read Message History
 
@@ -1209,8 +1176,8 @@ When inviting the bot, ensure these permissions are enabled:
 - Bot logs all interactions to database
 - Admins can view interaction logs
 - Reports are visible to all bot admins
-- DMs to users notify them of moderation actions
-- Vote data tracked per user
+- DMs to members notify them of moderation actions
+- Vote data tracked per member
 
 ### Port Requirements
 - **Port 8080**: Required for Top.gg webhook (configurable)
@@ -1234,8 +1201,8 @@ When inviting the bot, ensure these permissions are enabled:
 - [ ] Economy system integration
 - [ ] Custom command creation system
 - [ ] Temporary bans/mutes
-- [ ] Appeal system for blacklisted users
-- [ ] Per-user language preferences
+- [ ] Appeal system for blacklisted members
+- [ ] Per-member language preferences
 - [ ] Voice channel support
 
 ### Under Consideration
@@ -1296,7 +1263,8 @@ When inviting the bot, ensure these permissions are enabled:
 [![Discord](https://img.shields.io/discord/1460574191072972913?color=7289da&label=Discord&logo=discord&logoColor=white&style=for-the-badge)](https://discord.com/invite/XMvPq7W5N4)
 [![GitHub stars](https://img.shields.io/github/stars/flexed-commits/flexedai?style=for-the-badge)](https://github.com/flexed-commits/flexedai/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/flexed-commits/flexedai?style=for-the-badge)](https://github.com/flexed-commits/flexedai/issues)
+[![Top.gg](https://top.gg/api/widget/1379152032358858762.svg)](https://top.gg/bot/1379152032358858762)
 
-**Version 2.1** | Last Updated: January 2025
+**Version 2.1** | Last Updated: 1 February 2025
 
 </div>
