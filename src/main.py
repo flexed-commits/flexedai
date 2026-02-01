@@ -146,7 +146,16 @@ def init_db():
         setup_by TEXT,
         setup_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
- 
+    c.execute('''CREATE TABLE IF NOT EXISTS reaction_responses (
+        message_id TEXT PRIMARY KEY,
+        channel_id TEXT,
+        guild_id TEXT,
+        original_author_id TEXT,
+        reactor_id TEXT,
+        reaction_emoji TEXT,
+        bot_response TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
     conn.commit()
     conn.close()
 
