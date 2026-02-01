@@ -4165,8 +4165,8 @@ async def whoami(ctx):
     has_bypass = is_bypass_user(user.id)
     is_blacklisted = bool(blacklisted)
     
-    # Calculate account age
-    account_age = (datetime.datetime.utcnow() - user.created_at).days
+    # Calculate account age - FIXED: use timezone-aware datetime
+    account_age = (datetime.datetime.now(datetime.timezone.utc) - user.created_at).days
     
     embed = discord.Embed(
         title=f"👤 {user.name}",
@@ -4182,7 +4182,8 @@ async def whoami(ctx):
     
     # Server Info (if in a server)
     if ctx.guild:
-        join_age = (datetime.datetime.utcnow() - user.joined_at).days if user.joined_at else 0
+        # FIXED: use timezone-aware datetime here too
+        join_age = (datetime.datetime.now(datetime.timezone.utc) - user.joined_at).days if user.joined_at else 0
         embed.add_field(name="🏠 Server Roles", value=roles if roles != "N/A" else "None", inline=False)
         embed.add_field(name="📆 Joined Server", value=f"{join_age} days ago", inline=True)
     
@@ -4219,7 +4220,7 @@ async def whoami(ctx):
     if is_blacklisted:
         embed.add_field(
             name="⚠️ Account Standing", 
-            value="Your account is **suspended** from using the bot.\nContact the bot owner for appeals.",
+            value="Your account is **suspended** from using the bot.\nContact the bot owner or [join the support server](<{os.getenv('SUPPORT_SERVER_INVITE')}>)for appeals.",
             inline=False
         )
     elif strikes >= 2:
@@ -4245,6 +4246,7 @@ async def whoami(ctx):
     embed.set_footer(text=f"Account Created: {user.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     
     await ctx.send(embed=embed)
+
     
 
 # ==================== DISCORD COMMANDS ====================
