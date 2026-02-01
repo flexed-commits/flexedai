@@ -4247,6 +4247,7 @@ async def whoami(ctx):
     
     await ctx.send(embed=embed)
 
+
     
 
 # ==================== DISCORD COMMANDS ====================
