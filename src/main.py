@@ -1556,6 +1556,118 @@ async def remove_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No
     embed.add_field(name="Reason", value=reason, inline=False)
     
     await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="reactionstats", description="Owner/Admin: View reaction response statistics.")
+@owner_or_bot_admin()
+async def reaction_stats(ctx):
+    """View statistics about reaction responses"""
+    
+    # Get total reaction responses
+    total = db_query("SELECT COUNT(*) FROM reaction_responses", fetch=True)[0][0]
+    
+    # Get recent reactions (last 24 hours)
+    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=24)).isoformat()
+    recent = db_query(
+        "SELECT COUNT(*) FROM reaction_responses WHERE timestamp > ?",
+        (cutoff,),
+        fetch=True
+    )[0][0]
+    
+    # Get most common reactions
+    common_reactions = db_query(
+        "SELECT reaction_emoji, COUNT(*) as count FROM reaction_responses GROUP BY reaction_emoji ORDER BY count DESC LIMIT 10",
+        fetch=True
+    )
+    
+    # Get top reactors
+    top_reactors = db_query(
+        "SELECT reactor_id, COUNT(*) as count FROM reaction_responses GROUP BY reactor_id ORDER BY count DESC LIMIT 5",
+        fetch=True
+    )
+    
+    embed = discord.Embed(
+        title="📊 Reaction Response Statistics",
+        description="Bot's reaction detection and response data",
+        color=discord.Color.blue()
+    )
+    
+    embed.add_field(name="📈 Total Responses", value=str(total), inline=True)
+    embed.add_field(name="🕐 Last 24h", value=str(recent), inline=True)
+    embed.add_field(name="⏱️ Message Limit", value="14 days", inline=True)
+    
+    if common_reactions:
+        reaction_list = "\n".join([f"{r[0]} - {r[1]} times" for r in common_reactions[:5]])
+        embed.add_field(name="🔥 Most Common Reactions", value=reaction_list, inline=False)
+    
+    if top_reactors:
+        reactor_list = "\n".join([f"<@{r[0]}> - {r[1]} reactions" for r in top_reactors])
+        embed.add_field(name="👥 Top Reactors", value=reactor_list, inline=False)
+    
+    embed.set_footer(text="Reaction responses are AI-generated based on context")
+    
+    await ctx.send(embed=embed)
+
+
+@bot.hybrid_command(name="togglereactions", description="Admin: Toggle reaction responses for this channel.")
+async def toggle_reactions(ctx, enabled: bool = None):
+    """Enable or disable reaction responses in the current channel"""
+    
+    if ctx.author.id != OWNER_ID:
+        if not ctx.guild or not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ **Permission Denied**\n**Required:** Administrator permissions")
+            return
+    
+    # Add new column to settings if not exists (you may need to run this migration once)
+    try:
+        db_query("ALTER TABLE settings ADD COLUMN reactions_enabled INTEGER DEFAULT 1")
+    except:
+        pass  # Column already exists
+    
+    if enabled is None:
+        # Check current status
+        status = db_query(
+            "SELECT reactions_enabled FROM settings WHERE id = ?",
+            (str(ctx.channel.id),),
+            fetch=True
+        )
+        current = status[0][0] if status else 1
+        
+        await ctx.send(
+            f"🔔 **Reaction responses are currently {'ENABLED' if current else 'DISABLED'} in this channel.**\n\n"
+            f"Use `/togglereactions true` to enable or `/togglereactions false` to disable."
+        )
+        return
+    
+    # Update setting
+    db_query(
+        "INSERT OR REPLACE INTO settings (id, reactions_enabled) VALUES (?, ?)",
+        (str(ctx.channel.id), 1 if enabled else 0)
+    )
+    
+    embed = discord.Embed(
+        title=f"{'🔔 Enabled' if enabled else '🔕 Disabled'} Reaction Responses",
+        description=f"Reaction responses are now **{'ENABLED' if enabled else 'DISABLED'}** in this channel.",
+        color=discord.Color.green() if enabled else discord.Color.red()
+    )
+    
+    await ctx.send(embed=embed)
+
+
+@bot.hybrid_command(name="clearreactionlog", description="Owner/Admin: Clear reaction response logs.")
+@owner_or_bot_admin()
+async def clear_reaction_log(ctx, days: int = None):
+    """Clear reaction response logs, optionally older than X days"""
+    
+    if days:
+        cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).isoformat()
+        count_before = db_query("SELECT COUNT(*) FROM reaction_responses WHERE timestamp < ?", (cutoff,), fetch=True)[0][0]
+        db_query("DELETE FROM reaction_responses WHERE timestamp < ?", (cutoff,))
+        await ctx.send(f"🗑️ **Cleared {count_before} reaction logs older than {days} days.**")
+    else:
+        count = db_query("SELECT COUNT(*) FROM reaction_responses", fetch=True)[0][0]
+        db_query("DELETE FROM reaction_responses")
+        await ctx.send(f"🗑️ **Cleared all {count} reaction response logs.**")
+        
 @bot.hybrid_command(name="strikelist", description="Owner/Admin: View all users with strikes.")
 @owner_or_bot_admin()
 async def strike_list(ctx):
@@ -4766,5 +4878,152 @@ and comprehensive moderation tools."""
                 await message.channel.send(error_msg)
             except Exception as send_error:
                 print(f"❌ Error sending error message: {send_error}")
+
+
+
+@bot.event
+async def on_reaction_add(reaction, user):
+    """
+    Detect reactions added to messages within the past 14 days
+    Generate AI response based on the reaction context
+    """
+    # Ignore bot's own reactions
+    if user.bot:
+        return
+    
+    # Check if user is blacklisted
+    user_check = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(user.id),), fetch=True)
+    if user_check and user_check[0][0] == 1:
+        return
+    
+    # Check if message is within 14 days
+    message = reaction.message
+    message_age = datetime.datetime.utcnow() - message.created_at
+    if message_age.days > 14:
+        return  # Message too old
+    
+    # Check if server has configured updates channel (for guild messages)
+    if message.guild and not has_updates_channel(message.guild.id):
+        return
+    
+    # Get channel mode
+    mode_check = db_query("SELECT mode FROM settings WHERE id = ?", (str(message.channel.id),), fetch=True)
+    mode = mode_check[0][0] if mode_check else "stop"
+    
+    # Only respond in START mode or if it's the bot's message that got reacted to
+    if mode != "start" and message.author != bot.user:
+        return
+    
+    # Check if we already responded to this exact reaction
+    existing = db_query(
+        "SELECT message_id FROM reaction_responses WHERE message_id = ? AND reactor_id = ? AND reaction_emoji = ?",
+        (str(message.id), str(user.id), str(reaction.emoji)),
+        fetch=True
+    )
+    if existing:
+        return  # Already responded to this reaction
+    
+    # Get language setting
+    lang = get_channel_language(message.channel.id)
+    
+    # Prepare context for AI
+    try:
+        async with message.channel.typing():
+            # Get message context
+            original_author = message.author
+            original_content = message.content if message.content else "[No text content]"
+            
+            # Determine reaction type
+            reaction_emoji = str(reaction.emoji)
+            reaction_count = reaction.count
+            
+            # Get bot statistics
+            total_users = sum(g.member_count for g in bot.guilds)
+            
+            # Build AI prompt
+            system_prompt = f"""You are {BOT_NAME}, an AI Discord bot detecting and responding to reactions.
+
+REACTION CONTEXT:
+• Someone reacted to a message
+• Reactor: {user.name} (ID: {user.id})
+• Original Message Author: {original_author.name} (ID: {original_author.id})
+• Original Message: "{original_content[:500]}"
+• Reaction: {reaction_emoji}
+• Total reactions of this type: {reaction_count}
+• Message age: {message_age.days} days, {message_age.seconds // 3600} hours old
+• Channel: #{message.channel.name if hasattr(message.channel, 'name') else 'DM'}
+• Server: {message.guild.name if message.guild else 'DM'}
+
+LANGUAGE REQUIREMENT:
+⚠️ You MUST respond ONLY in {lang} language.
+
+YOUR TASK:
+Generate a short, contextual response acknowledging the reaction. Consider:
+1. What the reaction might mean in context of the original message
+2. Whether it's a positive, negative, or neutral reaction
+3. The relationship between the reactor and the original author
+4. Keep it brief and natural (max 150 characters recommended)
+
+RESPONSE GUIDELINES:
+• Be conversational and match the tone of the reaction
+• Don't be overly verbose
+• Use emojis sparingly
+• Make it feel natural, not forced
+• If the reaction is simple (👍, ❤️, etc.), keep response minimal
+• For complex reactions, you can be slightly more descriptive
+
+Generate your response:"""
+
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Generate AI response
+            res = await bot.groq_client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=messages,
+                max_tokens=200,
+                temperature=0.8
+            )
+            
+            ai_response = res.choices[0].message.content.strip()
+            
+            # Send response as a reply to the original message
+            response_msg = await message.reply(
+                f"{reaction_emoji} **Reaction detected!** {user.mention}\n{ai_response}",
+                mention_author=False
+            )
+            
+            # Log the reaction response
+            db_query(
+                "INSERT INTO reaction_responses VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+                (
+                    str(message.id),
+                    str(message.channel.id),
+                    str(message.guild.id) if message.guild else "DM",
+                    str(original_author.id),
+                    str(user.id),
+                    reaction_emoji,
+                    ai_response
+                )
+            )
+            
+            # Also log as interaction
+            db_query(
+                "INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    time.time(),
+                    str(message.guild.id) if message.guild else "DM",
+                    str(message.channel.id),
+                    user.name,
+                    str(user.id),
+                    f"[REACTION: {reaction_emoji}] on message: {original_content[:100]}",
+                    ai_response
+                )
+            )
+            
+            print(f"✅ Reaction response sent: {user.name} reacted {reaction_emoji} to {original_author.name}'s message")
+            
+    except Exception as e:
+        print(f"❌ Error handling reaction: {e}")
+        # Silently fail - don't spam channels with error messages for reactions
 
 bot.run(DISCORD_TOKEN)
