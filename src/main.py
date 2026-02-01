@@ -3524,6 +3524,11 @@ async def help_cmd(ctx):
 **⏱️ Cooldown:**
 • 0.6s between responses
 • Prevents API rate limiting
+
+**🎭 Reaction Detection:**
+• Responds to reactions on messages (14 days)
+• AI-generated contextual responses
+• Toggle per-channel with /togglereactions
 """
     user_embed.add_field(name="✨ Bot Features", value=features.strip(), inline=False)
     
