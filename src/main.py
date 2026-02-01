@@ -4020,6 +4020,107 @@ def decode_text_universal(encoded):
     except Exception as e:
         return f"Decoding error: {str(e)}"
 
+@bot.hybrid_command(name="whoami", description="Show your Discord profile.")
+async def whoami(ctx):
+    user = ctx.author
+    roles = ", ".join([r.name for r in user.roles[1:]]) if ctx.guild else "N/A"
+    
+    # Get user's moderation status
+    user_data = db_query("SELECT strikes, blacklisted FROM users WHERE user_id = ?", (str(user.id),), fetch=True)
+    
+    if user_data:
+        strikes, blacklisted = user_data[0]
+    else:
+        strikes, blacklisted = 0, 0
+    
+    # Check additional statuses
+    is_owner = user.id == OWNER_ID
+    is_admin = is_bot_admin(user.id)
+    has_bypass = is_bypass_user(user.id)
+    is_blacklisted = bool(blacklisted)
+    
+    # Calculate account age
+    account_age = (datetime.datetime.utcnow() - user.created_at).days
+    
+    embed = discord.Embed(
+        title=f"👤 {user.name}",
+        description=f"Here's your profile information:",
+        color=user.color if ctx.guild else discord.Color.blue()
+    )
+    embed.set_thumbnail(url=user.display_avatar.url)
+    
+    # Basic Info
+    embed.add_field(name="🆔 User ID", value=f"`{user.id}`", inline=True)
+    embed.add_field(name="📝 Display Name", value=user.display_name, inline=True)
+    embed.add_field(name="📅 Account Age", value=f"{account_age} days", inline=True)
+    
+    # Server Info (if in a server)
+    if ctx.guild:
+        join_age = (datetime.datetime.utcnow() - user.joined_at).days if user.joined_at else 0
+        embed.add_field(name="🏠 Server Roles", value=roles if roles != "N/A" else "None", inline=False)
+        embed.add_field(name="📆 Joined Server", value=f"{join_age} days ago", inline=True)
+    
+    # Bot Status
+    status_lines = []
+    if is_owner:
+        status_lines.append("👑 **Bot Owner**")
+    if is_admin:
+        status_lines.append("✨ **Bot Admin**")
+    if has_bypass:
+        status_lines.append("🔓 **Word Filter Bypass**")
+    
+    if status_lines:
+        embed.add_field(name="🎖️ Bot Privileges", value="\n".join(status_lines), inline=False)
+    
+    # Moderation Status
+    if is_blacklisted:
+        mod_status = "🚫 **BLACKLISTED**"
+        mod_color = discord.Color.dark_red()
+        embed.color = mod_color
+    elif strikes >= 2:
+        mod_status = f"⚠️ **{strikes}/3 Strikes** (High Risk)"
+        mod_color = discord.Color.orange()
+    elif strikes >= 1:
+        mod_status = f"⚡ **{strikes}/3 Strikes**"
+        mod_color = discord.Color.gold()
+    else:
+        mod_status = "✅ **Clean Record**"
+        mod_color = discord.Color.green()
+    
+    embed.add_field(name="📊 Moderation Status", value=mod_status, inline=True)
+    
+    # Account standing summary
+    if is_blacklisted:
+        embed.add_field(
+            name="⚠️ Account Standing", 
+            value="Your account is **suspended** from using the bot.\nContact the bot owner for appeals.",
+            inline=False
+        )
+    elif strikes >= 2:
+        embed.add_field(
+            name="⚠️ Account Standing",
+            value=f"You are **{3 - strikes} strike(s)** away from being blacklisted.\nPlease follow community guidelines.",
+            inline=False
+        )
+    elif strikes >= 1:
+        embed.add_field(
+            name="📌 Account Standing",
+            value=f"You have **{strikes} strike(s)**. Be careful to avoid more violations.",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="✅ Account Standing",
+            value="Your account is in **good standing**!",
+            inline=False
+        )
+    
+    # Footer with creation date
+    embed.set_footer(text=f"Account Created: {user.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    
+    await ctx.send(embed=embed)
+    
+
 # ==================== DISCORD COMMANDS ====================
 
 @bot.hybrid_command(name="encode", description="Encode text (Level 0 - Simple)")
