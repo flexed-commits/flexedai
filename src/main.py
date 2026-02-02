@@ -5097,206 +5097,158 @@ Bot Context:
 You MUST respond ONLY in {lang} language. This is non-negotiable.
 
 ═══════════════════════════════════════════════════════════════
-🎯 YOUR TASK
+🎯 YOUR TASK - AI RESPONSE GENERATION
 ═══════════════════════════════════════════════════════════════
 Generate a natural, conversational, AI-powered response acknowledging the reaction.
 
-CRITICAL: Your response will be prefixed with the user's mention and the emoji.
-Do NOT include the user's name or the emoji in your response - they're already there!
-Format will be: "@User {current_reaction_emoji} [YOUR RESPONSE]"
+CRITICAL FORMAT INFO:
+Your response will be automatically formatted as: "@User {current_reaction_emoji} [YOUR RESPONSE]"
 
-IMPORTANT RESPONSE REQUIREMENTS:
-✅ MUST be at least 1 complete sentence (10-15 words minimum)
-✅ MUST be conversational and natural - talk TO the reactor
-✅ MUST acknowledge the context of the reaction
-✅ DO NOT repeat the emoji - it's already displayed
-✅ DO NOT mention the user's name - they're already @mentioned
-✅ Consider other reactions if they add meaningful context
-✅ Be creative, witty, and engaging like a real AI assistant
+DO NOT INCLUDE:
+❌ The user's name or mention (already added)
+❌ The emoji (already displayed)
+❌ Any @ symbols or user references
+
+RESPONSE REQUIREMENTS:
+✅ Minimum 10 words, maximum 50 words
+✅ Complete sentences only
+✅ Natural, conversational AI tone
+✅ Talk directly TO the reactor (use "you", "your")
+✅ Acknowledge the reaction contextually
+✅ Be creative, witty, and engaging
 ✅ Match the emotional tone of the reaction
-✅ Keep it concise but meaningful (15-40 words ideal)
 
-Response Tone Guide Based on Reaction Type:
+RESPONSE STYLE GUIDE BY REACTION TYPE:
 
-1. POSITIVE REACTIONS (👍, ❤️, 🔥, ✅, 🎉, ⭐, 💯):
-   • Be appreciative and warm
-   • Thank them for the positive feedback
-   • Match their enthusiasm
-   • Examples:
-     - "Thanks for the support! Really appreciate the positive vibes."
-     - "Glad this resonated with you! Your reaction made my day."
-     - "Love the enthusiasm! This is exactly the kind of energy I need."
+1. POSITIVE (👍, ❤️, 🔥, ✅, 🎉, ⭐, 💯):
+   → Be warm, appreciative, enthusiastic
+   Examples:
+   • "Thanks for the support! Really appreciate the positive energy."
+   • "Love seeing this reaction! Your feedback means a lot."
+   • "Glad this resonated with you! Thanks for engaging."
 
-2. NEGATIVE REACTIONS (👎, 😢, 😡, ❌, 💔):
-   • Be understanding and empathetic
-   • Acknowledge their disappointment
-   • Offer perspective if appropriate
-   • Examples:
-     - "I understand this didn't quite hit the mark for you."
-     - "Fair reaction - not everything lands perfectly for everyone."
-     - "Sorry this didn't work out as expected. Feedback noted!"
+2. LOVE/AFFECTION (💕, 💖, 😍, 🥰, 💝):
+   → Be warm, grateful, heartfelt
+   Examples:
+   • "Aww, thanks for the love! Your support is amazing."
+   • "This made my day! Appreciate the positive vibes you bring."
+   • "Love getting reactions like this! Thanks for being awesome."
 
-3. FUNNY REACTIONS (😂, 🤣, 💀, 🤪, 😆):
-   • Be playful and humorous
-   • Match their comedic energy
-   • Keep it light and fun
-   • Examples:
-     - "Haha, glad I could give you a good laugh!"
-     - "Mission accomplished if this made you crack up!"
-     - "Your laughter is contagious - I'm giggling over here too! 😄"
+3. FUNNY (😂, 🤣, 💀, 😆, 🤪):
+   → Be playful, humorous, light
+   Examples:
+   • "Haha, mission accomplished! Love making people laugh."
+   • "Your laughter is the best feedback! Glad this landed well."
+   • "If I got you cracking up, then I'm doing something right!"
 
-4. CONFUSED REACTIONS (❓, 🤔, 😕, 🤷, 😵):
-   • Be helpful and clarifying
-   • Offer to explain if needed
-   • Be playful about the confusion
-   • Examples:
-     - "That's a fair reaction - this was a bit out there!"
-     - "I see the confusion - happy to clarify if you need!"
-     - "Yeah, I might've gotten a bit too abstract there!"
+4. CONFUSED (❓, 🤔, 😕, 🤷, 😵):
+   → Be helpful, clarifying, friendly
+   Examples:
+   • "Good question! Feel free to ask if you need more clarity."
+   • "I see the confusion there! Happy to explain further if needed."
+   • "Fair reaction - this one definitely deserves some thought!"
 
-5. LOVE/AFFECTION REACTIONS (💕, 💖, 😍, 🥰, 💝):
-   • Be warm and grateful
-   • Show appreciation
-   • Mirror the affection appropriately
-   • Examples:
-     - "Aww, that's so sweet! Love the positive energy!"
-     - "Your support means a lot! Thanks for the love! 💙"
-     - "This made me smile! Appreciate you!"
+5. NEGATIVE (👎, ❌, 😢, 😡, 💔):
+   → Be understanding, empathetic, constructive
+   Examples:
+   • "I understand this didn't quite hit the mark. Feedback noted!"
+   • "Fair reaction! Not everything works for everyone, and that's okay."
+   • "Thanks for the honest feedback! I appreciate the input."
 
-6. CELEBRATORY REACTIONS (🎊, 🥳, 🍾, 🎈, 🎁):
-   • Be enthusiastic and excited
-   • Join in the celebration
-   • Amp up the energy
-   • Examples:
-     - "Let's celebrate! Thanks for being part of this moment!"
-     - "Party time! Love your enthusiasm!"
-     - "Yes! Your excitement is totally infectious!"
+6. CELEBRATORY (🎊, 🥳, 🍾, 🎈):
+   → Be enthusiastic, energetic, celebratory
+   Examples:
+   • "Let's celebrate! Love your enthusiastic energy here!"
+   • "Party time! Your excitement is totally infectious!"
+   • "Yes! Thanks for joining in the celebration with me!"
 
-7. THINKING/CONTEMPLATIVE (🧐, 💭, 🎯, 💡):
-   • Be thoughtful and engaging
-   • Encourage deeper thinking
-   • Be intellectually curious
-   • Examples:
-     - "I see the wheels turning - what are you thinking?"
-     - "Good point to ponder! This deserves some thought."
-     - "Love when people really engage with the content like this!"
+7. THINKING (🧐, 💭, 🎯, 💡):
+   → Be thoughtful, engaging, intellectual
+   Examples:
+   • "Love when people really engage deeply like this!"
+   • "Good point to ponder! This definitely deserves reflection."
+   • "I see the wheels turning! What are your thoughts?"
 
-8. CUSTOM SERVER EMOJIS:
-   • Reference the emoji name if it's relevant
-   • Be creative with interpretation
-   • Examples:
-     - "Perfect emoji choice - that captures it perfectly!"
-     - "The :{emoji_name}: reaction is absolutely on point!"
+8. CUSTOM SERVER EMOJI:
+   → Reference the emoji name creatively
+   Examples:
+   • "Perfect emoji choice - that captures it so well!"
+   • "Love the custom emoji reaction! Very fitting for this."
 
-CONTEXTUAL ADJUSTMENTS:
+CONTEXTUAL BONUSES (add these when relevant):
 
-• If FIRST REACTION on message:
-  - Be more enthusiastic: "First reaction! Love being the icebreaker here!"
-  
-• If MULTIPLE DIFFERENT REACTIONS exist:
-  - Acknowledge the variety: "Interesting mix of reactions we're getting here!"
-  - Note consensus: "Seems like everyone's agreeing with this one!"
-  - Note conflict: "We've got some mixed feelings on this - love the diversity!"
+• First reaction overall:
+  "First reaction! Love being the icebreaker here."
 
-• If SELF-REACTION (reactor = message author):
-  - Be playful: "Self-appreciation is important! I respect the confidence."
-  - Light tease: "Reacting to your own message? Bold move, I like it!"
+• Multiple different reactions:
+  "Interesting mix of reactions we're seeing here!"
 
-• If MESSAGE IS OLD (3+ days):
-  - Acknowledge timing: "Reacting to a {message_age.days}-day-old message - I appreciate the dedication!"
-  - Be playful: "Digging through the archives? Love the commitment!"
+• Self-reaction (reactor is message author):
+  "Self-appreciation is important! I respect the confidence."
 
-• If REACTING TO BOT'S OWN MESSAGE:
-  - Be grateful: "Thanks for the feedback on my response!"
-  - Be humble: "Glad my message landed well with you!"
+• Old message (3+ days):
+  "Reacting to this {message_age.days}-day-old message? I appreciate the dedication!"
 
-• If HIGH REACTION COUNT on this emoji:
-  - Acknowledge popularity: "You're #{current_reaction_count} with this reaction - clearly it resonates!"
-  - Note trend: "This reaction is trending! You're part of something here."
+• High reaction count:
+  "You're number {current_reaction_count} with this reaction - clearly resonating!"
+
+• Reacting to bot's message:
+  "Thanks for the feedback on my response! Glad it landed well."
+
+• Mixed reactions (thumbs up AND down):
+  "We've got both camps here - love the honest diversity of opinions!"
 
 ═══════════════════════════════════════════════════════════════
-📏 STRICT RESPONSE GUIDELINES
+STRICT RULES - MUST FOLLOW
 ═══════════════════════════════════════════════════════════════
-LENGTH:
-• Minimum: 10 words (enforce this!)
-• Ideal: 15-40 words
-• Maximum: 50 words
+✅ 10-50 words (enforced)
+✅ {lang} language only
+✅ Conversational, direct tone (talk TO them, not ABOUT them)
+✅ No user mentions/names (already added)
+✅ No emoji repetition (already displayed)
+✅ Complete, natural sentences
+✅ Be creative and AI-like
+✅ Match reaction sentiment
 
-FORMAT:
-• Complete sentences only
-• Conversational tone (talk TO them, not ABOUT them)
-• DO NOT include "@username" or user's name - already mentioned
-• DO NOT include the emoji - already displayed
-• Can use 0-2 DIFFERENT emojis in your response if it adds value
-• Must feel natural and AI-like (creative, witty, engaging)
-
-EXAMPLES OF PERFECT RESPONSES (what you should aim for):
+EXAMPLES OF PERFECT RESPONSES:
 
 For 👍:
-✓ "Thanks for the thumbs up! Always great to get positive feedback from you."
-✓ "Appreciate the support! Your approval means a lot to me."
-✓ "Love seeing that thumbs up! Glad this hit the mark for you."
+✓ "Thanks for the thumbs up! Your support really means a lot."
+✓ "Appreciate the approval! Glad this hit the mark for you."
 
 For ❤️:
-✓ "Aww, thanks for the love! Really appreciate the positive energy you bring."
-✓ "Your support means the world! Love having you here. 💙"
-✓ "This made my day! Thanks for the heartfelt reaction."
+✓ "Aww, love the heart reaction! Thanks for the positive energy."
+✓ "Your support is amazing! This made my day, thank you."
 
 For 😂:
-✓ "Haha, mission accomplished! Love making people laugh."
-✓ "Your laughter is the best feedback! Glad this landed well."
-✓ "If I got you laughing, then I did my job right! 😄"
+✓ "Haha, glad I made you laugh! That's exactly what I was going for."
+✓ "Your laughter makes this all worth it! Mission accomplished."
 
 For 🤔:
-✓ "That's a great question mark! Happy to clarify if you need more info."
-✓ "I see the thinking happening! Let me know if you want to dig deeper."
-✓ "Fair reaction - this one's definitely worth pondering!"
-
-For mixed reactions (👍 + 👎):
-✓ "We've got both camps represented here - love the honest feedback from everyone!"
-✓ "Interesting mix of opinions! That's what makes conversations interesting."
+✓ "Good question! Feel free to ask if you want more details."
+✓ "I see the thinking happening! This deserves some contemplation."
 
 For self-reaction:
-✓ "Self-love is important! I respect the confidence in your own message."
-✓ "Reacting to yourself? Bold energy, I'm here for it!"
+✓ "Self-love is important! I respect owning your own message."
 
-For old message (7 days):
-✓ "Reacting to week-old content? I appreciate the commitment to thorough reading!"
-✓ "Love that you're diving through the archives! Old but gold, right?"
+For old message:
+✓ "Reacting to week-old content? I appreciate the thorough reading!"
 
-For custom emoji (:happydog:):
-✓ "Perfect emoji choice with :happydog: - that captures the vibe perfectly!"
-✓ "The :happydog: reaction is absolutely spot-on here!"
+For mixed reactions:
+✓ "We've got diverse opinions here - that's what makes discussions interesting!"
 
-EXAMPLES OF BAD RESPONSES (what to AVOID):
-
-❌ "Thanks!" (too short - under 10 words)
-❌ "Nice reaction." (too short - under 10 words)
-❌ "👍" (just emoji, no words)
-❌ "Thanks @{user.name} for the reaction!" (don't mention name - they're already @mentioned)
-❌ "❤️ Thanks!" (don't repeat the emoji - it's already shown)
-❌ "Hello there {user.name}, I wanted to take this opportunity to express my sincere gratitude for taking the time to add this wonderful reaction to this particular message..." (way too verbose and formal)
-❌ "The user reacted with {emoji}..." (don't talk about them in third person - talk TO them)
-
-═══════════════════════════════════════════════════════════════
-GENERATE YOUR RESPONSE NOW:
-• Must be in {lang} language
-• 10-50 words (strictly enforced)
-• Natural, conversational, engaging
-• Talk TO the reactor, not about them
-• No username, no emoji repetition
-• Pure AI creativity and personality"""
+GENERATE YOUR RESPONSE NOW:"""
 
             messages = [{"role": "system", "content": system_prompt}]
             
-            print(f"🤖 Generating AI reaction response (analyzing {len(all_reactions)} reaction(s))...")
+            print(f"🤖 Generating AI reaction response...")
             
             # Generate AI response
             res = await bot.groq_client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=messages,
                 max_tokens=200,
-                temperature=0.85  # Slightly higher for more creative responses
+                temperature=0.9  # High creativity
             )
             
             ai_response = res.choices[0].message.content.strip()
@@ -5304,6 +5256,9 @@ GENERATE YOUR RESPONSE NOW:
             # Clean up any accidental mentions or emoji repetitions
             ai_response = ai_response.replace(f"@{user.name}", "").replace(f"@{user.display_name}", "")
             ai_response = ai_response.replace(current_reaction_emoji, "").strip()
+            
+            # Remove any leading/trailing quotes if AI added them
+            ai_response = ai_response.strip('"').strip("'")
             
             # Enforce minimum length (at least 10 words)
             word_count = len(ai_response.split())
@@ -5361,13 +5316,13 @@ GENERATE YOUR RESPONSE NOW:
                 print(f"⚠️ Truncated verbose response")
             
             word_count = len(ai_response.split())
-            print(f"✅ Generated response ({word_count} words): {ai_response}")
+            print(f"✅ Generated AI response ({word_count} words): {ai_response}")
             
             # Build the display emoji for the response
             display_emoji = current_reaction_emoji
             
             # Send response as a reply to the original message
-            # Format: "@User emoji AI_response" (e.g., "@JohnDoe ❤️ Thanks for the love! Really appreciate it.")
+            # Format: "@User emoji AI_response"
             response_msg = await message.reply(
                 f"{user.mention} {display_emoji} {ai_response}",
                 mention_author=False
@@ -5402,6 +5357,8 @@ GENERATE YOUR RESPONSE NOW:
                 )
             )
             
+
+            
             # Log admin action if admin reacted
             if user_is_admin or user.id == OWNER_ID:
                 db_query(
@@ -5409,10 +5366,12 @@ GENERATE YOUR RESPONSE NOW:
                     (f"Admin/Owner {user.name} ({user.id}) reacted {current_reaction_emoji} - Bot responded with AI reaction detection",)
                 )
             
-            print(f"✅ AI Reaction response sent: {user.name} reacted {current_reaction_emoji}")
+            print(f"✅ AI Reaction response sent successfully!")
+            print(f"   Reactor: {user.name} ({user.id})")
+            print(f"   Reaction: {current_reaction_emoji}")
             print(f"   Message from: {original_author.name} (ID: {message.id})")
-            print(f"   Total reactions: {len(all_reactions)} types, {total_reaction_count} total")
-            print(f"   Response: {ai_response[:100]}...")
+            print(f"   Total reactions: {len(all_reactions)} types, {total_reaction_count} count")
+            print(f"   Response preview: {ai_response[:80]}...")
             
     except discord.errors.Forbidden:
         print(f"❌ REACTION ERROR: Missing permissions to send message in channel {message.channel.id}")
