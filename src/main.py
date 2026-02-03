@@ -5382,57 +5382,341 @@ GENERATE YOUR RESPONSE NOW:"""
         import traceback
         traceback.print_exc()
 
-@bot.command(name="edit", description="Owner: Edit a bot message")
+@bot.command(name="edit", description="Owner: Edit a bot message. Supports text, JSON embeds, and buttons.")
 @commands.is_owner()
 async def edit_message(ctx, message_id: str, *, new_content: str):
-    """Edit a message sent by the bot - supports plain text or JSON for embeds"""
+    """
+    Edit a message sent by the bot.
+    Supports plain text, JSON embeds, and buttons.
+
+    ─────────────────────────────────────────
+    USAGE EXAMPLES:
+    ─────────────────────────────────────────
+
+    1) PLAIN TEXT:
+       !edit 123456789 Hello this is the new text
+
+    2) EMBED ONLY (raw embed JSON):
+       !edit 123456789 {"description": "New description", "title": "New Title", "color": 3447003}
+
+    3) EMBED + TEXT combined:
+       !edit 123456789 {"text": "Above the embed", "embed": {"title": "Title", "description": "Desc", "color": 16711680}}
+
+    4) EMBED + BUTTONS:
+       !edit 123456789 {"embed": {"title": "Title", "description": "Desc"}, "buttons": [{"label": "Click Me", "style": 1}, {"label": "Google", "style": 5, "url": "https://google.com"}]}
+
+    5) TEXT + BUTTONS (no embed):
+       !edit 123456789 {"text": "Pick one!", "buttons": [{"label": "Option A", "style": 3}, {"label": "Option B", "style": 4}]}
+
+    6) BUTTONS ONLY (keeps existing text/embed):
+       !edit 123456789 {"buttons": [{"label": "Yes", "style": 3, "emoji": "✅"}, {"label": "No", "style": 4, "emoji": "❌"}]}
+
+    7) CLEAR EMBED (remove embed, set plain text):
+       !edit 123456789 {"text": "Just plain text now", "clear_embed": true}
+
+    8) CLEAR BUTTONS (remove buttons, keep rest):
+       !edit 123456789 {"text": "No buttons anymore", "clear_buttons": true}
+
+    9) FULL EMBED with all fields:
+       !edit 123456789 {"embed": {"title": "Big Title", "description": "Main description here", "color": 5814783, "url": "https://example.com", "timestamp": "2025-01-01T00:00:00", "footer": {"text": "Footer text", "icon_url": "https://example.com/icon.png"}, "image": {"url": "https://example.com/image.png"}, "thumbnail": {"url": "https://example.com/thumb.png"}, "author": {"name": "Author Name", "url": "https://example.com", "icon_url": "https://example.com/author.png"}, "fields": [{"name": "Field 1", "value": "Value 1", "inline": true}, {"name": "Field 2", "value": "Value 2", "inline": false}]}}
+
+    10) BUTTON WITH CUSTOM EMOJI:
+        !edit 123456789 {"text": "React!", "buttons": [{"label": "Fire", "style": 1, "emoji": "🔥"}, {"label": "Custom", "style": 2, "emoji": {"name": "customemoji", "id": 123456789}}]}
+
+    ─────────────────────────────────────────
+    BUTTON STYLES:
+        1 = Primary (Blurple)
+        2 = Secondary (Grey)
+        3 = Success (Green)
+        4 = Danger (Red)
+        5 = Link (Grey, requires "url" field)
+    ─────────────────────────────────────────
+    """
     try:
-        # Try to find the message in the current channel first
+        # Fetch message
         try:
-            message = await ctx.channel.fetch_message(int(message_id))
+            target_message = await ctx.channel.fetch_message(int(message_id))
         except discord.NotFound:
             await ctx.send("❌ **Message not found in this channel.**")
             return
-        
+        except ValueError:
+            await ctx.send("❌ **Invalid message ID** - Must be a numeric ID.")
+            return
+
         # Check if message is from the bot
-        if message.author.id != bot.user.id:
+        if target_message.author.id != bot.user.id:
             await ctx.send("❌ **Can only edit messages sent by the bot.**")
             return
-        
-        # Check if content is JSON (for embed editing)
-        if new_content.strip().startswith('{'):
-            try:
-                import json
-                embed_data = json.loads(new_content)
-                
-                # Create embed from JSON
-                embed = discord.Embed.from_dict(embed_data)
-                
-                # Edit with new embed
-                await message.edit(content=None, embed=embed)
-                await ctx.send(f"✅ **Message edited with new embed**\nMessage ID: `{message_id}`")
-                
-                # Log the action
-                db_query("INSERT INTO admin_logs (log) VALUES (?)", 
-                        (f"Owner {ctx.author.name} edited message {message_id} with JSON embed in #{ctx.channel.name}",))
-                
-            except json.JSONDecodeError as e:
-                await ctx.send(f"❌ **Invalid JSON format**\n```\n{str(e)}\n```")
+
+        # Strip code block wrappers if present (```json ... ``` or ``` ... ```)
+        cleaned = new_content.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+
+        # ───────────────────────────────────────────
+        # Try to parse as JSON
+        # ───────────────────────────────────────────
+        is_json = False
+        parsed = None
+        try:
+            parsed = json.loads(cleaned)
+            is_json = True
+        except (json.JSONDecodeError, ValueError):
+            is_json = False
+
+        # ───────────────────────────────────────────
+        # CASE 1: Plain text (not JSON at all)
+        # ───────────────────────────────────────────
+        if not is_json:
+            await target_message.edit(content=new_content, embed=None, view=None)
+            await ctx.send(f"✅ **Message edited** (plain text)\nMessage ID: `{message_id}`")
+            db_query("INSERT INTO admin_logs (log) VALUES (?)",
+                     (f"Owner {ctx.author.name} edited message {message_id} — plain text in #{ctx.channel.name}",))
+            return
+
+        # ───────────────────────────────────────────
+        # CASE 2: JSON detected — figure out what's inside
+        # ───────────────────────────────────────────
+
+        # Detect if it's a "raw embed" (has "description" or "title" at top level
+        # and does NOT have "embed", "text", "buttons", "clear_embed", "clear_buttons" keys)
+        # If so, wrap it so the rest of the logic is unified.
+        control_keys = {"embed", "text", "buttons", "clear_embed", "clear_buttons"}
+        raw_embed_keys = {"title", "description", "color", "url", "timestamp",
+                          "footer", "image", "thumbnail", "author", "fields"}
+
+        if isinstance(parsed, dict) and not any(k in parsed for k in control_keys):
+            # Looks like a raw embed JSON — wrap it
+            if any(k in parsed for k in raw_embed_keys):
+                parsed = {"embed": parsed}
+            else:
+                # Unknown JSON structure, just dump it as text
+                await target_message.edit(content=cleaned, embed=None, view=None)
+                await ctx.send(f"✅ **Message edited** (JSON as text, no recognised structure)\nMessage ID: `{message_id}`")
+                db_query("INSERT INTO admin_logs (log) VALUES (?)",
+                         (f"Owner {ctx.author.name} edited message {message_id} — raw JSON text in #{ctx.channel.name}",))
                 return
+
+        # ───────────────────────────────────────────
+        # Extract parts from the unified structure
+        # ───────────────────────────────────────────
+        text_content = parsed.get("text", None)          # str or None
+        embed_data   = parsed.get("embed", None)         # dict or None
+        buttons_data = parsed.get("buttons", None)       # list or None
+        clear_embed  = parsed.get("clear_embed", False)  # bool
+        clear_buttons = parsed.get("clear_buttons", False)  # bool
+
+        # ───────────────────────────────────────────
+        # Build Embed (if provided)
+        # ───────────────────────────────────────────
+        embed = None
+        if embed_data and isinstance(embed_data, dict):
+            # Guarantee "description" exists — discord.py requires it
+            if "description" not in embed_data:
+                embed_data["description"] = "\u200b"  # zero-width space
+
+            # Handle color — accept int, hex string like "#ff0000" or "0xff0000", or name
+            if "color" in embed_data:
+                raw_color = embed_data["color"]
+                if isinstance(raw_color, str):
+                    raw_color = raw_color.strip().lower().lstrip("#")
+                    try:
+                        embed_data["color"] = int(raw_color, 16)
+                    except ValueError:
+                        embed_data["color"] = 0  # fallback black
+                # else keep as int
+
+            # Handle timestamp — accept ISO string or None
+            if "timestamp" in embed_data:
+                ts = embed_data["timestamp"]
+                if isinstance(ts, str):
+                    try:
+                        embed_data["timestamp"] = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                    except (ValueError, TypeError):
+                        del embed_data["timestamp"]  # invalid, just remove
+
+            try:
+                embed = discord.Embed.from_dict(embed_data)
+            except Exception as e:
+                await ctx.send(f"❌ **Failed to build embed:**\n```\n{e}\n```")
+                return
+
+        # If clear_embed is set, force embed to None
+        if clear_embed:
+            embed = None
+
+        # ───────────────────────────────────────────
+        # Build View / Buttons (if provided)
+        # ───────────────────────────────────────────
+        view = None
+        if buttons_data and isinstance(buttons_data, list) and not clear_buttons:
+            view = discord.ui.View()
+
+            for idx, btn in enumerate(buttons_data):
+                if not isinstance(btn, dict):
+                    continue
+
+                label    = btn.get("label", f"Button {idx + 1}")
+                style_id = btn.get("style", 2)  # default Secondary
+                url      = btn.get("url", None)
+                custom_id_val = btn.get("custom_id", None)
+                disabled = btn.get("disabled", False)
+                emoji_raw = btn.get("emoji", None)
+
+                # Clamp style to valid range 1-5
+                if not isinstance(style_id, int) or style_id < 1 or style_id > 5:
+                    style_id = 2
+
+                # Map int → ButtonStyle
+                style_map = {
+                    1: discord.ButtonStyle.primary,
+                    2: discord.ButtonStyle.secondary,
+                    3: discord.ButtonStyle.success,
+                    4: discord.ButtonStyle.danger,
+                    5: discord.ButtonStyle.link,
+                }
+                style = style_map.get(style_id, discord.ButtonStyle.secondary)
+
+                # Link buttons MUST have url; non-link buttons must NOT have url
+                if style == discord.ButtonStyle.link:
+                    if not url:
+                        url = "https://discord.com"  # safe fallback
+                    custom_id_val = None  # link buttons cannot have custom_id
+                else:
+                    url = None  # non-link buttons cannot have url
+                    if not custom_id_val:
+                        custom_id_val = f"edit_btn_{message_id}_{idx}"
+
+                # Parse emoji
+                emoji_obj = None
+                if emoji_raw:
+                    if isinstance(emoji_raw, str):
+                        # Unicode emoji string
+                        emoji_obj = emoji_raw
+                    elif isinstance(emoji_raw, dict):
+                        # Custom emoji dict {"name": "x", "id": 123}
+                        try:
+                            emoji_obj = discord.PartialEmoji(
+                                name=emoji_raw.get("name", ""),
+                                id=int(emoji_raw["id"]) if "id" in emoji_raw else None,
+                                animated=emoji_raw.get("animated", False)
+                            )
+                        except (ValueError, TypeError):
+                            emoji_obj = None  # invalid, skip emoji
+
+                # Build the button
+                try:
+                    button = discord.ui.Button(
+                        label=label[:80],  # discord label limit 80 chars
+                        style=style,
+                        url=url,
+                        custom_id=custom_id_val,
+                        disabled=disabled,
+                        emoji=emoji_obj
+                    )
+                    view.add_item(button)
+                except Exception as e:
+                    print(f"⚠️ Skipped button {idx}: {e}")
+                    continue
+
+            # If view has zero items, set to None (discord rejects empty views)
+            if len(view.children) == 0:
+                view = None
+
+        # If clear_buttons, force view to None
+        if clear_buttons:
+            view = discord.ui.View()  # empty view removes existing buttons
+
+        # ───────────────────────────────────────────
+        # Determine final text content for the message
+        # ───────────────────────────────────────────
+        # If only buttons were provided (no text, no embed, no clear flags)
+        # then keep the EXISTING message content untouched — just swap the view.
+        keep_existing_content = (
+            text_content is None
+            and embed_data is None
+            and not clear_embed
+            and buttons_data is not None
+        )
+
+        if keep_existing_content:
+            # Edit only the view, preserve everything else
+            await target_message.edit(view=view)
+            await ctx.send(f"✅ **Buttons updated** (existing content kept)\nMessage ID: `{message_id}`\nButtons added: `{len(view.children) if view else 0}`")
+            db_query("INSERT INTO admin_logs (log) VALUES (?)",
+                     (f"Owner {ctx.author.name} edited message {message_id} — buttons only in #{ctx.channel.name}",))
+            return
+
+        # ───────────────────────────────────────────
+        # Perform the actual edit
+        # ───────────────────────────────────────────
+        # Build kwargs so we only pass what we need
+        edit_kwargs = {}
+
+        # TEXT
+        if text_content is not None:
+            edit_kwargs["content"] = str(text_content)
+        elif clear_embed and not embed:
+            # If we're clearing embed but no new text provided, set content to
+            # existing content so discord doesn't complain about empty message
+            edit_kwargs["content"] = target_message.content if target_message.content else "\u200b"
         else:
-            # Plain text edit
-            await message.edit(content=new_content)
-            await ctx.send(f"✅ **Message edited**\nMessage ID: `{message_id}`")
-            
-            # Log the action
-            db_query("INSERT INTO admin_logs (log) VALUES (?)", 
-                    (f"Owner {ctx.author.name} edited message {message_id} in #{ctx.channel.name}",))
-        
-    except ValueError:
-        await ctx.send("❌ **Invalid message ID** - Must be a numeric ID")
+            # No text specified and not clearing embed — preserve existing content
+            edit_kwargs["content"] = target_message.content
+
+        # EMBED
+        if embed is not None:
+            edit_kwargs["embed"] = embed
+        elif clear_embed:
+            edit_kwargs["embed"] = None
+        # else: don't touch embed (preserve existing)
+
+        # VIEW / BUTTONS
+        if view is not None:
+            edit_kwargs["view"] = view
+        elif clear_buttons:
+            edit_kwargs["view"] = discord.ui.View()  # removes buttons
+        # else: don't touch view
+
+        await target_message.edit(**edit_kwargs)
+
+        # ───────────────────────────────────────────
+        # Success response
+        # ───────────────────────────────────────────
+        summary_parts = []
+        if text_content is not None:
+            summary_parts.append(f"📝 Text: `{str(text_content)[:60]}{'...' if len(str(text_content)) > 60 else ''}`")
+        if embed is not None:
+            summary_parts.append(f"🖼️ Embed: `{embed.title or 'No title'}`")
+        if clear_embed:
+            summary_parts.append("🗑️ Embed cleared")
+        if view and len(view.children) > 0:
+            btn_labels = ", ".join([b.label or "?" for b in view.children])
+            summary_parts.append(f"🔘 Buttons: `{btn_labels}`")
+        if clear_buttons:
+            summary_parts.append("🗑️ Buttons cleared")
+
+        summary = "\n".join(summary_parts) if summary_parts else "No changes detected"
+
+        result_embed = discord.Embed(
+            title="✅ Message Edited",
+            description=f"**Message ID:** `{message_id}`\n\n{summary}",
+            color=discord.Color.green()
+        )
+        result_embed.set_footer(text=f"Edited by {ctx.author.name}")
+        await ctx.send(embed=result_embed)
+
+        db_query("INSERT INTO admin_logs (log) VALUES (?)",
+                 (f"Owner {ctx.author.name} edited message {message_id} in #{ctx.channel.name} — {summary}",))
+
     except discord.Forbidden:
-        await ctx.send("❌ **Missing permissions** - Cannot edit this message")
+        await ctx.send("❌ **Missing permissions** — Cannot edit this message.")
     except Exception as e:
-        await ctx.send(f"❌ **Error editing message:**\n```\n{str(e)}\n```")
+        await ctx.send(f"❌ **Error editing message:**\n```\n{e}\n```")
+        import traceback
+        traceback.print_exc()
         
 bot.run(DISCORD_TOKEN)
