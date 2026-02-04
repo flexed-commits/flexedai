@@ -17,7 +17,6 @@ SUPPORT_SERVER_ID = int(os.getenv('SUPPORT_SERVER_ID')) if os.getenv('SUPPORT_SE
 # Reminder-timing constants
 # ---------------------------------------------------------------------------
 BASE_REMINDER_HOURS = 12          # default cycle length
-SKIP_PENALTY_HOURS  = 12          # added once if the user missed a full cycle
 # ---------------------------------------------------------------------------
 
 def debug_log(message, level="INFO"):
@@ -48,7 +47,7 @@ def init_vote_db():
             next_reminder  DATETIME,
             total_votes    INTEGER  DEFAULT 0,
             role_expires_at DATETIME,
-            reminder_interval_hours REAL DEFAULT 12.0
+            preferred_reminder_hour REAL DEFAULT NULL
         )''')
 
         c.execute('''CREATE TABLE IF NOT EXISTS vote_logs (
@@ -61,7 +60,7 @@ def init_vote_db():
 
         # migrations – safe to run every time
         for col, default in [("role_expires_at","DATETIME"),
-                             ("reminder_interval_hours","REAL DEFAULT 12.0")]:
+                             ("preferred_reminder_hour","REAL DEFAULT NULL")]:
             try:
                 c.execute(f'ALTER TABLE vote_reminders ADD COLUMN {col} {default}')
                 debug_log(f"Migrated: added {col}", "SUCCESS")
@@ -92,74 +91,92 @@ def db_query(query, params=(), fetch=False):
         return None
 
 # ---------------------------------------------------------------------------
-# Reminder-interval helper  ── the core of the new adaptive logic
+# Reminder-interval helper  ── adaptive logic based on user behavior
 # ---------------------------------------------------------------------------
-def compute_new_reminder_interval(last_vote_dt, prev_reminder_dt, prev_interval_hours):
+def compute_next_reminder(current_vote_time, last_vote_time, scheduled_reminder_time, preferred_hour):
     """
-    Rules (all times in UTC):
-
-    1. Normal vote (user voted right around when the reminder fired or
-       before it was due)  →  keep the current interval unchanged.
-
-    2. User skipped one full cycle then voted EARLY the next day
-       (i.e. they voted *before* the next reminder would have fired).
-       Let x = how many hours early they voted compared to that reminder.
-       OLD behaviour  → next reminder = vote_time + (x + 12)   ← drifts badly
-       NEW behaviour  → we snap the interval down to
-                        (time_since_last_vote)  so future reminders match
-                        the user's *actual* cadence.
-
-    3. User voted LATE after the reminder was already sent.
-       Let y = hours after the reminder the user actually voted.
-       OLD behaviour  → next reminder = vote_time + (12 - y)   ← can frustrate
-       NEW behaviour  → next reminder = vote_time + 12          ← always a full
-                        cycle from when they actually voted, so no short waits.
-
-    We return (new_interval_hours, next_reminder_dt).
+    Adaptive reminder scheduling based on actual user voting behavior.
+    
+    Args:
+        current_vote_time: When the user just voted (datetime, UTC)
+        last_vote_time: When they voted previously (datetime, UTC, can be None)
+        scheduled_reminder_time: When the reminder was scheduled to fire (datetime, UTC, can be None)
+        preferred_hour: The user's learned preferred voting hour (float, 0-24, can be None)
+    
+    Returns:
+        (next_reminder_datetime, new_preferred_hour)
+    
+    Logic:
+    1. If this is first vote or no reminder was scheduled: use base 12 hours
+    2. If user voted BEFORE the scheduled reminder (early):
+       - Learn their preferred timing
+       - Schedule next reminder to match their natural cadence
+    3. If user voted AFTER the scheduled reminder (late):
+       - Still give them a full 12 hours from when they actually voted
+       - Don't punish them with a shorter window
     """
-    now = datetime.now(timezone.utc)
-
-    # ── guard: if we have no previous reminder we just use the base interval
-    if prev_reminder_dt is None:
-        return BASE_REMINDER_HOURS, now + timedelta(hours=BASE_REMINDER_HOURS)
-
-    hours_since_vote = (now - last_vote_dt).total_seconds() / 3600   # should be ~0
-
-    # time between the PREVIOUS reminder and when the user actually voted
-    vote_vs_reminder = (last_vote_dt - prev_reminder_dt).total_seconds() / 3600
-
-    # ── Case 3: voted LATE (after reminder fired)  →  y = vote_vs_reminder
-    if vote_vs_reminder > 0:
-        # Always give a full base cycle from the actual vote moment.
-        new_interval = BASE_REMINDER_HOURS
-        next_rem     = last_vote_dt + timedelta(hours=new_interval)
-        debug_log(f"Reminder: late vote detected (y={vote_vs_reminder:.2f}h). "
-                  f"Next reminder in {new_interval}h from vote time.", "DEBUG")
-        return new_interval, next_rem
-
-    # ── Case 2: voted EARLY (before reminder fired)  →  x = -vote_vs_reminder
-    if vote_vs_reminder < 0:
-        x = -vote_vs_reminder                          # positive hours-early
-        # Snap the interval to the gap the user *actually* used.
-        # gap = time from their *previous* vote to this vote.
-        # We approximate that with prev_interval + (vote_vs_reminder)
-        #      = prev_interval - x
-        actual_gap = prev_interval_hours - x
-        # Floor it so we never set something absurdly short (min 6 h)
-        new_interval = max(actual_gap, 6.0)
-        next_rem     = last_vote_dt + timedelta(hours=new_interval)
-        debug_log(f"Reminder: early vote detected (x={x:.2f}h). "
-                  f"Interval adjusted to {new_interval:.2f}h.", "DEBUG")
-        return new_interval, next_rem
-
-    # ── Case 1: voted right on time  →  no change
-    new_interval = prev_interval_hours
-    next_rem     = last_vote_dt + timedelta(hours=new_interval)
-    debug_log(f"Reminder: on-time vote. Keeping interval at {new_interval:.2f}h.", "DEBUG")
-    return new_interval, next_rem
+    
+    now = current_vote_time
+    
+    # Case 1: First vote or no previous data
+    if not last_vote_time or not scheduled_reminder_time:
+        debug_log("First vote or no history – using base 12h interval", "DEBUG")
+        return now + timedelta(hours=BASE_REMINDER_HOURS), None
+    
+    # Calculate actual voting interval (how long since their last vote)
+    actual_interval_hours = (now - last_vote_time).total_seconds() / 3600
+    
+    # Calculate how early/late they were relative to the scheduled reminder
+    delta_vs_reminder = (now - scheduled_reminder_time).total_seconds() / 3600
+    
+    debug_log(f"Vote analysis: actual_interval={actual_interval_hours:.2f}h, "
+              f"delta_vs_reminder={delta_vs_reminder:.2f}h", "DEBUG")
+    
+    # Case 2: User voted EARLY (before the reminder)
+    if delta_vs_reminder < -0.5:  # More than 30min early
+        hours_early = -delta_vs_reminder
+        debug_log(f"User voted {hours_early:.2f}h EARLY", "INFO")
+        
+        # Learn their preferred hour of day
+        vote_hour = now.hour + (now.minute / 60.0)
+        
+        # If they consistently vote early, adjust to their natural schedule
+        # Use their actual voting interval as the new cadence
+        if actual_interval_hours >= 10 and actual_interval_hours <= 14:
+            # They're voting roughly every 12 hours but earlier than reminder
+            # Schedule next reminder to match their actual pattern
+            next_reminder = now + timedelta(hours=actual_interval_hours)
+            debug_log(f"Adapting to user's natural {actual_interval_hours:.2f}h cadence", "INFO")
+            return next_reminder, vote_hour
+        else:
+            # Unusual interval, just use standard 12h from now
+            return now + timedelta(hours=BASE_REMINDER_HOURS), vote_hour
+    
+    # Case 3: User voted LATE (after the reminder)
+    elif delta_vs_reminder > 0.5:  # More than 30min late
+        hours_late = delta_vs_reminder
+        debug_log(f"User voted {hours_late:.2f}h LATE", "INFO")
+        
+        # Always give them a full 12 hours from when they actually voted
+        # Don't punish them with a shorter interval
+        next_reminder = now + timedelta(hours=BASE_REMINDER_HOURS)
+        vote_hour = now.hour + (now.minute / 60.0)
+        
+        debug_log(f"Giving full 12h from actual vote time", "INFO")
+        return next_reminder, vote_hour
+    
+    # Case 4: User voted ON TIME (within 30min of reminder)
+    else:
+        debug_log(f"User voted ON TIME (within 30min of reminder)", "INFO")
+        
+        # Keep the established pattern
+        next_reminder = now + timedelta(hours=BASE_REMINDER_HOURS)
+        vote_hour = now.hour + (now.minute / 60.0)
+        
+        return next_reminder, vote_hour
 
 # ---------------------------------------------------------------------------
-# Role helpers  (unchanged logic, untouched)
+# Role helpers  (unchanged logic)
 # ---------------------------------------------------------------------------
 async def assign_voter_role(bot, user_id, hours=12):
     debug_log(f"Attempting to assign voter role to {user_id} for {hours}h", "INFO")
@@ -278,7 +295,7 @@ async def check_and_assign_voter_role_on_join(bot, member):
         debug_log(f"check_and_assign_voter_role_on_join error: {e}", "ERROR"); tb.print_exc()
 
 # ---------------------------------------------------------------------------
-# Webhook handler  (unchanged logic, untouched)
+# Webhook handler  (unchanged logic)
 # ---------------------------------------------------------------------------
 async def handle_vote(request):
     debug_log("=" * 60, "INFO")
@@ -339,11 +356,12 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
         # ── pull existing row ──────────────────────────────────────────────
         total_votes       = 0
         reminder_enabled  = False
-        prev_reminder_dt  = None
-        prev_interval     = BASE_REMINDER_HOURS
+        last_vote_dt      = None
+        scheduled_reminder_dt = None
+        preferred_hour    = None
 
         existing = db_query(
-            "SELECT total_votes, enabled, next_reminder, reminder_interval_hours "
+            "SELECT total_votes, enabled, last_vote, next_reminder, preferred_reminder_hour "
             "FROM vote_reminders WHERE user_id = ?",
             (str(user_id),), fetch=True)
 
@@ -352,42 +370,51 @@ async def process_vote(bot, user_id, is_weekend=False, vote_type='upvote'):
             total_votes      = (row[0] or 0) + 1
             reminder_enabled = bool(row[1]) if row[1] is not None else False
 
-            if row[2]:                                  # next_reminder string
-                prev_reminder_dt = datetime.fromisoformat(row[2])
-                if prev_reminder_dt.tzinfo is None:
-                    prev_reminder_dt = prev_reminder_dt.replace(tzinfo=timezone.utc)
+            # Parse last_vote
+            if row[2]:
+                last_vote_dt = datetime.fromisoformat(row[2])
+                if last_vote_dt.tzinfo is None:
+                    last_vote_dt = last_vote_dt.replace(tzinfo=timezone.utc)
 
-            prev_interval = float(row[3]) if row[3] else BASE_REMINDER_HOURS
+            # Parse scheduled reminder
+            if row[3]:
+                scheduled_reminder_dt = datetime.fromisoformat(row[3])
+                if scheduled_reminder_dt.tzinfo is None:
+                    scheduled_reminder_dt = scheduled_reminder_dt.replace(tzinfo=timezone.utc)
+
+            preferred_hour = float(row[4]) if row[4] else None
+
         # ── end existing-row pull ──────────────────────────────────────────
 
         expires_at = now + timedelta(hours=12)
 
         if not is_test:
             # ── adaptive reminder calculation ──────────────────────────────
-            new_interval, next_rem = compute_new_reminder_interval(
-                now,                  # last_vote_dt  (just happened)
-                prev_reminder_dt,     # when the reminder was *scheduled*
-                prev_interval         # previous interval
+            next_rem, new_preferred_hour = compute_next_reminder(
+                now,                      # current vote time
+                last_vote_dt,             # their previous vote
+                scheduled_reminder_dt,    # when reminder was scheduled
+                preferred_hour            # their learned preference
             )
 
             if existing and len(existing) > 0:
                 db_query(
                     "UPDATE vote_reminders SET last_vote = ?, total_votes = ?, "
-                    "role_expires_at = ?, next_reminder = ?, reminder_interval_hours = ? "
+                    "role_expires_at = ?, next_reminder = ?, preferred_reminder_hour = ? "
                     "WHERE user_id = ?",
                     (now.isoformat(), total_votes, expires_at.isoformat(),
-                     next_rem.isoformat(), new_interval, str(user_id)))
+                     next_rem.isoformat(), new_preferred_hour, str(user_id)))
             else:
                 total_votes = 1
                 db_query(
                     "INSERT INTO vote_reminders "
                     "(user_id, last_vote, total_votes, enabled, role_expires_at, "
-                    " next_reminder, reminder_interval_hours) "
+                    " next_reminder, preferred_reminder_hour) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (str(user_id), now.isoformat(), total_votes, 0,
                      expires_at.isoformat(),
                      (now + timedelta(hours=BASE_REMINDER_HOURS)).isoformat(),
-                     BASE_REMINDER_HOURS))
+                     None))
                 reminder_enabled = False
 
         # ── fetch user ─────────────────────────────────────────────────────
@@ -540,9 +567,9 @@ class VoteReminderView(discord.ui.View):
             return
         try:
             next_rem = datetime.now(timezone.utc) + timedelta(hours=BASE_REMINDER_HOURS)
-            db_query("UPDATE vote_reminders SET enabled = 1, next_reminder = ?, "
-                     "reminder_interval_hours = ? WHERE user_id = ?",
-                     (next_rem.isoformat(), BASE_REMINDER_HOURS, str(self.user_id)))
+            db_query("UPDATE vote_reminders SET enabled = 1, next_reminder = ? "
+                     "WHERE user_id = ?",
+                     (next_rem.isoformat(), str(self.user_id)))
 
             button.disabled = True
             button.label    = "Reminders on ✅"
@@ -581,7 +608,7 @@ class VoteReminderDisableView(discord.ui.View):
             await interaction.response.send_message("Something went wrong – try again in a sec.", ephemeral=True)
 
 # ---------------------------------------------------------------------------
-# Reminder loop  ── uses the stored interval; never drifts
+# Reminder loop  ── fires reminders based on computed schedule
 # ---------------------------------------------------------------------------
 async def vote_reminder_loop(bot):
     await bot.wait_until_ready()
@@ -592,22 +619,16 @@ async def vote_reminder_loop(bot):
             now = datetime.now(timezone.utc)
 
             reminders = db_query(
-                "SELECT user_id, total_votes FROM vote_reminders "
+                "SELECT user_id, total_votes, next_reminder FROM vote_reminders "
                 "WHERE enabled = 1 AND next_reminder IS NOT NULL AND next_reminder <= ?",
                 (now.isoformat(),), fetch=True)
 
             if reminders:
                 debug_log(f"Sending {len(reminders)} reminder(s)", "INFO")
 
-            for user_id, total_votes in reminders:
+            for user_id, total_votes, next_reminder_str in reminders:
                 try:
                     user = await bot.fetch_user(int(user_id))
-
-                    # pull the current interval so we schedule the *next* one correctly
-                    row = db_query(
-                        "SELECT reminder_interval_hours FROM vote_reminders WHERE user_id = ?",
-                        (str(user_id),), fetch=True)
-                    current_interval = float(row[0][0]) if row and row[0][0] else BASE_REMINDER_HOURS
 
                     embed = discord.Embed(
                         title="Hey, time to vote again!",
@@ -635,10 +656,10 @@ async def vote_reminder_loop(bot):
 
                     await user.send(embed=embed, view=view)
 
-                    # ── schedule next reminder using the stored interval ────
-                    next_reminder = now + timedelta(hours=current_interval)
-                    db_query("UPDATE vote_reminders SET next_reminder = ? WHERE user_id = ?",
-                             (next_reminder.isoformat(), str(user_id)))
+                    # ── The next reminder will be set when they actually vote ──
+                    # We don't pre-calculate it here because we want to adapt to
+                    # their actual voting behavior
+                    debug_log(f"Reminder sent to {user_id}, next will be set on vote", "SUCCESS")
 
                 except discord.Forbidden:
                     db_query("UPDATE vote_reminders SET enabled = 0 WHERE user_id = ?", (str(user_id),))
