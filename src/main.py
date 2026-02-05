@@ -312,6 +312,72 @@ def export_db_to_json():
     conn.close()
     return data
 
+def is_bot_admin(user_id: int) -> bool:
+    """Check if user is a bot admin"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM bot_admins WHERE user_id = ?", (str(user_id),))
+    result = c.fetchone() is not None
+    conn.close()
+    return result or user_id == OWNER_ID
+
+def get_next_suggestion_id():
+    """Get the next suggestion ID"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT MAX(suggestion_id) FROM suggestions")
+    result = c.fetchone()[0]
+    conn.close()
+    return (result or 0) + 1
+
+async def log_suggestion_action(bot, suggestion_id, action, admin_name, reason=None):
+    """Log suggestion actions to the log channel"""
+    try:
+        log_channel = bot.get_channel(SUGGESTION_LOG_CHANNEL)
+        if not log_channel:
+            return
+        
+        # Get suggestion details
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT * FROM suggestions WHERE suggestion_id = ?", (suggestion_id,))
+        result = c.fetchone()
+        conn.close()
+        
+        if not result:
+            return
+        
+        _, user_id, user_name, guild_id, guild_name, _, title, suggestion, status, thread_id, timestamp = result
+        
+        color_map = {
+            'accepted': discord.Color.green(),
+            'considered': discord.Color.greyple(),
+            'denied': discord.Color.red()
+        }
+        
+        embed = discord.Embed(
+            title=f"📋 Suggestion #{suggestion_id} - {action.title()}",
+            description=f"**Title:** {title}\n**Suggestion:** {suggestion[:100]}{'...' if len(suggestion) > 100 else ''}",
+            color=color_map.get(action.lower(), discord.Color.blue()),
+            timestamp=datetime.datetime.now(datetime.timezone.utc)
+        )
+        
+        embed.add_field(name="Suggested By", value=f"{user_name} (`{user_id}`)", inline=True)
+        embed.add_field(name="From Server", value=f"{guild_name} (`{guild_id}`)", inline=True)
+        embed.add_field(name="Actioned By", value=admin_name, inline=True)
+        
+        if reason:
+            embed.add_field(name="Reason", value=reason, inline=False)
+        
+        if thread_id:
+            embed.add_field(name="Thread", value=f"<#{thread_id}>", inline=False)
+        
+        await log_channel.send(embed=embed)
+    except Exception as e:
+        print(f"Error logging suggestion action: {e}")
+
+
+
 # --- UTILITY FUNCTIONS ---
 async def log_to_channel(bot, channel_key, embed):
     """Send log embed to specified channel"""
