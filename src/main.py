@@ -471,7 +471,7 @@ class SuggestionActionModal(discord.ui.Modal):
             
             dm_embed = discord.Embed(
                 title=f"{status_emoji.get(self.action, '📋')} Your Suggestion has been {self.action.title()}",
-                description=f"**Suggestion ID:** #{self.suggestion_id}\n**Title:** {self.original_embed.title.replace('## New suggestion #' + str(self.suggestion_id), '').strip()}",
+                description=f"**Suggestion ID:** #{self.suggestion_id}\n**Title:** {self.original_embed.title.replace('New suggestion #' + str(self.suggestion_id), '').strip()}",
                 color=color_map.get(self.action, discord.Color.blue()),
                 timestamp=datetime.datetime.now(datetime.timezone.utc)
             )
@@ -2516,7 +2516,7 @@ async def suggest(ctx, suggestion_title: str, suggestion: str):
         
         # Create embed
         embed = discord.Embed(
-            title=f"## New suggestion #{suggestion_id}",
+            title=f"New suggestion #{suggestion_id}",
             description=suggestion,
             color=discord.Color.blue(),
             timestamp=datetime.datetime.now(datetime.timezone.utc)
