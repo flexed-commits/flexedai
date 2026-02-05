@@ -174,6 +174,20 @@ def init_db():
         thread_id TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS chess_games (
+        game_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player1_id TEXT,
+        player2_id TEXT,
+        current_turn TEXT,
+        board_fen TEXT,
+        last_move TEXT,
+        message_id TEXT,
+        channel_id TEXT,
+        status TEXT DEFAULT 'active',
+        winner_id TEXT,
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        ended_at DATETIME
+    )''')
     conn.commit()
     conn.close()
 
