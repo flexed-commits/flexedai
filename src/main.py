@@ -33,6 +33,8 @@ LOG_CHANNELS = {
     'admin_logs': int(os.getenv('LOG_CHANNEL_ADMIN_LOGS')),
     'reports': int(os.getenv('LOG_CHANNEL_REPORTS'))
 }
+SUGGESTION_FORUM_CHANNEL = int(os.getenv('SUGGESTION_FORUM_CHANNEL'))
+SUGGESTION_LOG_CHANNEL = int(os.getenv('SUGGESTION_LOG_CHANNEL'))
 # Discord message limits
 MAX_MESSAGE_LENGTH = 2000
 MAX_INPUT_TOKENS = 8000
