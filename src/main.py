@@ -376,6 +376,180 @@ async def log_suggestion_action(bot, suggestion_id, action, admin_name, reason=N
     except Exception as e:
         print(f"Error logging suggestion action: {e}")
 
+class SuggestionActionModal(discord.ui.Modal):
+    def __init__(self, action: str, suggestion_id: int, thread, original_embed, user_id: str):
+        self.action = action
+        self.suggestion_id = suggestion_id
+        self.thread = thread
+        self.original_embed = original_embed
+        self.user_id = user_id
+        
+        title_map = {
+            'accepted': 'Accept Suggestion',
+            'considered': 'Consider Suggestion',
+            'denied': 'Deny Suggestion'
+        }
+        super().__init__(title=title_map.get(action, 'Action'))
+        
+        # Reason is optional for accepted, required for others
+        required = action != 'accepted'
+        self.reason_input = discord.ui.TextInput(
+            label='Reason',
+            placeholder='Provide a reason...' if required else 'Provide a reason (optional)...',
+            required=required,
+            style=discord.TextStyle.paragraph,
+            max_length=1000
+        )
+        self.add_item(self.reason_input)
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        reason = self.reason_input.value.strip() if self.reason_input.value else None
+        
+        # Update database
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("UPDATE suggestions SET status = ? WHERE suggestion_id = ?", 
+                 (self.action, self.suggestion_id))
+        conn.commit()
+        conn.close()
+        
+        # Update embed
+        color_map = {
+            'accepted': discord.Color.green(),
+            'considered': discord.Color.greyple(),
+            'denied': discord.Color.red()
+        }
+        
+        status_emoji = {
+            'accepted': '✅',
+            'considered': '⏳',
+            'denied': '❌'
+        }
+        
+        new_embed = discord.Embed(
+            title=self.original_embed.title,
+            description=self.original_embed.description,
+            color=color_map.get(self.action, discord.Color.blue()),
+            timestamp=self.original_embed.timestamp
+        )
+        
+        if self.original_embed.author:
+            new_embed.set_author(
+                name=self.original_embed.author.name,
+                icon_url=self.original_embed.author.icon_url
+            )
+        
+        if self.original_embed.thumbnail:
+            new_embed.set_thumbnail(url=self.original_embed.thumbnail.url)
+        
+        if self.original_embed.footer:
+            new_embed.set_footer(text=self.original_embed.footer.text)
+        
+        new_embed.add_field(
+            name=f"Status: {status_emoji.get(self.action, '📋')} {self.action.title()}",
+            value=f"Actioned by {interaction.user.mention}",
+            inline=False
+        )
+        
+        if reason:
+            new_embed.add_field(name="Reason", value=reason, inline=False)
+        
+        # Edit thread starter message
+        starter_message = None
+        async for message in self.thread.history(limit=1, oldest_first=True):
+            starter_message = message
+            break
+        
+        if starter_message:
+            await starter_message.edit(embed=new_embed, view=None)
+        
+        # DM the user
+        try:
+            user = await interaction.client.fetch_user(int(self.user_id))
+            
+            dm_embed = discord.Embed(
+                title=f"{status_emoji.get(self.action, '📋')} Your Suggestion has been {self.action.title()}",
+                description=f"**Suggestion ID:** #{self.suggestion_id}\n**Title:** {self.original_embed.title.replace('## New suggestion #' + str(self.suggestion_id), '').strip()}",
+                color=color_map.get(self.action, discord.Color.blue()),
+                timestamp=datetime.datetime.now(datetime.timezone.utc)
+            )
+            
+            if reason:
+                dm_embed.add_field(name="Reason", value=reason, inline=False)
+            
+            if self.action == 'accepted':
+                dm_embed.add_field(
+                    name="What's Next?",
+                    value="Your suggestion has been accepted and will be implemented soon!",
+                    inline=False
+                )
+            elif self.action == 'considered':
+                dm_embed.add_field(
+                    name="What's Next?",
+                    value="Your suggestion is being considered and may be added in the future.",
+                    inline=False
+                )
+            elif self.action == 'denied':
+                dm_embed.add_field(
+                    name="What's Next?",
+                    value="Your suggestion has been reviewed but won't be implemented at this time.",
+                    inline=False
+                )
+            
+            dm_embed.set_footer(text=f"Suggestion Thread: {self.thread.name}")
+            
+            await user.send(embed=dm_embed)
+        except Exception as e:
+            print(f"Could not DM user: {e}")
+        
+        # Log the action
+        await log_suggestion_action(
+            interaction.client,
+            self.suggestion_id,
+            self.action,
+            interaction.user.name,
+            reason
+        )
+        
+        await interaction.response.send_message(
+            f"✅ Suggestion #{self.suggestion_id} marked as **{self.action}**!",
+            ephemeral=True
+        )
+
+class SuggestionButtonView(discord.ui.View):
+    def __init__(self, suggestion_id: int, user_id: str, original_embed):
+        super().__init__(timeout=None)
+        self.suggestion_id = suggestion_id
+        self.user_id = user_id
+        self.original_embed = original_embed
+    
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, custom_id="accept_suggestion")
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_bot_admin(interaction.user.id):
+            await interaction.response.send_message("❌ Only bot admins can use this button!", ephemeral=True)
+            return
+        
+        modal = SuggestionActionModal('accepted', self.suggestion_id, interaction.channel, self.original_embed, self.user_id)
+        await interaction.response.send_modal(modal)
+    
+    @discord.ui.button(label="Consider", style=discord.ButtonStyle.secondary, custom_id="consider_suggestion")
+    async def consider_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_bot_admin(interaction.user.id):
+            await interaction.response.send_message("❌ Only bot admins can use this button!", ephemeral=True)
+            return
+        
+        modal = SuggestionActionModal('considered', self.suggestion_id, interaction.channel, self.original_embed, self.user_id)
+        await interaction.response.send_modal(modal)
+    
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, custom_id="deny_suggestion")
+    async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_bot_admin(interaction.user.id):
+            await interaction.response.send_message("❌ Only bot admins can use this button!", ephemeral=True)
+            return
+        
+        modal = SuggestionActionModal('denied', self.suggestion_id, interaction.channel, self.original_embed, self.user_id)
+        await interaction.response.send_modal(modal)
+
 
 
 # --- UTILITY FUNCTIONS ---
@@ -2308,6 +2482,104 @@ class ReportActionView(discord.ui.View):
             ephemeral=True
         )
 
+
+@bot.hybrid_command(name="suggest", description="Submit a suggestion for the bot")
+async def suggest(ctx, suggestion_title: str, suggestion: str):
+    """Submit a suggestion for the bot"""
+    # Check if user is blacklisted
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT blacklisted FROM users WHERE user_id = ?", (str(ctx.author.id),))
+    result = c.fetchone()
+    conn.close()
+    
+    if result and result[0] == 1:
+        await ctx.send("❌ You are blacklisted and cannot submit suggestions.", ephemeral=True)
+        return
+    
+    # Get guild info
+    guild_name = ctx.guild.name if ctx.guild else "Direct Message"
+    guild_icon = ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None
+    guild_id = str(ctx.guild.id) if ctx.guild else "DM"
+    
+    # Get next suggestion ID
+    suggestion_id = get_next_suggestion_id()
+    
+    # Create forum thread
+    try:
+        forum_channel = bot.get_channel(SUGGESTION_FORUM_CHANNEL)
+        if not forum_channel:
+            await ctx.send("❌ Suggestion forum channel not found. Please contact a bot admin.", ephemeral=True)
+            return
+        
+        # Create embed
+        embed = discord.Embed(
+            title=f"## New suggestion #{suggestion_id}",
+            description=suggestion,
+            color=discord.Color.blue(),
+            timestamp=datetime.datetime.now(datetime.timezone.utc)
+        )
+        
+        embed.set_author(
+            name=guild_name,
+            icon_url=guild_icon
+        )
+        
+        embed.set_thumbnail(url=ctx.author.display_avatar.url)
+        
+        embed.set_footer(text=f"Suggested by {ctx.author.name} | {ctx.author.id}")
+        
+        # Create the thread
+        thread = await forum_channel.create_thread(
+            name=suggestion_title[:100],  # Discord limit
+            content=None,
+            embed=embed,
+            view=SuggestionButtonView(suggestion_id, str(ctx.author.id), embed)
+        )
+        
+        # Store in database
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''INSERT INTO suggestions 
+                     (user_id, user_name, guild_id, guild_name, guild_icon, title, suggestion, thread_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                 (str(ctx.author.id), ctx.author.name, guild_id, guild_name, guild_icon, 
+                  suggestion_title, suggestion, str(thread.thread.id)))
+        conn.commit()
+        conn.close()
+        
+        # Send confirmation
+        confirm_embed = discord.Embed(
+            title="✅ Suggestion Submitted",
+            description=f"Your suggestion has been submitted successfully!\n\n**Suggestion ID:** #{suggestion_id}\n**Thread:** {thread.thread.mention}",
+            color=discord.Color.green()
+        )
+        
+        await ctx.send(embed=confirm_embed, ephemeral=True)
+        
+        # Log to suggestion log channel
+        try:
+            log_channel = bot.get_channel(SUGGESTION_LOG_CHANNEL)
+            if log_channel:
+                log_embed = discord.Embed(
+                    title=f"📋 New Suggestion #{suggestion_id}",
+                    description=f"**Title:** {suggestion_title}\n**Suggestion:** {suggestion[:200]}{'...' if len(suggestion) > 200 else ''}",
+                    color=discord.Color.blue(),
+                    timestamp=datetime.datetime.now(datetime.timezone.utc)
+                )
+                
+                log_embed.add_field(name="Submitted By", value=f"{ctx.author.name} (`{ctx.author.id}`)", inline=True)
+                log_embed.add_field(name="From Server", value=f"{guild_name} (`{guild_id}`)", inline=True)
+                log_embed.add_field(name="Thread", value=thread.thread.mention, inline=False)
+                
+                await log_channel.send(embed=log_embed)
+        except Exception as e:
+            print(f"Error logging suggestion: {e}")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Error creating suggestion: {e}", ephemeral=True)
+        import traceback
+        traceback.print_exc()
 @bot.hybrid_command(name="votereminder", description="Manage your vote reminders")
 async def vote_reminder_settings(ctx, action: str = None):
     """Manage vote reminder settings"""
