@@ -10,6 +10,9 @@ import random
 from patreon import PatreonPromoter
 from topgg import init_vote_db, start_webhook_server, vote_reminder_loop, role_expiration_loop, check_and_assign_voter_role_on_join
 import hashlib
+import chess
+import aiohttp
+from io import BytesIO
 from dotenv import load_dotenv
 load_dotenv()
 
