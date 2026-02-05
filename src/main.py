@@ -634,6 +634,271 @@ def end_game(game_id: int, winner_id: str = None):
     conn.commit()
     conn.close()
 
+class ChessMoveModal(discord.ui.Modal):
+    def __init__(self, game_id: int, board: chess.Board, player_id: str, message, is_vs_ai: bool = False):
+        super().__init__(title="Make a Chess Move")
+        self.game_id = game_id
+        self.board = board
+        self.player_id = player_id
+        self.message = message
+        self.is_vs_ai = is_vs_ai
+        
+        self.move_input = discord.ui.TextInput(
+            label='Move',
+            placeholder='e.g., e2e4, Nf3, O-O',
+            required=True,
+            max_length=10,
+            style=discord.TextStyle.short
+        )
+        self.add_item(self.move_input)
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        move_str = self.move_input.value.strip()
+        
+        try:
+            # Parse and make the move
+            move = self.board.parse_san(move_str)
+            self.board.push(move)
+            
+            # Store the last move
+            last_move = move
+            
+            # Check game status
+            game_over = False
+            result_text = ""
+            winner_id = None
+            
+            if self.board.is_checkmate():
+                game_over = True
+                winner_id = self.player_id
+                result_text = f"🏆 Checkmate! <@{self.player_id}> wins!"
+            elif self.board.is_stalemate():
+                game_over = True
+                result_text = "🤝 Stalemate! The game is a draw."
+            elif self.board.is_insufficient_material():
+                game_over = True
+                result_text = "🤝 Draw by insufficient material."
+            elif self.board.is_fifty_moves():
+                game_over = True
+                result_text = "🤝 Draw by fifty-move rule."
+            elif self.board.is_repetition():
+                game_over = True
+                result_text = "🤝 Draw by threefold repetition."
+            
+            # If playing against AI and game is not over, make AI move
+            ai_move_text = ""
+            if self.is_vs_ai and not game_over:
+                # Simple AI: random legal move (you can integrate real Stockfish here)
+                import random
+                ai_move = random.choice(list(self.board.legal_moves))
+                self.board.push(ai_move)
+                last_move = ai_move  # Update last move to AI's move
+                ai_move_text = f"\n🤖 Stockfish played: `{ai_move.uci()}`"
+                
+                # Check again after AI move
+                if self.board.is_checkmate():
+                    game_over = True
+                    result_text = "🏆 Checkmate! Stockfish wins!"
+                    winner_id = "stockfish"
+                elif self.board.is_stalemate():
+                    game_over = True
+                    result_text = "🤝 Stalemate! The game is a draw."
+            
+            # Update database
+            if game_over:
+                end_game(self.game_id, winner_id)
+            else:
+                # Switch turn
+                if self.is_vs_ai:
+                    current_turn = self.player_id
+                else:
+                    # Get opponent ID from database
+                    conn = sqlite3.connect(DB_FILE)
+                    c = conn.cursor()
+                    c.execute("SELECT player1_id, player2_id FROM chess_games WHERE game_id = ?", (self.game_id,))
+                    p1, p2 = c.fetchone()
+                    conn.close()
+                    current_turn = p2 if p1 == self.player_id else p1
+                
+                update_game_board(self.game_id, self.board.fen(), current_turn, last_move.uci())
+            
+            # Update board image (with last move highlighted)
+            board_image = await board_to_image(self.board, last_move)
+            file = discord.File(board_image, filename="chess_board.png")
+            
+            # Create updated embed
+            embed = discord.Embed(
+                title="♟️ Chess Game",
+                description=f"**Move:** `{move_str}`{ai_move_text}\n\n" + 
+                           (result_text if game_over else f"**Current turn:** <@{current_turn}>"),
+                color=discord.Color.green() if game_over else discord.Color.blue()
+            )
+            
+            embed.set_image(url="attachment://chess_board.png")
+            
+            if self.board.is_check() and not game_over:
+                embed.add_field(name="⚠️ Check!", value="The king is in check!", inline=False)
+            
+            # Update view
+            if game_over:
+                await self.message.edit(embed=embed, view=None, attachments=[file])
+            else:
+                view = ChessGameView(self.game_id, self.board, current_turn, self.is_vs_ai)
+                await self.message.edit(embed=embed, view=view, attachments=[file])
+            
+            await interaction.response.send_message(f"✅ Move played: `{move_str}`", ephemeral=True)
+            
+        except ValueError as e:
+            await interaction.response.send_message(f"❌ `{move_str}` is an invalid move. Please use standard chess notation (e.g., e4, Nf3, O-O).", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
+            import traceback
+            traceback.print_exc()
+
+# --- Add Button View Classes ---
+
+class ChessGameView(discord.ui.View):
+    def __init__(self, game_id: int, board: chess.Board, current_player_id: str, is_vs_ai: bool = False):
+        super().__init__(timeout=None)
+        self.game_id = game_id
+        self.board = board
+        self.current_player_id = current_player_id
+        self.is_vs_ai = is_vs_ai
+    
+    @discord.ui.button(label="Move", style=discord.ButtonStyle.primary, emoji="♟️")
+    async def move_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Check if it's the player's turn
+        if str(interaction.user.id) != self.current_player_id:
+            await interaction.response.send_message("❌ It's not your turn!", ephemeral=True)
+            return
+        
+        modal = ChessMoveModal(self.game_id, self.board, str(interaction.user.id), interaction.message, self.is_vs_ai)
+        await interaction.response.send_modal(modal)
+    
+    @discord.ui.button(label="Resign", style=discord.ButtonStyle.danger, emoji="🏳️")
+    async def resign_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Check if user is a player in the game
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT player1_id, player2_id FROM chess_games WHERE game_id = ?", (self.game_id,))
+        result = c.fetchone()
+        conn.close()
+        
+        if not result:
+            await interaction.response.send_message("❌ Game not found!", ephemeral=True)
+            return
+        
+        player1_id, player2_id = result
+        
+        if str(interaction.user.id) not in [player1_id, player2_id]:
+            await interaction.response.send_message("❌ You are not a player in this game!", ephemeral=True)
+            return
+        
+        # Determine winner
+        winner_id = player2_id if str(interaction.user.id) == player1_id else player1_id
+        
+        # End game
+        end_game(self.game_id, winner_id if not self.is_vs_ai else "stockfish")
+        
+        # Update embed (no last move for resignation)
+        board_image = await board_to_image(self.board)
+        file = discord.File(board_image, filename="chess_board.png")
+        
+        embed = discord.Embed(
+            title="♟️ Chess Game - Game Over",
+            description=f"<@{interaction.user.id}> resigned!\n\n🏆 Winner: {'Stockfish' if self.is_vs_ai else f'<@{winner_id}>'}",
+            color=discord.Color.red()
+        )
+        
+        embed.set_image(url="attachment://chess_board.png")
+        
+        await interaction.message.edit(embed=embed, view=None, attachments=[file])
+        await interaction.response.send_message("You have resigned from the game.", ephemeral=True)
+
+class ChessInviteView(discord.ui.View):
+    def __init__(self, challenger_id: str, opponent_id: str):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.challenger_id = challenger_id
+        self.opponent_id = opponent_id
+        self.value = None
+    
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, emoji="✅")
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.opponent_id:
+            await interaction.response.send_message("❌ This invite is not for you!", ephemeral=True)
+            return
+        
+        self.value = True
+        self.stop()
+        
+        # Create the game
+        board = chess.Board()
+        
+        # Store in database
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''INSERT INTO chess_games 
+                     (player1_id, player2_id, current_turn, board_fen, channel_id)
+                     VALUES (?, ?, ?, ?, ?)''',
+                 (self.challenger_id, self.opponent_id, self.challenger_id, board.fen(), str(interaction.channel.id)))
+        game_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        
+        # Create board image (no last move for starting position)
+        board_image = await board_to_image(board)
+        file = discord.File(board_image, filename="chess_board.png")
+        
+        # Create game embed
+        game_embed = discord.Embed(
+            title="♟️ Chess Game Started!",
+            description=f"**White:** <@{self.challenger_id}>\n**Black:** <@{self.opponent_id}>\n\n**Current turn:** <@{self.challenger_id}>",
+            color=discord.Color.blue()
+        )
+        
+        game_embed.set_image(url="attachment://chess_board.png")
+        game_embed.set_footer(text=f"Game ID: {game_id}")
+        
+        # Create game view
+        view = ChessGameView(game_id, board, self.challenger_id, False)
+        
+        # Edit original message
+        accept_embed = discord.Embed(
+            title="✅ Chess Invite Accepted",
+            description=f"<@{self.opponent_id}> accepted the chess match!",
+            color=discord.Color.green()
+        )
+        
+        await interaction.message.edit(embed=accept_embed, view=None)
+        
+        # Send game message
+        await interaction.channel.send(
+            content=f"<@{self.challenger_id}> vs <@{self.opponent_id}>",
+            embed=game_embed,
+            view=view,
+            file=file
+        )
+        
+        await interaction.response.send_message("Game started! Good luck! ♟️", ephemeral=True)
+    
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger, emoji="❌")
+    async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.opponent_id:
+            await interaction.response.send_message("❌ This invite is not for you!", ephemeral=True)
+            return
+        
+        self.value = False
+        self.stop()
+        
+        decline_embed = discord.Embed(
+            title="❌ Chess Invite Declined",
+            description=f"<@{self.opponent_id}> declined the chess match.",
+            color=discord.Color.red()
+        )
+        
+        await interaction.message.edit(embed=decline_embed, view=None)
+        await interaction.response.send_message("You declined the chess invite.", ephemeral=True)
+        
 # --- UTILITY FUNCTIONS ---
 async def log_to_channel(bot, channel_key, embed):
     """Send log embed to specified channel"""
