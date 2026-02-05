@@ -569,7 +569,70 @@ class SuggestionButtonView(discord.ui.View):
         modal = SuggestionActionModal('denied', self.suggestion_id, interaction.channel, self.original_embed, self.user_id)
         await interaction.response.send_modal(modal)
 
+async def board_to_image(board: chess.Board, last_move: chess.Move = None) -> BytesIO:
+    """Convert chess board to image using backscattering.de API"""
+    try:
+        # Get FEN from board
+        fen = board.fen()
+        
+        # Build URL
+        url = f"https://backscattering.de/web-boardimage/board.png?coordinates=true&fen={fen}"
+        
+        # Add last move if available
+        if last_move:
+            lastmove_str = last_move.uci()
+            url += f"&lastmove={lastmove_str}"
+        
+        # Fetch the image
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    image_data = await response.read()
+                    image_io = BytesIO(image_data)
+                    image_io.seek(0)
+                    return image_io
+                else:
+                    raise Exception(f"Failed to fetch board image: HTTP {response.status}")
+    except Exception as e:
+        print(f"Error fetching board image: {e}")
+        raise
 
+def get_active_game(user_id: str):
+    """Get active game for a user"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''SELECT * FROM chess_games 
+                 WHERE (player1_id = ? OR player2_id = ?) 
+                 AND status = 'active' 
+                 ORDER BY started_at DESC LIMIT 1''', 
+             (user_id, user_id))
+    result = c.fetchone()
+    conn.close()
+    return result
+
+def update_game_board(game_id: int, board_fen: str, current_turn: str, last_move: str = None):
+    """Update game board state"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    if last_move:
+        c.execute("UPDATE chess_games SET board_fen = ?, current_turn = ?, last_move = ? WHERE game_id = ?",
+                 (board_fen, current_turn, last_move, game_id))
+    else:
+        c.execute("UPDATE chess_games SET board_fen = ?, current_turn = ? WHERE game_id = ?",
+                 (board_fen, current_turn, game_id))
+    conn.commit()
+    conn.close()
+
+def end_game(game_id: int, winner_id: str = None):
+    """End a chess game"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''UPDATE chess_games 
+                 SET status = 'completed', winner_id = ?, ended_at = CURRENT_TIMESTAMP 
+                 WHERE game_id = ?''',
+             (winner_id, game_id))
+    conn.commit()
+    conn.close()
 
 # --- UTILITY FUNCTIONS ---
 async def log_to_channel(bot, channel_key, embed):
