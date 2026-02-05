@@ -156,6 +156,19 @@ def init_db():
         bot_response TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS suggestions (
+        suggestion_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        user_name TEXT,
+        guild_id TEXT,
+        guild_name TEXT,
+        guild_icon TEXT,
+        title TEXT,
+        suggestion TEXT,
+        status TEXT DEFAULT 'pending',
+        thread_id TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
     conn.commit()
     conn.close()
 
