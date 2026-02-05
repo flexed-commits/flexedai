@@ -2334,6 +2334,89 @@ async def clear_strike(ctx, user_id: str, *, reason: str = "Strikes cleared by a
     
     await ctx.send(embed=embed)
 
+@bot.tree.command(name="chess", description="Play chess against Stockfish or another player")
+async def chess_command(interaction: discord.Interaction, opponent: discord.Member = None):
+    """Start a chess game"""
+    await interaction.response.defer()
+    
+    # Check if user already has an active game
+    existing_game = get_active_game(str(interaction.user.id))
+    if existing_game:
+        await interaction.followup.send("❌ You already have an active chess game! Finish or resign from it first.", ephemeral=True)
+        return
+    
+    if opponent:
+        # Check if opponent is a bot
+        if opponent.bot:
+            await interaction.followup.send("❌ You cannot play against bots!", ephemeral=True)
+            return
+        
+        # Check if opponent is the same as user
+        if opponent.id == interaction.user.id:
+            await interaction.followup.send("❌ You cannot play against yourself!", ephemeral=True)
+            return
+        
+        # Check if opponent has an active game
+        opponent_game = get_active_game(str(opponent.id))
+        if opponent_game:
+            await interaction.followup.send(f"❌ {opponent.mention} already has an active chess game!", ephemeral=True)
+            return
+        
+        # Send invite
+        invite_embed = discord.Embed(
+            title="♟️ Chess Match Invitation",
+            description=f"<@{interaction.user.id}> has challenged you to a chess match!\n\nDo you accept?",
+            color=discord.Color.blue()
+        )
+        
+        invite_embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        invite_embed.set_footer(text="You have 5 minutes to respond")
+        
+        view = ChessInviteView(str(interaction.user.id), str(opponent.id))
+        
+        await interaction.followup.send(
+            content=opponent.mention,
+            embed=invite_embed,
+            view=view
+        )
+    else:
+        # Play against AI (Stockfish simulation - random moves)
+        board = chess.Board()
+        
+        # Store in database
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''INSERT INTO chess_games 
+                     (player1_id, player2_id, current_turn, board_fen, channel_id)
+                     VALUES (?, ?, ?, ?, ?)''',
+                 (str(interaction.user.id), "stockfish", str(interaction.user.id), board.fen(), str(interaction.channel.id)))
+        game_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        
+        # Create board image (no last move for starting position)
+        board_image = await board_to_image(board)
+        file = discord.File(board_image, filename="chess_board.png")
+        
+        # Create game embed
+        embed = discord.Embed(
+            title="♟️ Chess vs Stockfish",
+            description=f"**Player:** <@{interaction.user.id}>\n**Opponent:** 🤖 Stockfish\n\n**Your turn!**",
+            color=discord.Color.blue()
+        )
+        
+        embed.set_image(url="attachment://chess_board.png")
+        embed.set_footer(text=f"Game ID: {game_id}")
+        
+        # Create game view
+        view = ChessGameView(game_id, board, str(interaction.user.id), True)
+        
+        await interaction.followup.send(
+            embed=embed,
+            view=view,
+            file=file
+        )
+        
 @bot.hybrid_group(name="bannedword", invoke_without_command=True)
 @owner_or_bot_admin()
 async def bw_group(ctx):
