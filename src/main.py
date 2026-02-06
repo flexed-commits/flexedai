@@ -5575,8 +5575,7 @@ async def on_message(message):
     if not should_respond:
         return
 
-    # ====== ADD COOLDOWN CHECK HERE ======
-    # Check cooldown (0.6 seconds between responses)
+    # ====== EXISTING COOLDOWN CHECK (0.6s global) ======
     current_time = time.time()
     time_since_last_response = current_time - bot.last_response_time
     
@@ -5584,7 +5583,26 @@ async def on_message(message):
         # Cooldown active - remain silent
         print(f"⏱️ COOLDOWN: Ignoring message from {message.author.name} (last response {time_since_last_response:.2f}s ago)")
         return
-    # ====== END COOLDOWN CHECK ======
+    # ====== END EXISTING COOLDOWN CHECK ======
+
+    # ====== NEW COOLDOWN CHECK (1s per user & 1s per channel) ======
+    user_id = str(message.author.id)
+    channel_id = str(message.channel.id)
+    
+    # Check if this specific user is on cooldown (1 second per user)
+    can_user_send, user_remaining = check_user_cooldown(channel_id, user_id, cooldown_seconds=1.0)
+    if not can_user_send:
+        # User sent message too quickly, silently ignore
+        print(f"⏱️ USER COOLDOWN: Ignoring message from {message.author.name} ({user_remaining:.2f}s remaining)")
+        return
+    
+    # Check if the channel has global cooldown (any user just sent)
+    can_channel_send, channel_remaining, last_user = check_channel_cooldown(channel_id, cooldown_seconds=1.0)
+    if not can_channel_send:
+        # Someone else just sent a message, silently ignore
+        print(f"⏱️ CHANNEL COOLDOWN: Ignoring message (last user: {last_user}, {channel_remaining:.2f}s remaining)")
+        return
+    # ====== END NEW COOLDOWN CHECK ======
 
     
     lang = get_channel_language(message.channel.id)
@@ -5802,6 +5820,10 @@ and comprehensive moderation tools."""
             
             # Update last response time after successful send
             bot.last_response_time = time.time()
+            
+            # ====== UPDATE USER COOLDOWN AFTER RESPONSE ======
+            update_user_cooldown(channel_id, user_id)
+            # ====== END UPDATE COOLDOWN ======
 
             # Add smart AI reactions (10% chance) - only if message wasn't deleted
             if not was_deleted:
@@ -5842,7 +5864,6 @@ and comprehensive moderation tools."""
                 await message.channel.send(error_msg)
             except Exception as send_error:
                 print(f"❌ Error sending error message: {send_error}")
-
 
 
 
