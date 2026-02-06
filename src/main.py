@@ -2997,6 +2997,19 @@ async def suggest(ctx, suggestion_title: str, suggestion: str):
         await ctx.send("❌ You are blacklisted and cannot submit suggestions.", ephemeral=True)
         return
     
+    # CHECK COOLDOWN
+    can_suggest, remaining_time = check_suggestion_cooldown(ctx.author.id)
+    if not can_suggest:
+        minutes = int(remaining_time // 60)
+        seconds = int(remaining_time % 60)
+        await ctx.send(
+            f"⏱️ **Cooldown Active**\n\n"
+            f"You can submit another suggestion in **{minutes}m {seconds}s**.\n\n"
+            f"This cooldown helps prevent spam and ensures all suggestions get proper attention.",
+            ephemeral=True
+        )
+        return
+    
     # Get guild info
     guild_name = ctx.guild.name if ctx.guild else "Direct Message"
     guild_icon = ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None
@@ -3048,10 +3061,13 @@ async def suggest(ctx, suggestion_title: str, suggestion: str):
         conn.commit()
         conn.close()
         
+        # UPDATE COOLDOWN
+        update_suggestion_cooldown(ctx.author.id)
+        
         # Send confirmation
         confirm_embed = discord.Embed(
             title="✅ Suggestion Submitted",
-            description=f"Your suggestion has been submitted successfully!\n\n**Suggestion ID:** #{suggestion_id}\n**Thread:** {thread.thread.mention}",
+            description=f"Your suggestion has been submitted successfully!\n\n**Suggestion ID:** #{suggestion_id}\n**Thread:** {thread.thread.mention}\n\n⏱️ **Next suggestion available in:** 1 hour",
             color=discord.Color.green()
         )
         
@@ -3080,6 +3096,7 @@ async def suggest(ctx, suggestion_title: str, suggestion: str):
         await ctx.send(f"❌ Error creating suggestion: {e}", ephemeral=True)
         import traceback
         traceback.print_exc()
+
 @bot.hybrid_command(name="votereminder", description="Manage your vote reminders")
 async def vote_reminder_settings(ctx, action: str = None):
     """Manage vote reminder settings"""
