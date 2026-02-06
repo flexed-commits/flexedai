@@ -1842,6 +1842,9 @@ async def blacklist_group(ctx):
 @blacklist_group.command(name="add")
 @owner_or_bot_admin()
 async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
+    # DEFER RESPONSE IMMEDIATELY to prevent interaction timeout
+    await ctx.defer()
+    
     db_query("INSERT OR REPLACE INTO users (user_id, blacklisted) VALUES (?, 1)", (user_id,))
     log_msg = f"User {user_id} BLACKLISTED by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
@@ -1852,12 +1855,12 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
         f"🚫 **You have been blacklisted from {BOT_NAME} Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     )
     
-    # Log to dedicated blacklist channel
+    # Log to dedicated blacklist channel - USE datetime.timezone.utc instead of utcnow()
     log_embed = discord.Embed(
         title="🚫 User Blacklisted",
         description=f"A user has been added to the blacklist.",
         color=discord.Color.dark_red(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
     log_embed.add_field(name="⚖️ Actioned By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
@@ -1867,7 +1870,7 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
-    # Confirm to command user
+    # Confirm to command user - USE followup instead of send
     embed = discord.Embed(
         title="🚫 User Blacklisted",
         description=f"User `{user_id}` has been successfully added to the blacklist.",
@@ -1878,11 +1881,20 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     embed.add_field(name="Reason", value=reason, inline=False)
     embed.add_field(name="DM Notification", value="✅ Sent" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
     
-    await ctx.send(embed=embed)
+    await ctx.followup.send(embed=embed)
+
+
+# ============================================================
+# FIX 6: Fixed blacklist remove Command - Defer First
+# ============================================================
+# REPLACE blacklist remove command (around line 1468)
 
 @blacklist_group.command(name="remove")
 @owner_or_bot_admin()
 async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
+    # DEFER RESPONSE IMMEDIATELY to prevent interaction timeout
+    await ctx.defer()
+    
     db_query("UPDATE users SET blacklisted = 0 WHERE user_id = ?", (user_id,))
     log_msg = f"User {user_id} removed from blacklist by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
@@ -1893,12 +1905,12 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
         f"✅ **Your blacklist has been removed**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can now use the bot again\n• All bot features are now accessible to you\n• Your previous violations have been reviewed\n\n**Welcome back!** Please follow the community guidelines to maintain your access.\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
     )
     
-    # Log to dedicated blacklist channel
+    # Log to dedicated blacklist channel - USE datetime.timezone.utc
     log_embed = discord.Embed(
         title="✅ User Unblacklisted",
         description=f"A user has been removed from the blacklist.",
         color=discord.Color.green(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
     log_embed.add_field(name="⚖️ Actioned By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
@@ -1908,7 +1920,7 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
-    # ADD THIS MISSING CONFIRMATION EMBED
+    # Confirm to command user - USE followup instead of send
     embed = discord.Embed(
         title="✅ User Unblacklisted",
         description=f"User `{user_id}` has been successfully removed from the blacklist.",
@@ -1919,7 +1931,7 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     embed.add_field(name="Reason", value=reason, inline=False)
     embed.add_field(name="DM Notification", value="✅ Sent" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
     
-    await ctx.send(embed=embed)
+    await ctx.followup.send(embed=embed)
 
 @bot.hybrid_group(name="blacklist-guild", description="Owner/Admin: Manage guild blacklist.", invoke_without_command=True)
 @owner_or_bot_admin()
@@ -1953,12 +1965,15 @@ async def blacklist_guild_group(ctx):
 async def blacklist_guild_add(ctx, guild_id: str, *, reason: str = "No reason provided"):
     """Blacklist a guild and force bot to leave"""
     try:
+        # DEFER RESPONSE IMMEDIATELY to prevent interaction timeout
+        await ctx.defer()
+        
         guild = bot.get_guild(int(guild_id))
         
         # Check if already blacklisted
         existing = db_query("SELECT guild_id FROM blacklisted_guilds WHERE guild_id = ?", (guild_id,), fetch=True)
         if existing:
-            await ctx.send(f"⚠️ **Guild `{guild_id}` is already blacklisted.**")
+            await ctx.followup.send(f"⚠️ **Guild `{guild_id}` is already blacklisted.**")
             return
         
         guild_name = guild.name if guild else "Unknown Server"
@@ -2010,12 +2025,12 @@ If you believe this is a mistake, contact: <@{OWNER_ID}>
             except Exception as e:
                 left_guild = False
         
-        # Log to blacklist channel
+        # Log to blacklist channel - USE datetime.timezone.utc
         log_embed = discord.Embed(
             title="🚫 Guild Blacklisted",
             description=f"A server has been blacklisted.",
             color=discord.Color.dark_red(),
-            timestamp=datetime.datetime.utcnow()
+            timestamp=datetime.datetime.now(datetime.timezone.utc)
         )
         log_embed.add_field(name="🏰 Server Name", value=guild_name, inline=True)
         log_embed.add_field(name="🆔 Server ID", value=f"`{guild_id}`", inline=True)
@@ -2031,7 +2046,7 @@ If you believe this is a mistake, contact: <@{OWNER_ID}>
         
         await log_to_channel(bot, 'blacklist', log_embed)
         
-        # Confirm to command user
+        # Confirm to command user - USE followup instead of send
         embed = discord.Embed(
             title="🚫 Guild Blacklisted",
             description=f"Server has been blacklisted.",
@@ -2044,22 +2059,31 @@ If you believe this is a mistake, contact: <@{OWNER_ID}>
         embed.add_field(name="Owner Notified", value="✅ Yes" if owner_notified else "❌ No", inline=True)
         embed.add_field(name="Bot Left", value="✅ Yes" if left_guild else "❌ Not in server", inline=True)
         
-        await ctx.send(embed=embed)
+        await ctx.followup.send(embed=embed)
         
     except ValueError:
-        await ctx.send("❌ **Invalid guild ID**\nPlease provide a valid numeric guild ID.")
+        await ctx.followup.send("❌ **Invalid guild ID**\nPlease provide a valid numeric guild ID.")
     except Exception as e:
-        await ctx.send(f"❌ **Error:** {str(e)}")
+        await ctx.followup.send(f"❌ **Error:** {str(e)}")
+
+
+# ============================================================
+# FIX 8: Fixed blacklist-guild remove Command - Defer First
+# ============================================================
+# REPLACE blacklist_guild_remove command (around line 1639)
 
 @blacklist_guild_group.command(name="remove")
 @owner_or_bot_admin()
 async def blacklist_guild_remove(ctx, guild_id: str, *, reason: str = "No reason provided"):
     """Remove a guild from the blacklist"""
+    # DEFER RESPONSE IMMEDIATELY to prevent interaction timeout
+    await ctx.defer()
+    
     # Check if blacklisted
     existing = db_query("SELECT guild_name, blacklisted_by, blacklisted_at FROM blacklisted_guilds WHERE guild_id = ?", (guild_id,), fetch=True)
     
     if not existing:
-        await ctx.send(f"⚠️ **Guild `{guild_id}` is not blacklisted.**")
+        await ctx.followup.send(f"⚠️ **Guild `{guild_id}` is not blacklisted.**")
         return
     
     guild_name, blacklisted_by, blacklisted_at = existing[0]
@@ -2071,12 +2095,12 @@ async def blacklist_guild_remove(ctx, guild_id: str, *, reason: str = "No reason
     log_msg = f"Guild {guild_name} ({guild_id}) removed from blacklist by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
     
-    # Log to blacklist channel
+    # Log to blacklist channel - USE datetime.timezone.utc
     log_embed = discord.Embed(
         title="✅ Guild Unblacklisted",
         description=f"A server has been removed from the blacklist.",
         color=discord.Color.green(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="🏰 Server Name", value=guild_name, inline=True)
     log_embed.add_field(name="🆔 Server ID", value=f"`{guild_id}`", inline=True)
@@ -2086,7 +2110,7 @@ async def blacklist_guild_remove(ctx, guild_id: str, *, reason: str = "No reason
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
-    # Confirm to command user
+    # Confirm to command user - USE followup instead of send
     embed = discord.Embed(
         title="✅ Guild Unblacklisted",
         description=f"Server has been removed from the blacklist and can now re-add the bot.",
@@ -2097,7 +2121,7 @@ async def blacklist_guild_remove(ctx, guild_id: str, *, reason: str = "No reason
     embed.add_field(name="Removed By", value=ctx.author.mention, inline=True)
     embed.add_field(name="Reason", value=reason, inline=False)
     
-    await ctx.send(embed=embed)
+    await ctx.followup.send(embed=embed)
 
 
 @bot.hybrid_command(name="addstrike", description="Owner/Admin: Add strikes to a user.")
