@@ -188,6 +188,15 @@ def init_db():
         started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         ended_at DATETIME
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS suggestion_cooldowns (
+        user_id TEXT PRIMARY KEY,
+        last_suggestion_time DATETIME
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS report_cooldowns (
+        user_id TEXT PRIMARY KEY,
+        last_report_time DATETIME
+    )''')
     conn.commit()
     conn.close()
 
