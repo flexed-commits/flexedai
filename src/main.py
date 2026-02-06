@@ -3193,6 +3193,19 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
         await ctx.send("❌ **You cannot report bots.**")
         return
     
+    # CHECK COOLDOWN
+    can_report, remaining_time = check_report_cooldown(ctx.author.id)
+    if not can_report:
+        minutes = int(remaining_time // 60)
+        seconds = int(remaining_time % 60)
+        await ctx.send(
+            f"⏱️ **Cooldown Active**\n\n"
+            f"You can submit another report in **{minutes}m {seconds}s**.\n\n"
+            f"This cooldown helps prevent spam and ensures all reports get proper review.",
+            ephemeral=True
+        )
+        return
+    
     # Collect proof from attachments if available
     attachments_list = []
     if ctx.message and ctx.message.attachments:
@@ -3212,6 +3225,9 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     # Get report ID
     report_id = db_query("SELECT last_insert_rowid()", fetch=True)[0][0]
     
+    # UPDATE COOLDOWN
+    update_report_cooldown(ctx.author.id)
+    
     # Log to database
     db_query("INSERT INTO admin_logs (log) VALUES (?)", 
              (f"Report #{report_id}: {ctx.author.name} ({ctx.author.id}) reported {member.name} ({member.id}) in {ctx.guild.name}. Reason: {reason}",))
@@ -3221,7 +3237,7 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
         title=f"📢 New User Report - #{report_id}",
         description="A user has been reported for misbehavior.",
         color=discord.Color.red(),
-        timestamp=discord.utils.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     
     log_embed.add_field(name="👤 Reported User", value=f"{member.mention} (`{member.id}`)\n**Username:** {member.name}\n**Display Name:** {member.display_name}", inline=True)
@@ -3230,7 +3246,7 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     
     log_embed.add_field(name="🏠 Server", value=f"**Name:** {ctx.guild.name}\n**ID:** `{ctx.guild.id}`", inline=True)
     log_embed.add_field(name="📍 Channel", value=f"{ctx.channel.mention}\n**ID:** `{ctx.channel.id}`", inline=True)
-    log_embed.add_field(name="📅 Report Date", value=discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
+    log_embed.add_field(name="📅 Report Date", value=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'), inline=True)
     
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     
@@ -3257,77 +3273,34 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     
     log_embed.add_field(name="📎 Proof", value="\n".join(proof_display) if proof_display else "No proof provided", inline=False)
     
-    # --- FIX START: Timezone-aware datetime subtraction ---
-    now = discord.utils.utcnow()
+    # Timezone-aware datetime calculation
+    now = datetime.datetime.now(datetime.timezone.utc)
     account_age = (now - member.created_at).days
     join_age = (now - member.joined_at).days if member.joined_at else 0
-    # --- FIX END ---
     
-    log_embed.add_field(
-        name="ℹ️ Account Information", 
-        value=f"**Account Created:** {member.created_at.strftime('%Y-%m-%d')} ({account_age} days ago)\n**Joined Server:** {member.joined_at.strftime('%Y-%m-%d') if member.joined_at else 'Unknown'} ({join_age} days ago)\n**Roles:** {len(member.roles)-1} roles", 
-        inline=True
-    )
-    
-    # Check if reported user has existing strikes
-    existing_strikes = db_query("SELECT strikes, blacklisted FROM users WHERE user_id = ?", (str(member.id),), fetch=True)
-    if existing_strikes and existing_strikes[0]:
-        strikes, blacklisted = existing_strikes[0]
-        if blacklisted:
-            status = "🚫 **BLACKLISTED**"
-            status_color = "This user is currently banned from the bot"
-        elif strikes >= 2:
-            status = f"⚠️ **{strikes}/3 Strikes** (High Risk)"
-            status_color = "User is close to automatic blacklist"
-        elif strikes >= 1:
-            status = f"⚡ **{strikes}/3 Strikes**"
-            status_color = "User has previous violations"
-        else:
-            status = "✅ Clean Record"
-            status_color = "No previous violations"
-        
-        log_embed.add_field(name="📊 User Status", value=f"{status}\n*{status_color}*", inline=True)
-    else:
-        log_embed.add_field(name="📊 User Status", value="✅ **Clean Record**\n*No previous violations*", inline=True)
-    
-    # Add reporter's credibility info
-    reporter_reports = db_query("SELECT COUNT(*) FROM reports WHERE reporter_id = ?", (str(ctx.author.id),), fetch=True)
-    report_count = reporter_reports[0][0] if reporter_reports else 0
-    
-    log_embed.add_field(
-        name="📊 Reporter Info",
-        value=f"**Total Reports Filed:** {report_count}\n**Account Age:** {(now - ctx.author.created_at).days} days",
-        inline=False
-    )
+    log_embed.add_field(name="📊 User Info", value=f"**Account Age:** {account_age} days\n**Server Join:** {join_age} days ago\n**Roles:** {len(member.roles) - 1}", inline=False)
     
     log_embed.set_thumbnail(url=member.display_avatar.url)
-    log_embed.set_footer(text=f"Report ID: {report_id} | Status: PENDING | Reported by: {ctx.author.name}")
+    log_embed.set_footer(text=f"Report ID: {report_id} | Status: PENDING")
     
-    # Send to reports/admin logs channel with action buttons
-    channel = bot.get_channel(LOG_CHANNELS['reports'])
-    if channel:
-        view = ReportActionView(report_id, member.id, member.name)
-        await channel.send(embed=log_embed, view=view)
+    # Send to reports log channel with action buttons
+    try:
+        await log_to_channel(bot, 'reports', log_embed, view=ReportActionView(report_id, str(member.id), member.name))
+    except Exception as e:
+        print(f"Error sending report to log channel: {e}")
     
-    # Confirm to reporter
+    # Send confirmation to reporter
     confirm_embed = discord.Embed(
-        title="✅ Report Submitted Successfully",
-        description=f"Your report has been forwarded to the bot administrators for review.",
+        title="✅ Report Submitted",
+        description=f"Your report has been submitted and will be reviewed by the moderation team.\n\n**Report ID:** `#{report_id}`\n\n⏱️ **Next report available in:** 1 hour",
         color=discord.Color.green()
     )
-    confirm_embed.add_field(name="🆔 Report ID", value=f"`#{report_id}`", inline=True)
-    confirm_embed.add_field(name="👤 Reported User", value=member.mention, inline=True)
-    confirm_embed.add_field(name="📌 Status", value="Pending Review", inline=True)
-    confirm_embed.set_footer(text="Thank you for helping maintain a safe community!")
+    confirm_embed.add_field(name="Reported User", value=member.mention, inline=True)
+    confirm_embed.add_field(name="Report ID", value=f"`#{report_id}`", inline=True)
+    confirm_embed.set_footer(text="Thank you for helping keep our community safe!")
     
-    if ctx.interaction:
-        await ctx.send(embed=confirm_embed, ephemeral=True)
-    else:
-        await ctx.send(embed=confirm_embed)
-        try:
-            await ctx.message.delete(delay=10)
-        except:
-            pass
+    await ctx.send(embed=confirm_embed, ephemeral=True)
+
 
 @bot.hybrid_command(name="reports", description="Owner/Admin: View recent reports.")
 @owner_or_bot_admin()
