@@ -5575,11 +5575,11 @@ async def on_message(message):
     if not should_respond:
         return
 
-    # ====== EXISTING COOLDOWN CHECK (0.6s global) ======
+    # ====== EXISTING COOLDOWN CHECK (1.0s global) ======
     current_time = time.time()
     time_since_last_response = current_time - bot.last_response_time
     
-    if time_since_last_response < 0.6:
+    if time_since_last_response < 1.0:
         # Cooldown active - remain silent
         print(f"⏱️ COOLDOWN: Ignoring message from {message.author.name} (last response {time_since_last_response:.2f}s ago)")
         return
