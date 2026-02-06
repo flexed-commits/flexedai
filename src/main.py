@@ -898,6 +898,9 @@ class ChessInviteView(discord.ui.View):
             await interaction.response.send_message("❌ This invite is not for you!", ephemeral=True)
             return
         
+        # DEFER IMMEDIATELY - THIS IS THE FIX
+        await interaction.response.defer()
+        
         self.value = True
         self.stop()
         
@@ -949,7 +952,31 @@ class ChessInviteView(discord.ui.View):
             file=file
         )
         
-        await interaction.response.send_message("Game started! Good luck! ♟️", ephemeral=True)
+        # USE FOLLOWUP INSTEAD - THIS IS THE FIX
+        await interaction.followup.send("Game started! Good luck! ♟️", ephemeral=True)
+    
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger, emoji="❌")
+    async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.opponent_id:
+            await interaction.response.send_message("❌ This invite is not for you!", ephemeral=True)
+            return
+        
+        # DEFER IMMEDIATELY - THIS IS THE FIX
+        await interaction.response.defer()
+        
+        self.value = False
+        self.stop()
+        
+        decline_embed = discord.Embed(
+            title="❌ Chess Invite Declined",
+            description=f"<@{self.opponent_id}> declined the chess match.",
+            color=discord.Color.red()
+        )
+        
+        await interaction.message.edit(embed=decline_embed, view=None)
+        
+        # USE FOLLOWUP INSTEAD - THIS IS THE FIX
+        await interaction.followup.send("You declined the chess invite.", ephemeral=True)
     
     @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger, emoji="❌")
     async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
