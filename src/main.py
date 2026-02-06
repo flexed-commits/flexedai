@@ -3450,54 +3450,60 @@ async def view_report_detail(ctx, report_id: int):
     await ctx.send(embed=embed)
 
 
-@bot.hybrid_command(name="reportclear", description="Owner/Admin: Clear all reports for a user.")
+@bot.hybrid_command(name="reportclear", description="Owner/Admin: Clear/delete a report.")
 @owner_or_bot_admin()
-async def report_clear(ctx, user_id: str, *, reason: str = "No reason provided"):
-    """Clear all reports for a specific user (soft delete - marks as deleted but keeps in database)"""
-    # Check how many non-deleted reports exist for this user
-    reports = db_query("SELECT COUNT(*) FROM reports WHERE reported_user_id = ? AND deleted = 0", (user_id,), fetch=True)
-    count = reports[0][0] if reports else 0
+async def report_clear(ctx, report_id: int):
+    """Mark a report as deleted"""
+    # DEFER RESPONSE IMMEDIATELY
+    await ctx.defer()
     
-    if count == 0:
-        await ctx.send(f"⚠️ **No active reports found for user `{user_id}`.**")
+    # Check if report exists
+    existing = db_query("SELECT reporter_id, reported_user_id, reason, status FROM reports WHERE report_id = ?", (report_id,), fetch=True)
+    
+    if not existing:
+        await ctx.followup.send(f"⚠️ **Report #{report_id} not found.**")
         return
     
-    # Soft delete - mark as deleted instead of actually deleting
-    db_query("UPDATE reports SET deleted = 1, status = 'cleared' WHERE reported_user_id = ? AND deleted = 0", (user_id,))
+    reporter_id, reported_user_id, reason, status = existing[0]
+    
+    # Mark as deleted
+    db_query("UPDATE reports SET deleted = 1, status = 'deleted' WHERE report_id = ?", (report_id,))
     
     # Log the action
-    log_msg = f"All reports soft-deleted for user {user_id} by {ctx.author.name} ({ctx.author.id}). Reason: {reason}. Reports cleared: {count}"
+    log_msg = f"Report #{report_id} cleared/deleted by {ctx.author.name} ({ctx.author.id})"
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
     
-    # Log to admin logs channel
-    log_embed = discord.Embed(
-        title="🗑️ Reports Cleared for User",
-        description=f"All reports have been cleared for a user.",
-        color=discord.Color.blue(),
-        timestamp=datetime.datetime.utcnow()
-    )
-    log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
-    log_embed.add_field(name="📊 Reports Cleared", value=str(count), inline=True)
-    log_embed.add_field(name="⚖️ Cleared By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
-    log_embed.add_field(name="📝 Reason", value=reason, inline=False)
-    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
-    log_embed.add_field(name="ℹ️ Note", value="Reports are archived and can still be viewed with /reportview", inline=False)
+    # Get current time
+    now = datetime.datetime.now(datetime.timezone.utc)
     
-    await log_to_channel(bot, 'admin_logs', log_embed)
+    # Log to reports channel
+    log_embed = discord.Embed(
+        title=f"🗑️ Report #{report_id} Cleared",
+        description=f"Report has been marked as deleted.",
+        color=discord.Color.orange(),
+        timestamp=now
+    )
+    log_embed.add_field(name="🆔 Report ID", value=f"`#{report_id}`", inline=True)
+    log_embed.add_field(name="👤 Reporter", value=f"<@{reporter_id}>", inline=True)
+    log_embed.add_field(name="🎯 Reported User", value=f"<@{reported_user_id}>", inline=True)
+    log_embed.add_field(name="📝 Reason", value=reason[:100] if len(reason) > 100 else reason, inline=False)
+    log_embed.add_field(name="📊 Previous Status", value=status, inline=True)
+    log_embed.add_field(name="⚖️ Cleared By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
+    
+    await log_to_channel(bot, 'reports', log_embed)
     
     # Confirm to command user
     embed = discord.Embed(
-        title="✅ Reports Cleared",
-        description=f"All active reports for user `{user_id}` have been cleared.",
-        color=discord.Color.green()
+        title="🗑️ Report Cleared",
+        description=f"Report #{report_id} has been marked as deleted.",
+        color=discord.Color.orange()
     )
-    embed.add_field(name="User ID", value=user_id, inline=True)
-    embed.add_field(name="Reports Cleared", value=str(count), inline=True)
+    embed.add_field(name="Report ID", value=f"`#{report_id}`", inline=True)
+    embed.add_field(name="Reporter", value=f"<@{reporter_id}>", inline=True)
+    embed.add_field(name="Reported User", value=f"<@{reported_user_id}>", inline=True)
     embed.add_field(name="Cleared By", value=ctx.author.mention, inline=True)
-    embed.add_field(name="Reason", value=reason, inline=False)
-    embed.add_field(name="📌 Note", value="*Reports are archived, not permanently deleted*", inline=False)
     
-    await ctx.send(embed=embed)
+    await ctx.followup.send(embed=embed)
 
 @bot.hybrid_command(name="reportremove", description="Owner/Admin: Remove a specific report.")
 @owner_or_bot_admin()
