@@ -303,6 +303,67 @@ def get_updates_channel(guild_id):
     res = db_query("SELECT channel_id FROM updates_channels WHERE guild_id = ?", (str(guild_id),), fetch=True)
     return res[0][0] if res else None
 
+def check_suggestion_cooldown(user_id):
+    """Check if user can submit a suggestion (1 hour cooldown)"""
+    result = db_query(
+        "SELECT last_suggestion_time FROM suggestion_cooldowns WHERE user_id = ?",
+        (str(user_id),),
+        fetch=True
+    )
+    
+    if not result:
+        return True, None  # No cooldown record, user can submit
+    
+    last_time = datetime.datetime.fromisoformat(result[0][0])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    time_diff = now - last_time
+    
+    if time_diff.total_seconds() >= 3600:  # 1 hour = 3600 seconds
+        return True, None
+    
+    remaining = 3600 - time_diff.total_seconds()
+    return False, remaining
+
+
+def check_report_cooldown(user_id):
+    """Check if user can submit a report (1 hour cooldown)"""
+    result = db_query(
+        "SELECT last_report_time FROM report_cooldowns WHERE user_id = ?",
+        (str(user_id),),
+        fetch=True
+    )
+    
+    if not result:
+        return True, None  # No cooldown record, user can submit
+    
+    last_time = datetime.datetime.fromisoformat(result[0][0])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    time_diff = now - last_time
+    
+    if time_diff.total_seconds() >= 3600:  # 1 hour = 3600 seconds
+        return True, None
+    
+    remaining = 3600 - time_diff.total_seconds()
+    return False, remaining
+
+
+def update_suggestion_cooldown(user_id):
+    """Update the last suggestion time for a user"""
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    db_query(
+        "INSERT OR REPLACE INTO suggestion_cooldowns (user_id, last_suggestion_time) VALUES (?, ?)",
+        (str(user_id), now)
+    )
+
+
+def update_report_cooldown(user_id):
+    """Update the last report time for a user"""
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    db_query(
+        "INSERT OR REPLACE INTO report_cooldowns (user_id, last_report_time) VALUES (?, ?)",
+        (str(user_id), now)
+    )
+    
 def export_db_to_json():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
