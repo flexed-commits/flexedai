@@ -15,7 +15,7 @@ import aiohttp
 from io import BytesIO
 from dotenv import load_dotenv
 load_dotenv()
-
+user_cooldowns = {}
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
@@ -363,7 +363,62 @@ def update_report_cooldown(user_id):
         "INSERT OR REPLACE INTO report_cooldowns (user_id, last_report_time) VALUES (?, ?)",
         (str(user_id), now)
     )
+
+def check_user_cooldown(channel_id: str, user_id: str, cooldown_seconds: float = 1.0):
+    """
+    Check if user can send message in this channel.
+    Returns (can_send, remaining_time)
+    """
+    import time
+    current_time = time.time()
     
+    # Initialize channel if not exists
+    if channel_id not in user_cooldowns:
+        user_cooldowns[channel_id] = {}
+    
+    # Check if user has cooldown in this channel
+    if user_id in user_cooldowns[channel_id]:
+        last_time = user_cooldowns[channel_id][user_id]
+        time_diff = current_time - last_time
+        
+        if time_diff < cooldown_seconds:
+            remaining = cooldown_seconds - time_diff
+            return False, remaining
+    
+    return True, 0.0
+
+
+def update_user_cooldown(channel_id: str, user_id: str):
+    """Update the last message time for a user in a channel"""
+    import time
+    
+    if channel_id not in user_cooldowns:
+        user_cooldowns[channel_id] = {}
+    
+    user_cooldowns[channel_id][user_id] = time.time()
+
+
+def check_channel_cooldown(channel_id: str, cooldown_seconds: float = 1.0):
+    """
+    Check if ANY user can send in this channel (global channel cooldown).
+    Returns (can_send, remaining_time, last_user_id)
+    """
+    import time
+    current_time = time.time()
+    
+    if channel_id not in user_cooldowns or not user_cooldowns[channel_id]:
+        return True, 0.0, None
+    
+    # Find the most recent message in this channel from ANY user
+    last_user = max(user_cooldowns[channel_id].items(), key=lambda x: x[1])
+    last_user_id, last_time = last_user
+    time_diff = current_time - last_time
+    
+    if time_diff < cooldown_seconds:
+        remaining = cooldown_seconds - time_diff
+        return False, remaining, last_user_id
+    
+    return True, 0.0, None
 def export_db_to_json():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
