@@ -1849,28 +1849,31 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     log_msg = f"User {user_id} BLACKLISTED by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
     
+    # Get current time
+    now = datetime.datetime.now(datetime.timezone.utc)
+    
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"🚫 **You have been blacklisted from {BOT_NAME} Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
+        f"🚫 **You have been blacklisted from {BOT_NAME} Bot**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can no longer use any bot commands\n• The bot will not respond to your messages\n• This action has been logged by bot administrators\n\n**Believe this is a mistake?**\nContact the bot owner: <@{OWNER_ID}>\n**Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}\n\n*Timestamp: {get_discord_timestamp(now, style='F')}*"
     )
     
-    # Log to dedicated blacklist channel - USE datetime.timezone.utc instead of utcnow()
+    # Log to dedicated blacklist channel
     log_embed = discord.Embed(
         title="🚫 User Blacklisted",
         description=f"A user has been added to the blacklist.",
         color=discord.Color.dark_red(),
-        timestamp=datetime.datetime.now(datetime.timezone.utc)
+        timestamp=now
     )
     log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
     log_embed.add_field(name="⚖️ Actioned By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Notification", value="✅ Delivered" if dm_sent else "❌ Failed (DMs closed)", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(now, style='F'), inline=True)
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
-    # Confirm to command user - USE followup instead of send
+    # Confirm to command user
     embed = discord.Embed(
         title="🚫 User Blacklisted",
         description=f"User `{user_id}` has been successfully added to the blacklist.",
@@ -1884,10 +1887,9 @@ async def bl_add(ctx, user_id: str, *, reason: str = "No reason provided"):
     await ctx.followup.send(embed=embed)
 
 
-# ============================================================
-# FIX 6: Fixed blacklist remove Command - Defer First
-# ============================================================
-# REPLACE blacklist remove command (around line 1468)
+# ─────────────────────────────────────────────────────────────
+# FIX: blacklist remove command
+# ─────────────────────────────────────────────────────────────
 
 @blacklist_group.command(name="remove")
 @owner_or_bot_admin()
@@ -1899,28 +1901,31 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     log_msg = f"User {user_id} removed from blacklist by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
     
+    # Get current time
+    now = datetime.datetime.now(datetime.timezone.utc)
+    
     # Send DM to user
     dm_sent = await send_user_dm(
         user_id, 
-        f"✅ **Your blacklist has been removed**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can now use the bot again\n• All bot features are now accessible to you\n• Your previous violations have been reviewed\n\n**Welcome back!** Please follow the community guidelines to maintain your access.\n\n*Timestamp: {get_discord_timestamp(style='F')}*"
+        f"✅ **Your blacklist has been removed**\n\n**Reason:** {reason}\n\n**What this means:**\n• You can now use the bot again\n• All bot features are now accessible to you\n• Your previous violations have been reviewed\n\n**Welcome back!** Please follow the community guidelines to maintain your access.\n\n*Timestamp: {get_discord_timestamp(now, style='F')}*"
     )
     
-    # Log to dedicated blacklist channel - USE datetime.timezone.utc
+    # Log to dedicated blacklist channel
     log_embed = discord.Embed(
         title="✅ User Unblacklisted",
         description=f"A user has been removed from the blacklist.",
         color=discord.Color.green(),
-        timestamp=datetime.datetime.now(datetime.timezone.utc)
+        timestamp=now
     )
     log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
     log_embed.add_field(name="⚖️ Actioned By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     log_embed.add_field(name="📝 Reason", value=reason, inline=False)
     log_embed.add_field(name="📬 DM Notification", value="✅ Delivered" if dm_sent else "❌ Failed (DMs closed)", inline=True)
-    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(style='F'), inline=True)
+    log_embed.add_field(name="🕐 Timestamp", value=get_discord_timestamp(now, style='F'), inline=True)
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
-    # Confirm to command user - USE followup instead of send
+    # Confirm to command user
     embed = discord.Embed(
         title="✅ User Unblacklisted",
         description=f"User `{user_id}` has been successfully removed from the blacklist.",
@@ -1988,6 +1993,9 @@ async def blacklist_guild_add(ctx, guild_id: str, *, reason: str = "No reason pr
         log_msg = f"Guild {guild_name} ({guild_id}) BLACKLISTED by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
         db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
         
+        # Get current time
+        now = datetime.datetime.now(datetime.timezone.utc)
+        
         # Try to notify guild owner before leaving
         owner_notified = False
         if guild and guild.owner:
@@ -2009,7 +2017,7 @@ Your server **{guild_name}** has been blacklisted from using {BOT_NAME} Bot.
 If you believe this is a mistake, contact: <@{OWNER_ID}>
 **Join the Support Server:** {os.getenv('SUPPORT_SERVER_INVITE', 'https://discord.com/invite/XMvPq7W5N4')}
 
-*Timestamp: {get_discord_timestamp(style='F')}*
+*Timestamp: {get_discord_timestamp(now, style='F')}*
 """
                 await guild.owner.send(dm_message)
                 owner_notified = True
@@ -2025,12 +2033,12 @@ If you believe this is a mistake, contact: <@{OWNER_ID}>
             except Exception as e:
                 left_guild = False
         
-        # Log to blacklist channel - USE datetime.timezone.utc
+        # Log to blacklist channel
         log_embed = discord.Embed(
             title="🚫 Guild Blacklisted",
             description=f"A server has been blacklisted.",
             color=discord.Color.dark_red(),
-            timestamp=datetime.datetime.now(datetime.timezone.utc)
+            timestamp=now
         )
         log_embed.add_field(name="🏰 Server Name", value=guild_name, inline=True)
         log_embed.add_field(name="🆔 Server ID", value=f"`{guild_id}`", inline=True)
@@ -2046,7 +2054,7 @@ If you believe this is a mistake, contact: <@{OWNER_ID}>
         
         await log_to_channel(bot, 'blacklist', log_embed)
         
-        # Confirm to command user - USE followup instead of send
+        # Confirm to command user
         embed = discord.Embed(
             title="🚫 Guild Blacklisted",
             description=f"Server has been blacklisted.",
@@ -2065,12 +2073,6 @@ If you believe this is a mistake, contact: <@{OWNER_ID}>
         await ctx.followup.send("❌ **Invalid guild ID**\nPlease provide a valid numeric guild ID.")
     except Exception as e:
         await ctx.followup.send(f"❌ **Error:** {str(e)}")
-
-
-# ============================================================
-# FIX 8: Fixed blacklist-guild remove Command - Defer First
-# ============================================================
-# REPLACE blacklist_guild_remove command (around line 1639)
 
 @blacklist_guild_group.command(name="remove")
 @owner_or_bot_admin()
@@ -2095,12 +2097,15 @@ async def blacklist_guild_remove(ctx, guild_id: str, *, reason: str = "No reason
     log_msg = f"Guild {guild_name} ({guild_id}) removed from blacklist by {ctx.author.name} ({ctx.author.id}). Reason: {reason}"
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
     
-    # Log to blacklist channel - USE datetime.timezone.utc
+    # Get current time
+    now = datetime.datetime.now(datetime.timezone.utc)
+    
+    # Log to blacklist channel
     log_embed = discord.Embed(
         title="✅ Guild Unblacklisted",
         description=f"A server has been removed from the blacklist.",
         color=discord.Color.green(),
-        timestamp=datetime.datetime.now(datetime.timezone.utc)
+        timestamp=now
     )
     log_embed.add_field(name="🏰 Server Name", value=guild_name, inline=True)
     log_embed.add_field(name="🆔 Server ID", value=f"`{guild_id}`", inline=True)
@@ -2110,7 +2115,7 @@ async def blacklist_guild_remove(ctx, guild_id: str, *, reason: str = "No reason
     
     await log_to_channel(bot, 'blacklist', log_embed)
     
-    # Confirm to command user - USE followup instead of send
+    # Confirm to command user
     embed = discord.Embed(
         title="✅ Guild Unblacklisted",
         description=f"Server has been removed from the blacklist and can now re-add the bot.",
@@ -2122,8 +2127,6 @@ async def blacklist_guild_remove(ctx, guild_id: str, *, reason: str = "No reason
     embed.add_field(name="Reason", value=reason, inline=False)
     
     await ctx.followup.send(embed=embed)
-
-
 @bot.hybrid_command(name="addstrike", description="Owner/Admin: Add strikes to a user.")
 @owner_or_bot_admin()
 async def add_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No reason provided"):
