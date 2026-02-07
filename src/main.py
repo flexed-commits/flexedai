@@ -3411,43 +3411,128 @@ async def report_user(ctx, member: discord.Member, proof: str, *, reason: str):
     await ctx.send(embed=confirm_embed, ephemeral=True)
 
 
-@bot.hybrid_command(name="reports", description="Owner/Admin: View recent reports.")
-@owner_or_bot_admin()
-async def view_reports(ctx, status: str = "pending"):
-    """View reports by status (pending, reviewed, dismissed)"""
-    valid_statuses = ["pending", "reviewed", "dismissed", "all"]
+class ReportsPaginationView(discord.ui.View):
+    def __init__(self, reports, status, per_page=10):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.reports = reports
+        self.status = status
+        self.per_page = per_page
+        self.current_page = 0
+        self.max_page = (len(reports) - 1) // per_page
+        
+        # Update button states on init
+        self.update_buttons()
     
-    if status not in valid_statuses:
-        await ctx.send(f"❌ **Invalid status**\n\nValid options: `{', '.join(valid_statuses)}`")
+    def update_buttons(self):
+        """Enable/disable buttons based on current page"""
+        # First Page button
+        self.first_page.disabled = (self.current_page == 0)
+        
+        # Previous Page button
+        self.previous_page.disabled = (self.current_page == 0)
+        
+        # Next Page button
+        self.next_page.disabled = (self.current_page >= self.max_page)
+        
+        # Last Page button
+        self.last_page.disabled = (self.current_page >= self.max_page)
+    
+    def get_page_embed(self):
+        """Generate embed for current page"""
+        start_idx = self.current_page * self.per_page
+        end_idx = start_idx + self.per_page
+        page_reports = self.reports[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title=f"📋 Reports ({self.status.capitalize()})",
+            description=f"Page {self.current_page + 1}/{self.max_page + 1} • Total: {len(self.reports)} reports",
+            color=discord.Color.blue()
+        )
+        
+        for report in page_reports:
+            # Handle variable number of columns
+            report_id = report[0]
+            reporter_id = report[1]
+            reporter_name = report[2]
+            reported_user_id = report[3]
+            reported_user_name = report[4]
+            guild_id = report[5]
+            guild_name = report[6]
+            reason = report[7]
+            proof = report[8] if len(report) > 8 else "No proof"
+            timestamp = report[9] if len(report) > 9 else "Unknown"
+            report_status = report[10] if len(report) > 10 else "pending"
+            
+            # Truncate long reasons
+            reason_short = reason[:100] + "..." if len(reason) > 100 else reason
+            
+            # Status emoji
+            status_emoji = {
+                "pending": "⏳",
+                "claimed": "✋",
+                "actioned": "✅",
+                "deleted": "🗑️"
+            }.get(report_status.lower(), "❓")
+            
+            embed.add_field(
+                name=f"{status_emoji} Report #{report_id} - {report_status.upper()}",
+                value=f"**Reporter:** <@{reporter_id}>\n**Reported:** <@{reported_user_id}>\n**Reason:** {reason_short}\n**Server:** {guild_name}",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Use /reportview <id> for full details • Page {self.current_page + 1}/{self.max_page + 1}")
+        
+        return embed
+    
+    @discord.ui.button(label="⏮️ First", style=discord.ButtonStyle.secondary, custom_id="first_page")
+    async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = 0
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_page_embed(), view=self)
+    
+    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.primary, custom_id="previous_page")
+    async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = max(0, self.current_page - 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_page_embed(), view=self)
+    
+    @discord.ui.button(label="▶️ Next", style=discord.ButtonStyle.primary, custom_id="next_page")
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = min(self.max_page, self.current_page + 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_page_embed(), view=self)
+    
+    @discord.ui.button(label="⏭️ Last", style=discord.ButtonStyle.secondary, custom_id="last_page")
+    async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = self.max_page
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_page_embed(), view=self)
+
+
+@bot.hybrid_command(name="reports", description="Owner/Admin: View all reports.")
+@owner_or_bot_admin()
+async def view_reports(ctx, status: str = "all"):
+    """View all reports or filter by status (pending/claimed/actioned/all)"""
+    
+    if status.lower() not in ["all", "pending", "claimed", "actioned"]:
+        await ctx.send("❌ **Invalid status**\nValid options: `all`, `pending`, `claimed`, `actioned`")
         return
     
-    if status == "all":
-        reports = db_query("SELECT * FROM reports ORDER BY timestamp DESC LIMIT 20", fetch=True)
+    # Get reports based on status filter
+    if status.lower() == "all":
+        reports = db_query("SELECT * FROM reports ORDER BY timestamp DESC", fetch=True)
     else:
-        reports = db_query("SELECT * FROM reports WHERE status = ? ORDER BY timestamp DESC LIMIT 20", (status,), fetch=True)
+        reports = db_query("SELECT * FROM reports WHERE status = ? ORDER BY timestamp DESC", (status.lower(),), fetch=True)
     
     if not reports:
-        await ctx.send(f"📋 **No {status} reports found.**")
+        await ctx.send(f"✅ **No {status} reports found**\nThe reports database is empty for this filter.")
         return
     
-    embed = discord.Embed(
-        title=f"📊 Reports - {status.capitalize()}",
-        description=f"Showing recent {status} reports",
-        color=discord.Color.blue()
-    )
+    # Create pagination view
+    view = ReportsPaginationView(reports, status, per_page=10)
+    embed = view.get_page_embed()
     
-    for report in reports[:10]:  # Show max 10 in embed
-        report_id, reporter_id, reporter_name, reported_id, reported_name, guild_id, guild_name, reason, proof, timestamp, report_status = report
-        
-        embed.add_field(
-            name=f"Report #{report_id} - {report_status.upper()}",
-            value=f"**Reported:** <@{reported_id}> ({reported_name})\n**By:** <@{reporter_id}>\n**Server:** {guild_name}\n**Reason:** {reason[:100]}...\n**Date:** {timestamp}",
-            inline=False
-        )
-    
-    embed.set_footer(text=f"Total {status} reports: {len(reports)} | Use /reportview <id> for details")
-    
-    await ctx.send(embed=embed)
+    await ctx.send(embed=embed, view=view)
 
 @bot.hybrid_command(name="reportview", description="Owner/Admin: View detailed report.")
 @owner_or_bot_admin()
