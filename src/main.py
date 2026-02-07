@@ -4,7 +4,7 @@ import discord
 import hashlib, string
 from discord.ext import commands, tasks
 import os, time, datetime, json, sqlite3, asyncio
-from groq import AsyncGroq 
+import google.generativeai as genai
 from collections import deque
 import random
 from patreon import PatreonPromoter
@@ -18,8 +18,8 @@ load_dotenv()
 user_cooldowns = {}
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
-GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-MODEL_NAME = os.getenv('MODEL_NAME')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+MODEL_NAME = "gemini-2.0-flash-exp" 
 OWNER_ID = int(os.getenv('OWNER_ID'))
 OWNER_NAME = os.getenv('OWNER_NAME')
 DB_FILE = "bot_data.db"
@@ -1142,7 +1142,8 @@ async def get_prefix(bot, message):
 class AIBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix=get_prefix, intents=discord.Intents.all(), help_command=None)
-        self.groq_client = AsyncGroq(api_key=GROQ_API_KEY)
+        genai.configure(api_key=GEMINI_API_KEY)
+        self.gemini_client = genai.GenerativeModel(MODEL_NAME)
         self.memory = {}
         self.reaction_chance = 0.10
         self.last_response_time = 0
@@ -5586,15 +5587,6 @@ Examples of good responses: "👍", "😂 👍", "🎉", "❤️", "🤔", "none
 
 Your response:"""
 
-        reaction_msgs = [{"role": "user", "content": reaction_prompt}]
-        reaction_res = await bot.groq_client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=reaction_msgs,
-            max_tokens=50,
-            temperature=0.7
-        )
-        
-        suggested_reactions = reaction_res.choices[0].message.content.strip()
         
         if suggested_reactions.lower() == "none":
             return
@@ -5620,7 +5612,19 @@ Your response:"""
 async def on_message(message):
     if message.author.bot:
         print("❌ SKIP: Message is from a bot")
-        return
+        retu        reaction_msgs = [{"role": "user", "content": reaction_prompt}]
+        
+        # Gemini API call
+        chat = bot.gemini_client.start_chat(history=[])
+        reaction_res = await chat.send_message_async(
+            reaction_prompt,
+            generation_config=genai.types.GenerationConfig(
+                max_output_tokens=50,
+                temperature=0.7
+            )
+        )
+        
+        suggested_reactions = reaction_res.text.strip()
 
     user_check = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(message.author.id),), fetch=True)
     if user_check and user_check[0][0] == 1:
@@ -5906,8 +5910,36 @@ and comprehensive moderation tools."""
 
         try:
             print(f"🤖 Generating AI response for {message.author.name}...")
-            res = await bot.groq_client.chat.completions.create(model=MODEL_NAME, messages=msgs, max_tokens=800)
-            reply = res.choices[0].message.content
+
+        try:
+            print(f"🤖 Generating AI response for {message.author.name}...")
+            
+            # Convert messages to Gemini format
+            gemini_history = []
+            system_content = ""
+            user_message = ""
+            
+            for msg in msgs:
+                if msg["role"] == "system":
+                    system_content = msg["content"]
+                elif msg["role"] == "user":
+                    user_message = msg["content"]
+                    gemini_history.append({"role": "user", "parts": [msg["content"]]})
+                elif msg["role"] == "assistant":
+                    gemini_history.append({"role": "model", "parts": [msg["content"]]})
+            
+            # Start chat with history (excluding the last user message)
+            chat = bot.gemini_client.start_chat(history=gemini_history[:-1])
+            
+            # Generate response
+            response = await chat.send_message_async(
+                user_message,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=800,
+                    temperature=0.7,
+                )
+            )
+            reply = response.text
             print(f"✅ Got AI response ({len(reply)} chars)")
             
             if was_truncated:
@@ -6336,19 +6368,22 @@ For mixed reactions:
 
 GENERATE YOUR RESPONSE NOW:"""
 
-            messages = [{"role": "system", "content": system_prompt}]
+messages = [{"role": "system", "content": system_prompt}]
             
             print(f"🤖 Generating AI reaction response...")
             
-            # Generate AI response
-            res = await bot.groq_client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages,
-                max_tokens=200,
-                temperature=0.9  # High creativity
+            # Generate AI response with Gemini
+            chat = bot.gemini_client.start_chat(history=[])
+            res = await chat.send_message_async(
+                system_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=200,
+                    temperature=0.9  # High creativity
+                )
             )
             
-            ai_response = res.choices[0].message.content.strip()
+            ai_response = res.text.strip()
+
             
             # Clean up any accidental mentions or emoji repetitions
             ai_response = ai_response.replace(f"@{user.name}", "").replace(f"@{user.display_name}", "")
