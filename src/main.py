@@ -5803,7 +5803,7 @@ and comprehensive moderation tools."""
 
         try:
             print(f"🤖 Generating AI response for {message.author.name}...")
-            res = await bot.groq_client.chat.completions.create(model=MODEL_NAME, messages=msgs, max_tokens=1500)
+            res = await bot.groq_client.chat.completions.create(model=MODEL_NAME, messages=msgs, max_tokens=800)
             reply = res.choices[0].message.content
             print(f"✅ Got AI response ({len(reply)} chars)")
             
