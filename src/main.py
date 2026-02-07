@@ -5929,10 +5929,10 @@ and comprehensive moderation tools."""
             
             # Start chat with history (excluding the last user message)
             chat = bot.gemini_client.start_chat(history=gemini_history[:-1])
-            
+            full_message = f"{system_content}\n\n---\n\nUser message: {user_message}"
             # Generate response
             response = await chat.send_message_async(
-                user_message,
+                full_message,
                 generation_config=genai.types.GenerationConfig(
                     max_output_tokens=800,
                     temperature=0.7,
