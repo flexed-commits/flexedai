@@ -5847,10 +5847,27 @@ and comprehensive moderation tools."""
             
         
         except discord.errors.HTTPException as e:
-            print(f"❌ ERROR in AI response generation:")
-            print(f"   Error type: HTTPException")
-            print(f"   Error message: {e}")
-            error_msg = f"❌ **An error occurred while sending the response**\n{message.author.mention}, I generated a response but couldn't send it. Please try again."
+            print(f"❌ HTTPException ERROR:")
+            print(f"   Status: {e.status}")
+            print(f"   Code: {e.code}")
+            print(f"   Message: {e.text}")
+            print(f"   Response length: {len(reply)} chars")
+            print(f"   First 100 chars: {reply[:100]}")
+            
+            # Try to send error with more details
+            error_msg = f"❌ **Failed to send response**\n"
+            
+            if e.status == 403:
+                error_msg += "I don't have permission to send messages here."
+            elif e.status == 404:
+                error_msg += "The message or channel was deleted."
+            elif e.code == 50035:
+                error_msg += f"Response was too long ({len(reply)} chars). Please ask a shorter question."
+            elif e.status == 429:
+                error_msg += "I'm being rate limited. Please wait a moment."
+            else:
+                error_msg += f"Discord API error: {e.text}\n{message.author.mention}, please try again."
+            
             try:
                 await message.channel.send(error_msg)
             except Exception as send_error:
