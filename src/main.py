@@ -3507,29 +3507,28 @@ async def view_report_detail(ctx, report_id: int):
 
 @bot.hybrid_command(name="reportclear", description="Owner/Admin: Clear ALL reports filed AGAINST a specific user.")
 @owner_or_bot_admin()
-async def report_clear(ctx, user: discord.User):
+async def report_clear(ctx, user_id: str):
     """Clear all reports filed AGAINST a specific user (reported user)"""
-    # DEFER RESPONSE IMMEDIATELY
-    await ctx.defer()
+    # For hybrid commands, use ctx.send() not ctx.followup
     
     # Get all reports against this user
     reports = db_query(
-        "SELECT report_id, reporter_id, reason FROM reports WHERE reported_user_id = ? AND deleted = 0",
-        (str(user.id),),
+        "SELECT report_id, reporter_id, reason FROM reports WHERE reported_user_id = ?",
+        (user_id,),
         fetch=True
     )
     
     if not reports:
-        await ctx.followup.send(f"⚠️ **No active reports found against {user.mention}**\n\nThis user has not been reported, or all reports against them have already been deleted.")
+        await ctx.send(f"⚠️ **No reports found against user `{user_id}`**\n\nThis user has not been reported.")
         return
     
     report_count = len(reports)
     
-    # Mark all reports as deleted
-    db_query("UPDATE reports SET deleted = 1, status = 'deleted' WHERE reported_user_id = ? AND deleted = 0", (str(user.id),))
+    # DELETE reports completely
+    db_query("DELETE FROM reports WHERE reported_user_id = ?", (user_id,))
     
     # Log the action
-    log_msg = f"All {report_count} report(s) against user {user.name} ({user.id}) cleared by {ctx.author.name} ({ctx.author.id})"
+    log_msg = f"All {report_count} report(s) against user {user_id} cleared by {ctx.author.name} ({ctx.author.id})"
     db_query("INSERT INTO admin_logs (log) VALUES (?)", (log_msg,))
     
     # Get current time
@@ -3542,7 +3541,7 @@ async def report_clear(ctx, user: discord.User):
         color=discord.Color.orange(),
         timestamp=now
     )
-    log_embed.add_field(name="🎯 Reported User (Cleared)", value=f"{user.mention} (`{user.id}`)", inline=True)
+    log_embed.add_field(name="🎯 Reported User (Cleared)", value=f"<@{user_id}> (`{user_id}`)", inline=True)
     log_embed.add_field(name="📊 Reports Cleared", value=str(report_count), inline=True)
     log_embed.add_field(name="⚖️ Cleared By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
     
@@ -3560,10 +3559,10 @@ async def report_clear(ctx, user: discord.User):
     # Confirm to command user
     embed = discord.Embed(
         title=f"🗑️ Cleared {report_count} Report(s)",
-        description=f"All reports filed **against** {user.mention} have been marked as deleted.",
+        description=f"All reports filed **against** <@{user_id}> have been permanently deleted.",
         color=discord.Color.orange()
     )
-    embed.add_field(name="Reported User", value=f"{user.mention}\n`{user.id}`", inline=True)
+    embed.add_field(name="Reported User", value=f"<@{user_id}>\n`{user_id}`", inline=True)
     embed.add_field(name="Reports Cleared", value=str(report_count), inline=True)
     embed.add_field(name="Cleared By", value=ctx.author.mention, inline=True)
     
@@ -3575,9 +3574,9 @@ async def report_clear(ctx, user: discord.User):
         details += f"\n*...and {report_count - 5} more*"
     
     embed.add_field(name="📋 Cleared Reports", value=details, inline=False)
-    embed.set_footer(text=f"All reports against {user.name} have been dismissed")
+    embed.set_footer(text=f"All reports against user {user_id} have been permanently deleted")
     
-    await ctx.followup.send(embed=embed)
+    await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="reportremove", description="Owner/Admin: Remove a specific report by ID.")
 @owner_or_bot_admin()
