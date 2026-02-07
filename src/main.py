@@ -4352,14 +4352,17 @@ async def announce(ctx, *, message: str):
     updates_channels = db_query("SELECT guild_id, channel_id FROM updates_channels", fetch=True)
     configured_guild_ids = {str(uc[0]) for uc in updates_channels} if updates_channels else set()
     
+    # Get current timestamp for the embed
+    current_time = datetime.datetime.utcnow()
+    
     # Create announcement embed
     announcement_embed = discord.Embed(
         title=f"📢 {BOT_NAME} Announcement",
         description=message,
         color=discord.Color.blue(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=current_time
     )
-    announcement_embed.set_footer(text=f"Announcement from {ctx.author.name} • {get_discord_timestamp(style='F')}")
+    announcement_embed.set_footer(text=f"Announcement from {ctx.author.name} • {get_discord_timestamp(current_time, style='F')}")
     announcement_embed.set_author(name=BOT_NAME, icon_url=bot.user.display_avatar.url)
     
     # Statistics
@@ -4455,6 +4458,7 @@ async def announce(ctx, *, message: str):
     result_embed.set_footer(text="Note: All server owners receive DMs regardless of updates channel setup")
     
     await ctx.send(embed=result_embed)
+
 
 @bot.hybrid_command(name="viewupdates", description="View your server's updates channel configuration.")
 async def view_updates(ctx):
