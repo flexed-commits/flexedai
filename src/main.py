@@ -3674,7 +3674,7 @@ async def report_remove(ctx, report_id: int):
     existing = db_query("SELECT reporter_id, reported_user_id, reason, status FROM reports WHERE report_id = ?", (report_id,), fetch=True)
     
     if not existing:
-        await ctx.followup.send(f"⚠️ **Report #{report_id} not found.**")
+        await ctx.send(f"⚠️ **Report #{report_id} not found.**")
         return
     
     reporter_id, reported_user_id, reason, status = existing[0]
@@ -3716,7 +3716,7 @@ async def report_remove(ctx, report_id: int):
     embed.add_field(name="Reported User", value=f"<@{reported_user_id}>", inline=True)
     embed.add_field(name="Removed By", value=ctx.author.mention, inline=True)
     
-    await ctx.followup.send(embed=embed)
+    await ctx.send(embed=embed)
     
 # Bot Admin Management Commands (Owner Only)
 @bot.command(name="add-admin", description="Owner: Add a bot admin.")
