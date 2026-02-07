@@ -5587,6 +5587,17 @@ Examples of good responses: "👍", "😂 👍", "🎉", "❤️", "🤔", "none
 
 Your response:"""
 
+        # Gemini API call for reaction suggestions
+        chat = bot.gemini_client.start_chat(history=[])
+        reaction_res = await chat.send_message_async(
+            reaction_prompt,
+            generation_config=genai.types.GenerationConfig(
+                max_output_tokens=50,
+                temperature=0.7
+            )
+        )
+        
+        suggested_reactions = reaction_res.text.strip()
         
         if suggested_reactions.lower() == "none":
             return
@@ -5612,20 +5623,7 @@ Your response:"""
 async def on_message(message):
     if message.author.bot:
         print("❌ SKIP: Message is from a bot")
-        retu        reaction_msgs = [{"role": "user", "content": reaction_prompt}]
-        
-        # Gemini API call
-        chat = bot.gemini_client.start_chat(history=[])
-        reaction_res = await chat.send_message_async(
-            reaction_prompt,
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=50,
-                temperature=0.7
-            )
-        )
-        
-        suggested_reactions = reaction_res.text.strip()
-
+        return
     user_check = db_query("SELECT blacklisted FROM users WHERE user_id = ?", (str(message.author.id),), fetch=True)
     if user_check and user_check[0][0] == 1:
         print(f"❌ SKIP: User {message.author.id} is blacklisted")
