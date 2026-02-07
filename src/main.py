@@ -5912,9 +5912,6 @@ and comprehensive moderation tools."""
 
         try:
             print(f"🤖 Generating AI response for {message.author.name}...")
-
-        try:
-            print(f"🤖 Generating AI response for {message.author.name}...")
             
             # Convert messages to Gemini format
             gemini_history = []
