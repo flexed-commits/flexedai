@@ -18,7 +18,12 @@ load_dotenv()
 user_cooldowns = {}
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+GEMINI_KEYS = [
+    os.getenv('GOOGLE_API_KEY_1'),
+    os.getenv('GOOGLE_API_KEY_2'),
+    os.getenv('GOOGLE_API_KEY_3'),
+]
+GEMINI_KEYS = [key for key in GEMINI_KEYS if key] 
 MODEL_NAME = "gemini-3-flash-preview" 
 OWNER_ID = int(os.getenv('OWNER_ID'))
 OWNER_NAME = os.getenv('OWNER_NAME')
@@ -1139,11 +1144,80 @@ async def get_prefix(bot, message):
     res = db_query("SELECT prefix FROM settings WHERE id = ?", (guild_or_user_id,), fetch=True)
     return res[0][0] if res and res[0][0] else "/"
 
+
+class APIManager:
+    def __init__(self, gemini_keys):
+        self.gemini_keys = gemini_keys
+        self.current_index = 0
+        self.clients = []
+        
+        for key in gemini_keys:
+            genai.configure(api_key=key)
+            self.clients.append(genai.GenerativeModel(MODEL_NAME))
+        
+        print(f"✅ Loaded {len(self.clients)} Gemini API keys")
+    
+    def rotate(self):
+        """Switch to next API key"""
+        self.current_index = (self.current_index + 1) % len(self.clients)
+        print(f"🔄 Rotated to API key #{self.current_index + 1}")
+    
+    async def generate(self, messages, max_tokens=800, temp=0.7):
+        """Generate response with automatic rotation on rate limit"""
+        
+        # Extract messages
+        system_content = ""
+        user_message = ""
+        history = []
+        
+        for msg in messages:
+            if msg["role"] == "system":
+                system_content = msg["content"]
+            elif msg["role"] == "user":
+                user_message = msg["content"]
+                history.append({"role": "user", "parts": [msg["content"]]})
+            elif msg["role"] == "assistant":
+                history.append({"role": "model", "parts": [msg["content"]]})
+        
+        full_msg = f"{system_content}\n\n---\n\nUser message: {user_message}"
+        
+        # Try all 3 keys
+        for attempt in range(len(self.clients)):
+            try:
+                client = self.clients[self.current_index]
+                chat = client.start_chat(history=history[:-1])
+                
+                response = await chat.send_message_async(
+                    full_msg,
+                    generation_config=genai.types.GenerationConfig(
+                        max_output_tokens=max_tokens,
+                        temperature=temp,
+                    )
+                )
+                
+                return response.text
+                
+            except Exception as e:
+                error = str(e).lower()
+                
+                # Check if rate limit
+                if "quota" in error or "rate" in error or "429" in error:
+                    print(f"⚠️ Key #{self.current_index + 1} rate limited")
+                    
+                    if attempt < len(self.clients) - 1:
+                        self.rotate()  # Try next key
+                        continue
+                    else:
+                        raise Exception("All 3 API keys exhausted")
+                else:
+                    raise e
+        
+        raise Exception("All API keys failed")
+    
 class AIBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix=get_prefix, intents=discord.Intents.all(), help_command=None)
-        genai.configure(api_key=GEMINI_API_KEY)
-        self.gemini_client = genai.GenerativeModel(MODEL_NAME)
+        self.api_manager = APIManager(GEMINI_KEYS)
         self.memory = {}
         self.reaction_chance = 0.10
         self.last_response_time = 0
