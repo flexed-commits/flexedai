@@ -24,7 +24,7 @@ GEMINI_KEYS = [
     os.getenv('GOOGLE_API_KEY_3'),
 ]
 GEMINI_KEYS = [key for key in GEMINI_KEYS if key] 
-MODEL_NAME = "gemini-3-flash-preview" 
+MODEL_NAME = "gemini-2.0-flash-lite-preview-0805" 
 OWNER_ID = int(os.getenv('OWNER_ID'))
 OWNER_NAME = os.getenv('OWNER_NAME')
 DB_FILE = "bot_data.db"
