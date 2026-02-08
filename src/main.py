@@ -6040,8 +6040,7 @@ async def tictactoe_cmd(interaction: discord.Interaction, opponent: discord.Memb
         # Check blacklist
         user_data = db_query(
             "SELECT blacklisted FROM users WHERE user_id = ?",
-            (str(interaction.user.id),),
-            fetch_one=True
+            (str(interaction.user.id),)
         )
         if user_data and user_data[0] == 1:
             await interaction.response.send_message(
@@ -6120,20 +6119,17 @@ async def tictactoe_stats_cmd(interaction: discord.Interaction):
     
     total = db_query(
         "SELECT COUNT(*) FROM tictactoe_games WHERE (player1_id = ? OR player2_id = ?) AND status != 'active'",
-        (user_id, user_id),
-        fetch_one=True
+        (user_id, user_id)
     )[0]
     
     wins = db_query(
         "SELECT COUNT(*) FROM tictactoe_games WHERE winner_id = ? AND status IN ('finished', 'forfeit')",
-        (user_id,),
-        fetch_one=True
+        (user_id,)
     )[0]
     
     draws = db_query(
         "SELECT COUNT(*) FROM tictactoe_games WHERE (player1_id = ? OR player2_id = ?) AND status = 'draw'",
-        (user_id, user_id),
-        fetch_one=True
+        (user_id, user_id)
     )[0]
     
     losses = total - wins - draws
