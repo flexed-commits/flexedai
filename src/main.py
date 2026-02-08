@@ -4,7 +4,7 @@ import discord
 import hashlib, string
 from discord.ext import commands, tasks
 import os, time, datetime, json, sqlite3, asyncio
-import google.generativeai as genai
+from groq import AsyncGroq
 from collections import deque
 import random
 from patreon import PatreonPromoter
@@ -18,12 +18,12 @@ load_dotenv()
 user_cooldowns = {}
 # --- CONFIGURATION ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN') 
-GEMINI_KEYS = [
-    os.getenv('GOOGLE_API_KEY_1'),
-    os.getenv('GOOGLE_API_KEY_2'),
-    os.getenv('GOOGLE_API_KEY_3'),
+GROQ_KEYS = [
+    os.getenv('GROQ_API_KEY_1'),
+    os.getenv('GROQ_API_KEY_2'),
+    os.getenv('GROQ_API_KEY_3'),
 ]
-GEMINI_KEYS = [key for key in GEMINI_KEYS if key] 
+GROQ_KEYS = [key for key in GROQ_KEYS if key] 
 MODEL_NAME = "gemini-2.0-flash-lite-preview-0805" 
 OWNER_ID = int(os.getenv('OWNER_ID'))
 OWNER_NAME = os.getenv('OWNER_NAME')
@@ -1145,70 +1145,47 @@ async def get_prefix(bot, message):
     return res[0][0] if res and res[0][0] else "/"
 
 
-class APIManager:
-    def __init__(self, gemini_keys):
-        self.gemini_keys = gemini_keys
+class GroqAPIManager:
+    def __init__(self, groq_keys):
+        self.groq_keys = groq_keys
         self.current_index = 0
-        self.clients = []
-        
-        for key in gemini_keys:
-            genai.configure(api_key=key)
-            self.clients.append(genai.GenerativeModel(MODEL_NAME))
-        
-        print(f"✅ Loaded {len(self.clients)} Gemini API keys")
+        self.clients = [AsyncGroq(api_key=key) for key in groq_keys]
+        print(f"✅ Loaded {len(self.clients)} Groq API keys")
     
     def rotate(self):
         """Switch to next API key"""
         self.current_index = (self.current_index + 1) % len(self.clients)
-        print(f"🔄 Rotated to API key #{self.current_index + 1}")
+        print(f"🔄 Rotated to Groq key #{self.current_index + 1}")
     
     async def generate(self, messages, max_tokens=800, temp=0.7):
         """Generate response with automatic rotation on rate limit"""
         
-        # Extract messages
-        system_content = ""
-        user_message = ""
-        history = []
-        
-        for msg in messages:
-            if msg["role"] == "system":
-                system_content = msg["content"]
-            elif msg["role"] == "user":
-                user_message = msg["content"]
-                history.append({"role": "user", "parts": [msg["content"]]})
-            elif msg["role"] == "assistant":
-                history.append({"role": "model", "parts": [msg["content"]]})
-        
-        full_msg = f"{system_content}\n\n---\n\nUser message: {user_message}"
-        
-        # Try all 3 keys
+        # Try all keys
         for attempt in range(len(self.clients)):
             try:
                 client = self.clients[self.current_index]
-                chat = client.start_chat(history=history[:-1])
                 
-                response = await chat.send_message_async(
-                    full_msg,
-                    generation_config=genai.types.GenerationConfig(
-                        max_output_tokens=max_tokens,
-                        temperature=temp,
-                    )
+                response = await client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temp
                 )
                 
-                return response.text
+                return response.choices[0].message.content
                 
             except Exception as e:
                 error = str(e).lower()
                 
                 # Check if rate limit
-                if "quota" in error or "rate" in error or "429" in error:
-                    print(f"⚠️ Key #{self.current_index + 1} rate limited")
+                if "rate" in error or "429" in error or "limit" in error:
+                    print(f"⚠️ Groq key #{self.current_index + 1} rate limited")
                     
                     if attempt < len(self.clients) - 1:
-                        self.rotate()  # Try next key
+                        self.rotate()
                         continue
                     else:
-                        raise Exception("All 3 API keys exhausted")
+                        raise Exception("All Groq API keys exhausted")
                 else:
                     raise e
         
@@ -1217,7 +1194,7 @@ class APIManager:
 class AIBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix=get_prefix, intents=discord.Intents.all(), help_command=None)
-        self.api_manager = APIManager(GEMINI_KEYS)
+        self.api_manager = GroqAPIManager(GROQ_KEYS)
         self.memory = {}
         self.reaction_chance = 0.10
         self.last_response_time = 0
