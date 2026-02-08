@@ -28,7 +28,7 @@ GROQ_KEYS = [
     os.getenv('GROQ_API_KEY_7')
 ]
 GROQ_KEYS = [key for key in GROQ_KEYS if key] 
-MODEL_NAME = "gemini-2.0-flash-lite-preview-0805" 
+MODEL_NAME = "groq/compound" 
 OWNER_ID = int(os.getenv('OWNER_ID'))
 OWNER_NAME = os.getenv('OWNER_NAME')
 DB_FILE = "bot_data.db"
