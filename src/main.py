@@ -933,14 +933,17 @@ class DifficultySelect(discord.ui.Select):
         player2_id = "AI"
         
         # Create game in database
-        db_query(
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute(
             """INSERT INTO tictactoe_games 
             (player1_id, player2_id, current_turn, channel_id, difficulty, is_ai_game) 
             VALUES (?, ?, ?, ?, ?, 1)""",
             (player1_id, player2_id, player1_id, str(interaction.channel.id), difficulty)
         )
-        
-        game_id = db_query("SELECT last_insert_rowid()")[0]
+        game_id = c.lastrowid
+        conn.commit()
+        conn.close()
         
         # Create game view
         game_view = TicTacToe(
@@ -989,14 +992,17 @@ class TicTacToeInvite(discord.ui.View):
             return
         
         # Create game
-        db_query(
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute(
             """INSERT INTO tictactoe_games 
             (player1_id, player2_id, current_turn, channel_id, is_ai_game) 
             VALUES (?, ?, ?, ?, 0)""",
             (self.challenger_id, self.opponent_id, self.challenger_id, self.channel_id)
         )
-        
-        game_id = db_query("SELECT last_insert_rowid()")[0]
+        game_id = c.lastrowid
+        conn.commit()
+        conn.close()
         
         # Create game view
         game_view = TicTacToe(
