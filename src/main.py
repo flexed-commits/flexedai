@@ -206,6 +206,21 @@ def init_db():
         user_id TEXT PRIMARY KEY,
         last_report_time DATETIME
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS tictactoe_games (
+        game_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player1_id TEXT,
+        player2_id TEXT,
+        current_turn TEXT,
+        board TEXT DEFAULT '         ',
+        message_id TEXT,
+        channel_id TEXT,
+        difficulty TEXT,
+        is_ai_game INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        winner_id TEXT,
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        ended_at DATETIME
+    )''')
     conn.commit()
     conn.close()
 
