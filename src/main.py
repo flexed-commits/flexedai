@@ -940,7 +940,7 @@ class DifficultySelect(discord.ui.Select):
             (player1_id, player2_id, player1_id, str(interaction.channel.id), difficulty)
         )
         
-        game_id = db_query("SELECT last_insert_rowid()", fetch_one=True)[0]
+        game_id = db_query("SELECT last_insert_rowid()")[0]
         
         # Create game view
         game_view = TicTacToe(
@@ -996,7 +996,7 @@ class TicTacToeInvite(discord.ui.View):
             (self.challenger_id, self.opponent_id, self.challenger_id, self.channel_id)
         )
         
-        game_id = db_query("SELECT last_insert_rowid()", fetch_one=True)[0]
+        game_id = db_query("SELECT last_insert_rowid()")[0]
         
         # Create game view
         game_view = TicTacToe(
