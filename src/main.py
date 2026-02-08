@@ -6419,7 +6419,7 @@ async def tictactoe_cmd(interaction: discord.Interaction, opponent: discord.Memb
                 title="🎮 Tic-Tac-Toe Challenge",
                 description=(
                     f"**{interaction.user.mention}** has challenged you to a game!\n\n"
-                    f"⏰ Time to accept: <t:{int((datetime.datetime.utcnow() + datetime.timedelta(seconds=300)).timestamp())}:R>"
+                    f"⏰ Time to accept: <t:{int((datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=600)).timestamp())}:R>"
                 ),
                 color=discord.Color.blue()
             )
