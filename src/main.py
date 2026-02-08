@@ -544,6 +544,500 @@ async def log_suggestion_action(bot, suggestion_id, action, admin_name, reason=N
     except Exception as e:
         print(f"Error logging suggestion action: {e}")
 
+
+class TicTacToeButton(discord.ui.Button):
+    """Individual button for tic-tac-toe grid"""
+    def __init__(self, x: int, y: int, player1: str, player2: str, is_ai: bool = False):
+        super().__init__(style=discord.ButtonStyle.secondary, label='\u200b', row=y)
+        self.x = x
+        self.y = y
+        self.player1 = player1
+        self.player2 = player2
+        self.is_ai = is_ai
+
+    async def callback(self, interaction: discord.Interaction):
+        assert self.view is not None
+        view: TicTacToe = self.view
+        
+        # Check if it's the correct player's turn
+        current_player = view.player1 if view.current_player == 'X' else view.player2
+        if str(interaction.user.id) != current_player:
+            await interaction.response.send_message(
+                "❌ It's not your turn!", 
+                ephemeral=True
+            )
+            return
+
+        # Make the move
+        if view.board[self.y][self.x] == ' ':
+            view.board[self.y][self.x] = view.current_player
+            self.label = 'X' if view.current_player == 'X' else 'O'
+            self.style = discord.ButtonStyle.danger if view.current_player == 'X' else discord.ButtonStyle.success
+            self.disabled = True
+
+            # Check for winner
+            winner = view.check_winner()
+            
+            if winner:
+                await view.end_game(interaction, winner)
+            elif view.is_board_full():
+                await view.end_game(interaction, 'Tie')
+            else:
+                # Switch turns
+                view.current_player = 'O' if view.current_player == 'X' else 'X'
+                
+                # Update database
+                board_str = ''.join([''.join(row) for row in view.board])
+                current_turn = view.player2 if view.current_player == 'O' else view.player1
+                db_query(
+                    "UPDATE tictactoe_games SET board = ?, current_turn = ? WHERE game_id = ?",
+                    (board_str, current_turn, view.game_id)
+                )
+                
+                await interaction.response.edit_message(
+                    embed=view.get_game_embed(),
+                    view=view
+                )
+                
+                # If AI's turn, make AI move
+                if view.is_ai and view.current_player == 'O':
+                    await view.make_ai_move(interaction)
+
+
+class TicTacToe(discord.ui.View):
+    """Main tic-tac-toe game view"""
+    children: list[TicTacToeButton]
+
+    def __init__(self, player1: str, player2: str, is_ai: bool = False, difficulty: str = 'Hard', game_id: int = None):
+        super().__init__(timeout=600)
+        self.player1 = player1
+        self.player2 = player2
+        self.is_ai = is_ai
+        self.difficulty = difficulty
+        self.game_id = game_id
+        self.current_player = 'X'
+        self.board = [[' ' for _ in range(3)] for _ in range(3)]
+        
+        # Create 3x3 grid
+        for y in range(3):
+            for x in range(3):
+                self.add_item(TicTacToeButton(x, y, player1, player2, is_ai))
+        
+        # Add forfeit button
+        forfeit_btn = discord.ui.Button(
+            label='🏳️ Forfeit',
+            style=discord.ButtonStyle.danger,
+            row=3
+        )
+        forfeit_btn.callback = self.forfeit
+        self.add_item(forfeit_btn)
+
+    def check_winner(self) -> str | None:
+        """Check if there's a winner"""
+        # Check rows
+        for row in self.board:
+            if row[0] == row[1] == row[2] != ' ':
+                return row[0]
+        
+        # Check columns
+        for col in range(3):
+            if self.board[0][col] == self.board[1][col] == self.board[2][col] != ' ':
+                return self.board[0][col]
+        
+        # Check diagonals
+        if self.board[0][0] == self.board[1][1] == self.board[2][2] != ' ':
+            return self.board[0][0]
+        if self.board[0][2] == self.board[1][1] == self.board[2][0] != ' ':
+            return self.board[0][2]
+        
+        return None
+
+    def is_board_full(self) -> bool:
+        """Check if board is full"""
+        return all(cell != ' ' for row in self.board for cell in row)
+
+    def get_game_embed(self) -> discord.Embed:
+        """Create game state embed"""
+        embed = discord.Embed(
+            title="🎮 Tic-Tac-Toe",
+            color=discord.Color.blue()
+        )
+        
+        if self.is_ai:
+            embed.description = (
+                f"**Player X:** <@{self.player1}>\n"
+                f"**Player O:** AI ({self.difficulty})\n\n"
+                f"**Current Turn:** {'X' if self.current_player == 'X' else 'O'}"
+            )
+        else:
+            current_user = self.player1 if self.current_player == 'X' else self.player2
+            embed.description = (
+                f"**Player X:** <@{self.player1}>\n"
+                f"**Player O:** <@{self.player2}>\n\n"
+                f"**Current Turn:** <@{current_user}>"
+            )
+        
+        return embed
+
+    async def end_game(self, interaction: discord.Interaction, winner: str):
+        """Handle game end"""
+        # Disable all buttons
+        for child in self.children:
+            child.disabled = True
+        
+        if winner == 'Tie':
+            embed = discord.Embed(
+                title="🎮 Tic-Tac-Toe - Draw!",
+                description="🤝 It's a tie! Nobody wins.",
+                color=discord.Color.gold()
+            )
+            db_query(
+                "UPDATE tictactoe_games SET status = 'draw', ended_at = CURRENT_TIMESTAMP WHERE game_id = ?",
+                (self.game_id,)
+            )
+        else:
+            winner_id = self.player1 if winner == 'X' else self.player2
+            winner_symbol = '❌' if winner == 'X' else '⭕'
+            
+            if self.is_ai and winner == 'O':
+                winner_name = f"AI ({self.difficulty})"
+            else:
+                winner_name = f"<@{winner_id}>"
+            
+            embed = discord.Embed(
+                title=f"🎮 Tic-Tac-Toe - {winner_symbol} Wins!",
+                description=f"🎉 **Winner:** {winner_name}",
+                color=discord.Color.green()
+            )
+            
+            db_query(
+                "UPDATE tictactoe_games SET status = 'finished', winner_id = ?, ended_at = CURRENT_TIMESTAMP WHERE game_id = ?",
+                (winner_id, self.game_id)
+            )
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    async def forfeit(self, interaction: discord.Interaction):
+        """Handle forfeit button"""
+        # Check if user is in the game
+        if str(interaction.user.id) not in [self.player1, self.player2]:
+            await interaction.response.send_message(
+                "❌ You're not in this game!",
+                ephemeral=True
+            )
+            return
+        
+        # Determine winner (the other player)
+        winner_id = self.player2 if str(interaction.user.id) == self.player1 else self.player1
+        winner_symbol = 'O' if str(interaction.user.id) == self.player1 else 'X'
+        
+        # Disable all buttons
+        for child in self.children:
+            child.disabled = True
+        
+        if self.is_ai and winner_id == self.player2:
+            winner_name = f"AI ({self.difficulty})"
+        else:
+            winner_name = f"<@{winner_id}>"
+        
+        embed = discord.Embed(
+            title="🎮 Tic-Tac-Toe - Forfeit",
+            description=f"<@{interaction.user.id}> forfeited!\n🎉 **Winner:** {winner_name}",
+            color=discord.Color.orange()
+        )
+        
+        db_query(
+            "UPDATE tictactoe_games SET status = 'forfeit', winner_id = ?, ended_at = CURRENT_TIMESTAMP WHERE game_id = ?",
+            (winner_id, self.game_id)
+        )
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    def minimax(self, board: list, depth: int, is_maximizing: bool) -> int:
+        """Minimax algorithm for optimal AI moves"""
+        # Check terminal states
+        winner = self.check_winner_state(board)
+        if winner == 'O':
+            return 10 - depth
+        elif winner == 'X':
+            return depth - 10
+        elif self.is_board_full_state(board):
+            return 0
+        
+        if is_maximizing:
+            best_score = -float('inf')
+            for y in range(3):
+                for x in range(3):
+                    if board[y][x] == ' ':
+                        board[y][x] = 'O'
+                        score = self.minimax(board, depth + 1, False)
+                        board[y][x] = ' '
+                        best_score = max(score, best_score)
+            return best_score
+        else:
+            best_score = float('inf')
+            for y in range(3):
+                for x in range(3):
+                    if board[y][x] == ' ':
+                        board[y][x] = 'X'
+                        score = self.minimax(board, depth + 1, True)
+                        board[y][x] = ' '
+                        best_score = min(score, best_score)
+            return best_score
+
+    def check_winner_state(self, board: list) -> str | None:
+        """Check winner for a given board state"""
+        # Check rows
+        for row in board:
+            if row[0] == row[1] == row[2] != ' ':
+                return row[0]
+        
+        # Check columns
+        for col in range(3):
+            if board[0][col] == board[1][col] == board[2][col] != ' ':
+                return board[0][col]
+        
+        # Check diagonals
+        if board[0][0] == board[1][1] == board[2][2] != ' ':
+            return board[0][0]
+        if board[0][2] == board[1][1] == board[2][0] != ' ':
+            return board[0][2]
+        
+        return None
+
+    def is_board_full_state(self, board: list) -> bool:
+        """Check if board state is full"""
+        return all(cell != ' ' for row in board for cell in row)
+
+    def get_best_move(self) -> tuple[int, int] | None:
+        """Get best move using minimax"""
+        best_score = -float('inf')
+        best_move = None
+        
+        for y in range(3):
+            for x in range(3):
+                if self.board[y][x] == ' ':
+                    self.board[y][x] = 'O'
+                    score = self.minimax(self.board, 0, False)
+                    self.board[y][x] = ' '
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_move = (x, y)
+        
+        return best_move
+
+    def get_random_move(self) -> tuple[int, int] | None:
+        """Get random available move"""
+        available = []
+        for y in range(3):
+            for x in range(3):
+                if self.board[y][x] == ' ':
+                    available.append((x, y))
+        
+        return random.choice(available) if available else None
+
+    def get_ai_move_by_difficulty(self) -> tuple[int, int] | None:
+        """Get AI move based on difficulty"""
+        difficulty_chances = {
+            'Easy': 0.30,
+            'Middle': 0.50,
+            'Hard': 0.70,
+            'Insane': 0.85
+        }
+        
+        optimal_chance = difficulty_chances.get(self.difficulty, 0.70)
+        
+        # Decide whether to play optimally or randomly
+        if random.random() < optimal_chance:
+            return self.get_best_move()
+        else:
+            return self.get_random_move()
+
+    async def make_ai_move(self, interaction: discord.Interaction):
+        """Make AI move"""
+        await asyncio.sleep(1)  # Small delay for realism
+        
+        move = self.get_ai_move_by_difficulty()
+        if not move:
+            return
+        
+        x, y = move
+        self.board[y][x] = 'O'
+        
+        # Update button
+        for child in self.children:
+            if isinstance(child, TicTacToeButton) and child.x == x and child.y == y:
+                child.label = 'O'
+                child.style = discord.ButtonStyle.success
+                child.disabled = True
+                break
+        
+        # Check winner
+        winner = self.check_winner()
+        
+        if winner:
+            await self.end_game(interaction, winner)
+        elif self.is_board_full():
+            await self.end_game(interaction, 'Tie')
+        else:
+            # Switch back to player
+            self.current_player = 'X'
+            
+            # Update database
+            board_str = ''.join([''.join(row) for row in self.board])
+            db_query(
+                "UPDATE tictactoe_games SET board = ?, current_turn = ? WHERE game_id = ?",
+                (board_str, self.player1, self.game_id)
+            )
+            
+            await interaction.edit_original_response(
+                embed=self.get_game_embed(),
+                view=self
+            )
+
+
+class DifficultySelect(discord.ui.Select):
+    """Difficulty selection dropdown"""
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label="Easy",
+                description="AI has 30% win chance",
+                emoji="🟢"
+            ),
+            discord.SelectOption(
+                label="Middle",
+                description="AI has 50% win chance",
+                emoji="🟡"
+            ),
+            discord.SelectOption(
+                label="Hard",
+                description="AI has 70% win chance",
+                emoji="🟠"
+            ),
+            discord.SelectOption(
+                label="Insane",
+                description="AI has 85% win chance",
+                emoji="🔴"
+            )
+        ]
+        super().__init__(
+            placeholder="Select difficulty...",
+            options=options
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        difficulty = self.values[0]
+        player1_id = str(interaction.user.id)
+        player2_id = "AI"
+        
+        # Create game in database
+        db_query(
+            """INSERT INTO tictactoe_games 
+            (player1_id, player2_id, current_turn, channel_id, difficulty, is_ai_game) 
+            VALUES (?, ?, ?, ?, ?, 1)""",
+            (player1_id, player2_id, player1_id, str(interaction.channel.id), difficulty)
+        )
+        
+        game_id = db_query("SELECT last_insert_rowid()", fetch_one=True)[0]
+        
+        # Create game view
+        game_view = TicTacToe(
+            player1=player1_id,
+            player2=player2_id,
+            is_ai=True,
+            difficulty=difficulty,
+            game_id=game_id
+        )
+        
+        await interaction.response.edit_message(
+            embed=game_view.get_game_embed(),
+            view=game_view
+        )
+        
+        # Update message_id
+        msg = await interaction.original_response()
+        db_query(
+            "UPDATE tictactoe_games SET message_id = ? WHERE game_id = ?",
+            (str(msg.id), game_id)
+        )
+
+
+class DifficultyView(discord.ui.View):
+    """View containing difficulty selector"""
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(DifficultySelect())
+
+
+class TicTacToeInvite(discord.ui.View):
+    """Invite view for PvP games"""
+    def __init__(self, challenger_id: str, opponent_id: str, channel_id: str):
+        super().__init__(timeout=60)
+        self.challenger_id = challenger_id
+        self.opponent_id = opponent_id
+        self.channel_id = channel_id
+
+    @discord.ui.button(label="✅ Accept", style=discord.ButtonStyle.success)
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.opponent_id:
+            await interaction.response.send_message(
+                "❌ This invite is not for you!",
+                ephemeral=True
+            )
+            return
+        
+        # Create game
+        db_query(
+            """INSERT INTO tictactoe_games 
+            (player1_id, player2_id, current_turn, channel_id, is_ai_game) 
+            VALUES (?, ?, ?, ?, 0)""",
+            (self.challenger_id, self.opponent_id, self.challenger_id, self.channel_id)
+        )
+        
+        game_id = db_query("SELECT last_insert_rowid()", fetch_one=True)[0]
+        
+        # Create game view
+        game_view = TicTacToe(
+            player1=self.challenger_id,
+            player2=self.opponent_id,
+            is_ai=False,
+            game_id=game_id
+        )
+        
+        await interaction.response.edit_message(
+            embed=game_view.get_game_embed(),
+            view=game_view
+        )
+        
+        # Update message_id
+        msg = await interaction.original_response()
+        db_query(
+            "UPDATE tictactoe_games SET message_id = ? WHERE game_id = ?",
+            (str(msg.id), game_id)
+        )
+
+    @discord.ui.button(label="❌ Decline", style=discord.ButtonStyle.danger)
+    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.opponent_id:
+            await interaction.response.send_message(
+                "❌ This invite is not for you!",
+                ephemeral=True
+            )
+            return
+        
+        embed = discord.Embed(
+            title="🎮 Invite Declined",
+            description=f"<@{self.opponent_id}> declined the game.",
+            color=discord.Color.red()
+        )
+        
+        for child in self.children:
+            child.disabled = True
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+        
 class SuggestionActionModal(discord.ui.Modal):
     def __init__(self, action: str, suggestion_id: int, thread, original_embed, user_id: str):
         self.action = action
@@ -5533,6 +6027,129 @@ async def encode_lvl3_cmd(ctx, *, message: str):
             
     except Exception as e:
         await ctx.send(f"❌ **Encoding failed:** `{str(e)}`", ephemeral=True)
+
+@bot.tree.command(name="tic-tac-toe", description="Play Tic-Tac-Toe against AI or another player")
+async def tictactoe_cmd(interaction: discord.Interaction, opponent: discord.Member = None):
+    """
+    Start a tic-tac-toe game
+    
+    Parameters:
+    opponent: Challenge another user (leave empty to play against AI)
+    """
+    try:
+        # Check blacklist
+        user_data = db_query(
+            "SELECT blacklisted FROM users WHERE user_id = ?",
+            (str(interaction.user.id),),
+            fetch_one=True
+        )
+        if user_data and user_data[0] == 1:
+            await interaction.response.send_message(
+                "❌ You are blacklisted from using this bot.",
+                ephemeral=True
+            )
+            return
+        
+        if opponent:
+            # PvP mode
+            if opponent.id == interaction.user.id:
+                await interaction.response.send_message(
+                    "❌ You cannot play against yourself!",
+                    ephemeral=True
+                )
+                return
+            
+            if opponent.bot:
+                await interaction.response.send_message(
+                    "❌ You cannot play against bots!",
+                    ephemeral=True
+                )
+                return
+            
+            # Send invite
+            embed = discord.Embed(
+                title="🎮 Tic-Tac-Toe Challenge",
+                description=(
+                    f"<@{interaction.user.id}> has challenged <@{opponent.id}> to Tic-Tac-Toe!\n\n"
+                    f"<@{opponent.id}>, do you accept?"
+                ),
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text="This invite expires in 60 seconds")
+            
+            invite_view = TicTacToeInvite(
+                str(interaction.user.id),
+                str(opponent.id),
+                str(interaction.channel.id)
+            )
+            
+            await interaction.response.send_message(embed=embed, view=invite_view)
+        else:
+            # AI mode - show difficulty selector
+            embed = discord.Embed(
+                title="🎮 Tic-Tac-Toe - AI Mode",
+                description=(
+                    "Select your difficulty:\n\n"
+                    "🟢 **Easy** - AI has 30% win chance\n"
+                    "🟡 **Middle** - AI has 50% win chance\n"
+                    "🟠 **Hard** - AI has 70% win chance\n"
+                    "🔴 **Insane** - AI has 85% win chance"
+                ),
+                color=discord.Color.blue()
+            )
+            
+            await interaction.response.send_message(
+                embed=embed,
+                view=DifficultyView()
+            )
+    
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ An error occurred: {str(e)}",
+            ephemeral=True
+        )
+        print(f"Error in tictactoe command: {e}")
+
+
+# ===== 4. STATS COMMAND (OPTIONAL) =====
+
+@bot.tree.command(name="tictactoe-stats", description="View your tic-tac-toe statistics")
+async def tictactoe_stats_cmd(interaction: discord.Interaction):
+    """View your game stats"""
+    user_id = str(interaction.user.id)
+    
+    total = db_query(
+        "SELECT COUNT(*) FROM tictactoe_games WHERE (player1_id = ? OR player2_id = ?) AND status != 'active'",
+        (user_id, user_id),
+        fetch_one=True
+    )[0]
+    
+    wins = db_query(
+        "SELECT COUNT(*) FROM tictactoe_games WHERE winner_id = ? AND status IN ('finished', 'forfeit')",
+        (user_id,),
+        fetch_one=True
+    )[0]
+    
+    draws = db_query(
+        "SELECT COUNT(*) FROM tictactoe_games WHERE (player1_id = ? OR player2_id = ?) AND status = 'draw'",
+        (user_id, user_id),
+        fetch_one=True
+    )[0]
+    
+    losses = total - wins - draws
+    win_rate = (wins / total * 100) if total > 0 else 0
+    
+    embed = discord.Embed(
+        title="📊 Tic-Tac-Toe Stats",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="Games Played", value=str(total), inline=True)
+    embed.add_field(name="Wins", value=f"🏆 {wins}", inline=True)
+    embed.add_field(name="Losses", value=f"💀 {losses}", inline=True)
+    embed.add_field(name="Draws", value=f"🤝 {draws}", inline=True)
+    embed.add_field(name="Win Rate", value=f"📈 {win_rate:.1f}%", inline=True)
+    
+    await interaction.response.send_message(embed=embed)
 
 @bot.hybrid_command(name="decode", description="Decode message (works for all levels)")
 async def decode_cmd(ctx, *, encoded_message: str):
