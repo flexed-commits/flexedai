@@ -6428,8 +6428,7 @@ async def tictactoe_cmd(interaction: discord.Interaction, opponent: discord.Memb
             invite_view = TicTacToeInvite(
                 str(interaction.user.id),
                 str(opponent.id),
-                str(interaction.channel.id),
-                timeout=300
+                str(interaction.channel.id)
             )
             
             # Send with ping in content
