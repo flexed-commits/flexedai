@@ -977,7 +977,7 @@ class DifficultyView(discord.ui.View):
 class TicTacToeInvite(discord.ui.View):
     """Invite view for PvP games"""
     def __init__(self, challenger_id: str, opponent_id: str, channel_id: str):
-        super().__init__(timeout=60)
+        super().__init__(timeout=600)
         self.challenger_id = challenger_id
         self.opponent_id = opponent_id
         self.channel_id = channel_id
