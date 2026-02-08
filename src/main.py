@@ -1043,7 +1043,22 @@ class TicTacToeInvite(discord.ui.View):
             child.disabled = True
         
         await interaction.response.edit_message(embed=embed, view=self)
+
+    async def on_timeout(self):
+        """Called when the invitation expires after 300 seconds"""
+        expired_embed = discord.Embed(
+            title="⏱️ Invitation Expired",
+            description=f"~~**{self.challenger_mention}** has challenged **{self.opponent_mention}** to a game!~~\n\n"
+                        f"**This invitation has expired.**\n"
+                        f"Challenge them again to start a new game!",
+            color=discord.Color.red()
+        )
+        expired_embed.set_footer(text="Invitation expired after 5 minutes")
         
+        try:
+            await self.message.edit(content=None, embed=expired_embed, view=None)
+        except:
+            pass
 class SuggestionActionModal(discord.ui.Modal):
     def __init__(self, action: str, suggestion_id: int, thread, original_embed, user_id: str):
         self.action = action
@@ -6075,24 +6090,37 @@ async def tictactoe_cmd(interaction: discord.Interaction, opponent: discord.Memb
                 )
                 return
             
-            # Send invite
+            # Send invite with ping
             embed = discord.Embed(
                 title="🎮 Tic-Tac-Toe Challenge",
                 description=(
-                    f"<@{interaction.user.id}> has challenged <@{opponent.id}> to Tic-Tac-Toe!\n\n"
-                    f"<@{opponent.id}>, do you accept?"
+                    f"**{interaction.user.mention}** has challenged you to a game!\n\n"
+                    f"⏰ Time to accept: <t:{int((datetime.datetime.utcnow() + datetime.timedelta(seconds=300)).timestamp())}:R>"
                 ),
                 color=discord.Color.blue()
             )
-            embed.set_footer(text="This invite expires in 60 seconds")
+            embed.set_footer(text="Accept or decline the challenge below!")
             
             invite_view = TicTacToeInvite(
                 str(interaction.user.id),
                 str(opponent.id),
-                str(interaction.channel.id)
+                str(interaction.channel.id),
+                timeout=300
             )
             
-            await interaction.response.send_message(embed=embed, view=invite_view)
+            # Send with ping in content
+            await interaction.response.send_message(
+                content=f"{opponent.mention}",
+                embed=embed,
+                view=invite_view
+            )
+            
+            # Store message for timeout edit
+            message = await interaction.original_response()
+            invite_view.message = message
+            invite_view.challenger_mention = interaction.user.mention
+            invite_view.opponent_mention = opponent.mention
+            
         else:
             # AI mode - show difficulty selector
             embed = discord.Embed(
