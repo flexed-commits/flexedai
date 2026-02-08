@@ -1613,6 +1613,36 @@ class ChessInviteView(discord.ui.View):
         
         await interaction.message.edit(embed=decline_embed, view=None)
         await interaction.response.send_message("You declined the chess invite.", ephemeral=True)
+
+def increment_ai_chat_count(user_id, guild_id):
+    """Increment AI chat message count for leaderboard"""
+    today = datetime.date.today()
+    db_query('''
+        INSERT INTO leaderboard_ai_chat (user_id, guild_id, message_count, first_message_date)
+        VALUES (?, ?, 1, ?)
+        ON CONFLICT(user_id, guild_id) DO UPDATE SET
+        message_count = message_count + 1
+    ''', (str(user_id), str(guild_id), today))
+
+def increment_chess_wins(user_id, guild_id):
+    """Increment chess wins for leaderboard"""
+    today = datetime.date.today()
+    db_query('''
+        INSERT INTO leaderboard_chess (user_id, guild_id, wins, first_win_date)
+        VALUES (?, ?, 1, ?)
+        ON CONFLICT(user_id, guild_id) DO UPDATE SET
+        wins = wins + 1
+    ''', (str(user_id), str(guild_id), today))
+
+def increment_tictactoe_wins(user_id, guild_id, difficulty):
+    """Increment tic-tac-toe wins for leaderboard"""
+    today = datetime.date.today()
+    db_query('''
+        INSERT INTO leaderboard_tictactoe (user_id, guild_id, difficulty, wins, first_win_date)
+        VALUES (?, ?, ?, 1, ?)
+        ON CONFLICT(user_id, guild_id, difficulty) DO UPDATE SET
+        wins = wins + 1
+    ''', (str(user_id), str(guild_id), difficulty, today))
         
 # --- UTILITY FUNCTIONS ---
 async def log_to_channel(bot, channel_key, embed):
@@ -5380,6 +5410,261 @@ async def ping(ctx):
         status = "Slow"
     
     await ctx.send(f"🏓 **Pong!** {emoji}\n**Latency:** {latency}ms ({status})")
+
+@bot.hybrid_command(name="leaderboard", description="View server or global leaderboards")
+async def leaderboard(ctx, server_leaderboard: bool = True):
+    """
+    Display leaderboards for various game modes
+    
+    Parameters:
+    -----------
+    server_leaderboard: bool
+        True for server leaderboard, False for global leaderboard
+    """
+    await ctx.defer()
+    
+    # Create the category selection view
+    class LeaderboardCategoryView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=60)
+            self.selected_category = None
+            
+        @discord.ui.select(
+            placeholder="Choose a leaderboard category",
+            options=[
+                discord.SelectOption(
+                    label="Chat with AI",
+                    description="Messages exchanged with AI",
+                    emoji="💬",
+                    value="ai_chat"
+                ),
+                discord.SelectOption(
+                    label="Chess",
+                    description="Wins against Stockfish",
+                    emoji="♟️",
+                    value="chess"
+                ),
+                discord.SelectOption(
+                    label="Tic-Tac-Toe",
+                    description="Wins in Tic-Tac-Toe",
+                    emoji="⭕",
+                    value="tictactoe"
+                )
+            ]
+        )
+        async def category_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message("❌ This is not your leaderboard!", ephemeral=True)
+                return
+                
+            self.selected_category = select.values[0]
+            
+            if self.selected_category == "ai_chat":
+                await show_ai_chat_leaderboard(interaction, server_leaderboard)
+            elif self.selected_category == "chess":
+                await show_chess_leaderboard(interaction, server_leaderboard)
+            elif self.selected_category == "tictactoe":
+                await show_tictactoe_difficulty_select(interaction, server_leaderboard)
+    
+    # AI Chat Leaderboard
+    async def show_ai_chat_leaderboard(interaction, is_server):
+        today = datetime.date.today()
+        
+        if is_server:
+            query = '''
+                SELECT user_id, message_count 
+                FROM leaderboard_ai_chat 
+                WHERE guild_id = ? AND DATE(first_message_date) >= DATE(?)
+                ORDER BY message_count DESC 
+                LIMIT 10
+            '''
+            results = db_query(query, (str(ctx.guild.id), today), fetch=True)
+            title = f"🏆 {ctx.guild.name} - AI Chat Leaderboard"
+        else:
+            query = '''
+                SELECT user_id, SUM(message_count) as total
+                FROM leaderboard_ai_chat 
+                WHERE DATE(first_message_date) >= DATE(?)
+                GROUP BY user_id 
+                ORDER BY total DESC 
+                LIMIT 10
+            '''
+            results = db_query(query, (today,), fetch=True)
+            title = "🌍 Global AI Chat Leaderboard"
+        
+        embed = discord.Embed(
+            title=title,
+            description=f"*Tracking started: {today}*",
+            color=discord.Color.blue()
+        )
+        
+        if results:
+            leaderboard_text = ""
+            for idx, row in enumerate(results, 1):
+                user_id = row[0]
+                count = row[1]
+                
+                try:
+                    user = await bot.fetch_user(int(user_id))
+                    name = user.name
+                except:
+                    name = f"User {user_id}"
+                
+                medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"**{idx}.**"
+                leaderboard_text += f"{medal} {name} - **{count}** messages\n"
+            
+            embed.add_field(name="Top Players", value=leaderboard_text, inline=False)
+        else:
+            embed.description = "No data available yet. Start chatting with the AI!"
+        
+        await interaction.response.edit_message(embed=embed, view=None)
+    
+    # Chess Leaderboard
+    async def show_chess_leaderboard(interaction, is_server):
+        today = datetime.date.today()
+        
+        if is_server:
+            query = '''
+                SELECT user_id, wins 
+                FROM leaderboard_chess 
+                WHERE guild_id = ? AND DATE(first_win_date) >= DATE(?)
+                ORDER BY wins DESC 
+                LIMIT 10
+            '''
+            results = db_query(query, (str(ctx.guild.id), today), fetch=True)
+            title = f"🏆 {ctx.guild.name} - Chess Leaderboard"
+        else:
+            query = '''
+                SELECT user_id, SUM(wins) as total
+                FROM leaderboard_chess 
+                WHERE DATE(first_win_date) >= DATE(?)
+                GROUP BY user_id 
+                ORDER BY total DESC 
+                LIMIT 10
+            '''
+            results = db_query(query, (today,), fetch=True)
+            title = "🌍 Global Chess Leaderboard"
+        
+        embed = discord.Embed(
+            title=title,
+            description=f"*Wins against Stockfish • Tracking started: {today}*",
+            color=discord.Color.gold()
+        )
+        
+        if results:
+            leaderboard_text = ""
+            for idx, row in enumerate(results, 1):
+                user_id = row[0]
+                wins = row[1]
+                
+                try:
+                    user = await bot.fetch_user(int(user_id))
+                    name = user.name
+                except:
+                    name = f"User {user_id}"
+                
+                medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"**{idx}.**"
+                leaderboard_text += f"{medal} {name} - **{wins}** wins\n"
+            
+            embed.add_field(name="Top Players", value=leaderboard_text, inline=False)
+        else:
+            embed.description = "No wins recorded yet. Beat Stockfish to appear here!"
+        
+        await interaction.response.edit_message(embed=embed, view=None)
+    
+    # Tic-Tac-Toe Difficulty Selection
+    async def show_tictactoe_difficulty_select(interaction, is_server):
+        class DifficultyView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=60)
+            
+            @discord.ui.select(
+                placeholder="Select difficulty level",
+                options=[
+                    discord.SelectOption(label="Easy", emoji="🟢", value="easy"),
+                    discord.SelectOption(label="Medium", emoji="🟡", value="medium"),
+                    discord.SelectOption(label="Hard", emoji="🔴", value="hard"),
+                    discord.SelectOption(label="Impossible", emoji="💀", value="impossible")
+                ]
+            )
+            async def difficulty_select(self, inter: discord.Interaction, select: discord.ui.Select):
+                if inter.user.id != ctx.author.id:
+                    await inter.response.send_message("❌ This is not your leaderboard!", ephemeral=True)
+                    return
+                
+                difficulty = select.values[0]
+                await show_tictactoe_leaderboard(inter, is_server, difficulty)
+        
+        embed = discord.Embed(
+            title="⭕ Tic-Tac-Toe Leaderboard",
+            description="Please select a difficulty level:",
+            color=discord.Color.purple()
+        )
+        await interaction.response.edit_message(embed=embed, view=DifficultyView())
+    
+    # Tic-Tac-Toe Leaderboard by Difficulty
+    async def show_tictactoe_leaderboard(interaction, is_server, difficulty):
+        today = datetime.date.today()
+        
+        if is_server:
+            query = '''
+                SELECT user_id, wins 
+                FROM leaderboard_tictactoe 
+                WHERE guild_id = ? AND difficulty = ? AND DATE(first_win_date) >= DATE(?)
+                ORDER BY wins DESC 
+                LIMIT 10
+            '''
+            results = db_query(query, (str(ctx.guild.id), difficulty, today), fetch=True)
+            title = f"🏆 {ctx.guild.name} - Tic-Tac-Toe ({difficulty.capitalize()})"
+        else:
+            query = '''
+                SELECT user_id, SUM(wins) as total
+                FROM leaderboard_tictactoe 
+                WHERE difficulty = ? AND DATE(first_win_date) >= DATE(?)
+                GROUP BY user_id 
+                ORDER BY total DESC 
+                LIMIT 10
+            '''
+            results = db_query(query, (difficulty, today), fetch=True)
+            title = f"🌍 Global Tic-Tac-Toe ({difficulty.capitalize()})"
+        
+        embed = discord.Embed(
+            title=title,
+            description=f"*Tracking started: {today}*",
+            color=discord.Color.purple()
+        )
+        
+        if results:
+            leaderboard_text = ""
+            for idx, row in enumerate(results, 1):
+                user_id = row[0]
+                wins = row[1]
+                
+                try:
+                    user = await bot.fetch_user(int(user_id))
+                    name = user.name
+                except:
+                    name = f"User {user_id}"
+                
+                medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"**{idx}.**"
+                leaderboard_text += f"{medal} {name} - **{wins}** wins\n"
+            
+            embed.add_field(name="Top Players", value=leaderboard_text, inline=False)
+        else:
+            embed.description = f"No wins recorded yet at {difficulty} difficulty!"
+        
+        await interaction.response.edit_message(embed=embed, view=None)
+    
+    # Show initial category selection
+    scope = "Server" if server_leaderboard else "Global"
+    embed = discord.Embed(
+        title=f"📊 {scope} Leaderboards",
+        description="Select a category to view:",
+        color=discord.Color.blurple()
+    )
+    
+    view = LeaderboardCategoryView()
+    await ctx.send(embed=embed, view=view)
 
 @bot.hybrid_command(name="invite", description=f"Add {BOT_NAME} to your own server!")
 async def invite(ctx):
