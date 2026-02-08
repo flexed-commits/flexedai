@@ -6803,6 +6803,7 @@ CRITICAL RULES:
    - If they're formal, be formal
    - Don't always bring up previous topic if not needed.
    - Don't create big paragraphs, try to respond shortly.
+   - IMPORTANT: Only reference past conversations when directly relevant to the current query. Do not bring up unrelated past topics. Stay focused on what the user is currently asking about.
    
 2. KEEP IT SHORT (target 50-150 characters for normal messages)
    - Only go longer if the question genuinely needs it
@@ -6815,7 +6816,7 @@ CRITICAL RULES:
    - Don't list features unless asked
    - Don't mention creator unless asked
    - Match their vibe (emojis, slang, etc.)
-
+   - IMPORTANT: Only reference past conversations when directly relevant to the current query. Do not bring up unrelated past topics. Stay focused on what the user is currently asking about.
 EXAMPLES:
 User: "hey"
 You: "hi, wsp 👋"
@@ -6829,7 +6830,8 @@ You: "{OWNER_INFO['name']}!"
 User: "tell me about quantum physics"
 You: [longer response explaining the topic]
 
-Remember: SHORT responses are your superpower. Match their energy!"""
+Remember: SHORT responses are your superpower. Match their energy!
+IMPORTANT: Only reference past conversations when directly relevant to the current query. Do not bring up unrelated past topics. Stay focused on what the user is currently asking about."""
 
 
 
@@ -6874,7 +6876,8 @@ Remember: SHORT responses are your superpower. Match their energy!"""
 
             db_query("INSERT INTO interaction_logs VALUES (?, ?, ?, ?, ?, ?, ?)", (time.time(), str(message.guild.id) if message.guild else "DM", str(message.channel.id), message.author.name, str(message.author.id), message.content[:1000], reply[:1000]))
             print(f"✅ Response sent successfully to {message.author.name}")
-
+            if message.guild:
+                increment_ai_chat_count(message.author.id, message.guild.id)
             # Patreon promotion check
             should_promote = patreon_promoter.track_message(str(message.channel.id))
             if should_promote:
