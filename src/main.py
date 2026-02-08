@@ -6464,6 +6464,8 @@ CRITICAL RULES:
    - If they send 5 words, respond with ~5-15 words
    - If they're casual, be casual
    - If they're formal, be formal
+   - Don't always bring up previous topic if not needed.
+   - Don't create big paragraphs, try to respond shortly.
    
 2. KEEP IT SHORT (target 50-150 characters for normal messages)
    - Only go longer if the question genuinely needs it
