@@ -1268,7 +1268,7 @@ The bot has automatically left your server. You cannot re-add this bot while bla
                 title="🚫 Blacklisted Guild Attempted Join",
                 description=f"Bot was added to a blacklisted server and auto-left.",
                 color=discord.Color.dark_red(),
-                timestamp=datetime.datetime.utcnow()
+                timestamp=datetime.datetime.now(datetime.timezone.utc)
             )
             log_embed.add_field(name="🏰 Server Name", value=guild.name, inline=True)
             log_embed.add_field(name="🆔 Server ID", value=f"`{guild.id}`", inline=True)
@@ -1298,7 +1298,7 @@ The bot has automatically left your server. You cannot re-add this bot while bla
         title="🟢 Bot Joined Server",
         description=f"{BOT_NAME} has been added to a new server!",
         color=discord.Color.green(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     embed.add_field(name="📋 Server Name", value=guild.name, inline=True)
     embed.add_field(name="🆔 Server ID", value=f"`{guild.id}`", inline=True)
@@ -1503,7 +1503,7 @@ async def on_guild_remove(guild):
         title="🔴 Bot Left Server",
         description=f"{BOT_NAME} has been removed from a server.",
         color=discord.Color.red(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     embed.add_field(name="📋 Server Name", value=guild.name, inline=True)
     embed.add_field(name="🆔 Server ID", value=f"`{guild.id}`", inline=True)
@@ -2298,7 +2298,7 @@ async def add_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No re
         title="⚡ Strike Issued" if not is_banned else "🚫 User Auto-Blacklisted (3 Strikes)",
         description=f"Strike(s) have been added to a user.",
         color=discord.Color.orange() if not is_banned else discord.Color.dark_red(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
     log_embed.add_field(name="⚡ Strikes Added", value=str(amount), inline=True)
@@ -2364,7 +2364,7 @@ async def remove_strike(ctx, user_id: str, amount: int = 1, *, reason: str = "No
         title="✅ Strike(s) Removed" if not was_unbanned else "🎉 User Unbanned (Strike Removal)",
         description=f"Strike(s) have been removed from a user.",
         color=discord.Color.green(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
     log_embed.add_field(name="⚡ Strikes Removed", value=str(amount), inline=True)
@@ -2401,7 +2401,7 @@ async def reaction_stats(ctx):
     total = db_query("SELECT COUNT(*) FROM reaction_responses", fetch=True)[0][0]
     
     # Get recent reactions (last 24 hours)
-    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=24)).isoformat()
+    cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)).isoformat()
     recent = db_query(
         "SELECT COUNT(*) FROM reaction_responses WHERE timestamp > ?",
         (cutoff,),
@@ -2494,7 +2494,7 @@ async def clear_reaction_log(ctx, days: int = None):
     """Clear reaction response logs, optionally older than X days"""
     
     if days:
-        cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).isoformat()
+        cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).isoformat()
         count_before = db_query("SELECT COUNT(*) FROM reaction_responses WHERE timestamp < ?", (cutoff,), fetch=True)[0][0]
         db_query("DELETE FROM reaction_responses WHERE timestamp < ?", (cutoff,))
         await ctx.send(f"🗑️ **Cleared {count_before} reaction logs older than {days} days.**")
@@ -2546,7 +2546,7 @@ async def clear_strike(ctx, user_id: str, *, reason: str = "Strikes cleared by a
         title="🧹 All Strikes Cleared",
         description=f"All strikes have been cleared for a user.",
         color=discord.Color.blue(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
     log_embed.add_field(name="📊 Previous Strikes", value=f"{previous_strikes}/3", inline=True)
@@ -2690,7 +2690,7 @@ async def bw_add(ctx, word: str):
         title="🔇 Banned Word Added",
         description=f"A new word has been added to the filter.",
         color=discord.Color.red(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="🔤 Word", value=f"`{word_lower}`", inline=True)
     log_embed.add_field(name="⚖️ Added By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
@@ -2719,7 +2719,7 @@ async def bw_rem(ctx, word: str):
         title="✅ Banned Word Removed",
         description=f"A word has been removed from the filter.",
         color=discord.Color.green(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="🔤 Word", value=f"`{word_lower}`", inline=True)
     log_embed.add_field(name="⚖️ Removed By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
@@ -2801,7 +2801,7 @@ You have been granted permission to bypass the word filter in {BOT_NAME} Bot.
         title="🔓 Word Filter Bypass Granted",
         description="A user has been granted word filter bypass privileges.",
         color=discord.Color.blue(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
     log_embed.add_field(name="⚖️ Granted By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
@@ -2868,7 +2868,7 @@ Your word filter bypass privileges have been revoked.
         title="🔒 Word Filter Bypass Revoked",
         description="Word filter bypass has been removed from a user.",
         color=discord.Color.orange(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="👤 User ID", value=f"`{user_id}`", inline=True)
     log_embed.add_field(name="⚖️ Revoked By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
@@ -2921,7 +2921,7 @@ async def clear_admin_logs(ctx):
         title="🗑️ Admin Logs Cleared",
         description=f"All admin logs have been cleared.",
         color=discord.Color.orange(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(name="📊 Logs Cleared", value=str(count), inline=True)
     log_embed.add_field(name="⚖️ Cleared By", value=f"{ctx.author.mention} (`{ctx.author.id}`)", inline=True)
@@ -3617,7 +3617,7 @@ async def view_report_detail(ctx, report_id: int):
         title=f"📋 Report Details - #{r_id}",
         description=f"**Status:** {status.upper()}" + (" 🗑️ **(DELETED/ARCHIVED)**" if is_deleted else ""),
         color=embed_color,
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     
     embed.add_field(name="👤 Reported User", value=f"<@{reported_id}>\n`{reported_id}`\n{reported_name}", inline=True)
@@ -3991,7 +3991,7 @@ Thank you for your service! 🙏
         title="📋 Bot Admin Removed",
         description="A bot administrator has been removed from their position.",
         color=discord.Color.orange(),
-        timestamp=datetime.datetime.utcnow()
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
     )
     log_embed.add_field(
         name="👤 Removed Admin", 
@@ -4408,7 +4408,7 @@ async def announce(ctx, *, message: str):
     configured_guild_ids = {str(uc[0]) for uc in updates_channels} if updates_channels else set()
     
     # Get current timestamp for the embed
-    current_time = datetime.datetime.utcnow()
+    current_time = datetime.datetime.now(datetime.timezone.utc)
     
     # Create announcement embed
     announcement_embed = discord.Embed(
@@ -4417,7 +4417,7 @@ async def announce(ctx, *, message: str):
         color=discord.Color.blue(),
         timestamp=current_time
     )
-    announcement_embed.set_footer(text=f"Announcement from {ctx.author.name} • {get_discord_timestamp(current_time, style='F')}")
+    announcement_embed.set_footer(text=f"Announcement from {ctx.author.name}")
     announcement_embed.set_author(name=BOT_NAME, icon_url=bot.user.display_avatar.url)
     
     # Statistics
@@ -4870,7 +4870,7 @@ async def command_ids(ctx):
             title="Slash Command IDs",
             description="All registered slash commands and their Discord IDs",
             color=discord.Color.blue(),
-            timestamp=datetime.datetime.utcnow()
+            timestamp=datetime.datetime.now(datetime.timezone.utc)
         )
         
         # Sort commands alphabetically
