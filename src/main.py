@@ -221,6 +221,30 @@ def init_db():
         started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         ended_at DATETIME
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS leaderboard_ai_chat (
+        user_id TEXT,
+        guild_id TEXT,
+        message_count INTEGER DEFAULT 0,
+        first_message_date DATE DEFAULT CURRENT_DATE,
+        PRIMARY KEY (user_id, guild_id)
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS leaderboard_chess (
+        user_id TEXT,
+        guild_id TEXT,
+        wins INTEGER DEFAULT 0,
+        first_win_date DATE DEFAULT CURRENT_DATE,
+        PRIMARY KEY (user_id, guild_id)
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS leaderboard_tictactoe (
+        user_id TEXT,
+        guild_id TEXT,
+        difficulty TEXT,
+        wins INTEGER DEFAULT 0,
+        first_win_date DATE DEFAULT CURRENT_DATE,
+        PRIMARY KEY (user_id, guild_id, difficulty)
+    )''')
     conn.commit()
     conn.close()
 
