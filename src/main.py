@@ -6044,10 +6044,14 @@ async def tictactoe_cmd(interaction: discord.Interaction, opponent: discord.Memb
     """
     try:
         # Check blacklist
-        user_data = db_query(
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        user_data = c.execute(
             "SELECT blacklisted FROM users WHERE user_id = ?",
             (str(interaction.user.id),)
-        )
+        ).fetchone()
+        conn.close()
+        
         if user_data and user_data[0] == 1:
             await interaction.response.send_message(
                 "❌ You are blacklisted from using this bot.",
@@ -6116,27 +6120,32 @@ async def tictactoe_cmd(interaction: discord.Interaction, opponent: discord.Memb
         print(f"Error in tictactoe command: {e}")
 
 
-# ===== 4. STATS COMMAND (OPTIONAL) =====
+
 
 @bot.tree.command(name="tictactoe-stats", description="View your tic-tac-toe statistics")
 async def tictactoe_stats_cmd(interaction: discord.Interaction):
     """View your game stats"""
     user_id = str(interaction.user.id)
     
-    total = db_query(
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    total = c.execute(
         "SELECT COUNT(*) FROM tictactoe_games WHERE (player1_id = ? OR player2_id = ?) AND status != 'active'",
         (user_id, user_id)
-    )[0]
+    ).fetchone()[0]
     
-    wins = db_query(
+    wins = c.execute(
         "SELECT COUNT(*) FROM tictactoe_games WHERE winner_id = ? AND status IN ('finished', 'forfeit')",
         (user_id,)
-    )[0]
+    ).fetchone()[0]
     
-    draws = db_query(
+    draws = c.execute(
         "SELECT COUNT(*) FROM tictactoe_games WHERE (player1_id = ? OR player2_id = ?) AND status = 'draw'",
         (user_id, user_id)
-    )[0]
+    ).fetchone()[0]
+    
+    conn.close()
     
     losses = total - wins - draws
     win_rate = (wins / total * 100) if total > 0 else 0
