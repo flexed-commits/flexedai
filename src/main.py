@@ -5871,7 +5871,7 @@ Remember: SHORT responses are your superpower. Match their energy!"""
 
         msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
 
-try:
+        try:
             print(f"🤖 Generating AI response for {message.author.name}...")
             
             # Use API manager with auto-rotation
