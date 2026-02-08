@@ -5666,16 +5666,13 @@ Examples of good responses: "👍", "😂 👍", "🎉", "❤️", "🤔", "none
 Your response:"""
 
         # Gemini API call for reaction suggestions
-        chat = bot.gemini_client.start_chat(history=[])
-        reaction_res = await chat.send_message_async(
-            reaction_prompt,
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=50,
-                temperature=0.7
-            )
+        suggested_reactions = await bot.api_manager.generate(
+            messages=[{"role": "user", "content": reaction_prompt}],
+            max_tokens=50,
+            temp=0.7
         )
         
-        suggested_reactions = reaction_res.text.strip()
+        suggested_reactions = suggested_reactions.strip()
         
         if suggested_reactions.lower() == "none":
             return
@@ -5874,35 +5871,16 @@ Remember: SHORT responses are your superpower. Match their energy!"""
 
         msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
 
-        try:
+try:
             print(f"🤖 Generating AI response for {message.author.name}...")
             
-            # Convert messages to Gemini format
-            gemini_history = []
-            system_content = ""
-            user_message = ""
-            
-            for msg in msgs:
-                if msg["role"] == "system":
-                    system_content = msg["content"]
-                elif msg["role"] == "user":
-                    user_message = msg["content"]
-                    gemini_history.append({"role": "user", "parts": [msg["content"]]})
-                elif msg["role"] == "assistant":
-                    gemini_history.append({"role": "model", "parts": [msg["content"]]})
-            
-            # Start chat with history (excluding the last user message)
-            chat = bot.gemini_client.start_chat(history=gemini_history[:-1])
-            full_message = f"{system_content}\n\n---\n\nUser message: {user_message}"
-            # Generate response
-            response = await chat.send_message_async(
-                full_message,
-                generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=800,
-                    temperature=0.7,
-                )
+            # Use API manager with auto-rotation
+            reply = await bot.api_manager.generate(
+                messages=msgs,
+                max_tokens=800,
+                temp=0.7
             )
-            reply = response.text
+            
             print(f"✅ Got AI response ({len(reply)} chars)")
             
             if was_truncated:
@@ -6335,17 +6313,14 @@ GENERATE YOUR RESPONSE NOW:"""
             
             print(f"🤖 Generating AI reaction response...")
             
-            # Generate AI response with Gemini
-            chat = bot.gemini_client.start_chat(history=[])
-            res = await chat.send_message_async(
-                system_prompt,
-                generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=200,
-                    temperature=0.9  # High creativity
-                )
+            # Use API manager with auto-rotation
+            ai_response = await bot.api_manager.generate(
+                messages=messages,
+                max_tokens=200,
+                temp=0.9
             )
             
-            ai_response = res.text.strip()
+            ai_response = ai_response.strip()
 
             
             # Clean up any accidental mentions or emoji repetitions
