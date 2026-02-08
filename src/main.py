@@ -22,6 +22,10 @@ GROQ_KEYS = [
     os.getenv('GROQ_API_KEY_1'),
     os.getenv('GROQ_API_KEY_2'),
     os.getenv('GROQ_API_KEY_3'),
+    os.getenv('GROQ_API_KEY_4'),
+    os.getenv('GROQ_API_KEY_5'),
+    os.getenv('GROQ_API_KEY_6'),
+    os.getenv('GROQ_API_KEY_7')
 ]
 GROQ_KEYS = [key for key in GROQ_KEYS if key] 
 MODEL_NAME = "gemini-2.0-flash-lite-preview-0805" 
