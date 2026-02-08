@@ -738,6 +738,13 @@ class TicTacToe(discord.ui.View):
                 "UPDATE tictactoe_games SET status = 'finished', winner_id = ?, ended_at = CURRENT_TIMESTAMP WHERE game_id = ?",
                 (winner_id, self.game_id)
             )
+            if winner_id and winner_id != self.player2 or (not self.is_ai):
+                try:
+                    guild_id = interaction.guild.id if interaction.guild else None
+                    if guild_id and winner_id != 'AI':
+                        increment_tictactoe_wins(int(winner_id), guild_id, self.difficulty)
+                except:
+                    pass
         
         await interaction.response.edit_message(embed=embed, view=self)
 
@@ -1373,7 +1380,7 @@ class ChessMoveModal(discord.ui.Modal):
                 game_over = True
                 result_text = "🤝 Draw by threefold repetition."
             
-            # If playing against AI and game is not over, make AI move
+# If playing against AI and game is not over, make AI move
             ai_move_text = ""
             if self.is_vs_ai and not game_over:
                 # Simple AI: random legal move (you can integrate real Stockfish here)
@@ -1395,6 +1402,14 @@ class ChessMoveModal(discord.ui.Modal):
             # Update database
             if game_over:
                 end_game(self.game_id, winner_id)
+                # Increment chess leaderboard if player won against AI
+                if winner_id and winner_id != "stockfish" and self.is_vs_ai:
+                    try:
+                        guild_id = interaction.guild.id if interaction.guild else None
+                        if guild_id:
+                            increment_chess_wins(int(winner_id), guild_id)
+                    except Exception as e:
+                        print(f"Failed to increment chess leaderboard: {e}")
             else:
                 # Switch turn
                 if self.is_vs_ai:
