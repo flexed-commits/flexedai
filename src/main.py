@@ -5426,6 +5426,11 @@ async def ping(ctx):
     
     await ctx.send(f"🏓 **Pong!** {emoji}\n**Latency:** {latency}ms ({status})")
 
+# Updated Leaderboard Command - Keeps dropdown visible when category is selected
+# Tic-Tac-Toe section now shows ONLY leaderboards with two rows of dropdowns
+
+# ==================== LEADERBOARD COMMAND ====================
+
 @bot.hybrid_command(name="leaderboard", description="View server or global leaderboards")
 async def leaderboard(ctx, server_leaderboard: bool = True):
     """
@@ -5438,10 +5443,10 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
     """
     await ctx.defer()
     
-    # Create the category selection view
+    # Create the category selection view (PERSISTENT - doesn't get removed)
     class LeaderboardCategoryView(discord.ui.View):
         def __init__(self):
-            super().__init__(timeout=60)
+            super().__init__(timeout=180)  # Increased timeout
             self.selected_category = None
             
         @discord.ui.select(
@@ -5474,15 +5479,16 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                 
             self.selected_category = select.values[0]
             
+            # Edit message but KEEP the view (dropdown stays visible)
             if self.selected_category == "ai_chat":
-                await show_ai_chat_leaderboard(interaction, server_leaderboard)
+                await show_ai_chat_leaderboard(interaction, server_leaderboard, self)
             elif self.selected_category == "chess":
-                await show_chess_leaderboard(interaction, server_leaderboard)
+                await show_chess_leaderboard(interaction, server_leaderboard, self)
             elif self.selected_category == "tictactoe":
-                await show_tictactoe_difficulty_select(interaction, server_leaderboard)
+                await show_tictactoe_difficulty_select(interaction, server_leaderboard, self)
     
-    # AI Chat Leaderboard
-    async def show_ai_chat_leaderboard(interaction, is_server):
+    # AI Chat Leaderboard - NOW ACCEPTS VIEW PARAMETER
+    async def show_ai_chat_leaderboard(interaction, is_server, view):
         today = datetime.date.today()
         
         if is_server:
@@ -5532,10 +5538,11 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
         else:
             embed.description = "No data available yet. Start chatting with the AI!"
         
-        await interaction.response.edit_message(embed=embed, view=None)
+        # Keep the view (dropdown) visible
+        await interaction.response.edit_message(embed=embed, view=view)
     
-    # Chess Leaderboard
-    async def show_chess_leaderboard(interaction, is_server):
+    # Chess Leaderboard - NOW ACCEPTS VIEW PARAMETER
+    async def show_chess_leaderboard(interaction, is_server, view):
         today = datetime.date.today()
         
         if is_server:
@@ -5585,14 +5592,20 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
         else:
             embed.description = "No wins recorded yet. Beat Stockfish to appear here!"
         
-        await interaction.response.edit_message(embed=embed, view=None)
+        # Keep the view (dropdown) visible
+        await interaction.response.edit_message(embed=embed, view=view)
     
-    # Tic-Tac-Toe Difficulty Selection
-    async def show_tictactoe_difficulty_select(interaction, is_server):
-        class DifficultyView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=60)
-            
+    # Tic-Tac-Toe Difficulty Selection - NOW WITH TWO ROWS OF DROPDOWNS
+    async def show_tictactoe_difficulty_select(interaction, is_server, parent_view):
+        # Create NEW view with BOTH category dropdown AND difficulty dropdown
+        class TicTacToeLeaderboardView(discord.ui.View):
+            def __init__(self, parent_view):
+                super().__init__(timeout=180)
+                self.parent_view = parent_view
+                
+                # Add the category dropdown from parent (FIRST ROW)
+                self.add_item(parent_view.children[0])
+                
             @discord.ui.select(
                 placeholder="Select difficulty level",
                 options=[
@@ -5600,7 +5613,8 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                     discord.SelectOption(label="Medium", emoji="🟡", value="medium"),
                     discord.SelectOption(label="Hard", emoji="🔴", value="hard"),
                     discord.SelectOption(label="Impossible", emoji="💀", value="impossible")
-                ]
+                ],
+                row=1  # SECOND ROW
             )
             async def difficulty_select(self, inter: discord.Interaction, select: discord.ui.Select):
                 if inter.user.id != ctx.author.id:
@@ -5608,17 +5622,21 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                     return
                 
                 difficulty = select.values[0]
-                await show_tictactoe_leaderboard(inter, is_server, difficulty)
+                # Show the leaderboard for selected difficulty (KEEP BOTH DROPDOWNS)
+                await show_tictactoe_leaderboard(inter, is_server, difficulty, self)
         
+        # Initial embed asking to select difficulty
         embed = discord.Embed(
             title="⭕ Tic-Tac-Toe Leaderboard",
-            description="Please select a difficulty level:",
+            description="Please select a difficulty level to view the leaderboard:",
             color=discord.Color.purple()
         )
-        await interaction.response.edit_message(embed=embed, view=DifficultyView())
+        
+        new_view = TicTacToeLeaderboardView(parent_view)
+        await interaction.response.edit_message(embed=embed, view=new_view)
     
-    # Tic-Tac-Toe Leaderboard by Difficulty
-    async def show_tictactoe_leaderboard(interaction, is_server, difficulty):
+    # Tic-Tac-Toe Leaderboard by Difficulty - KEEPS BOTH DROPDOWNS VISIBLE
+    async def show_tictactoe_leaderboard(interaction, is_server, difficulty, view):
         today = datetime.date.today()
         
         if is_server:
@@ -5645,7 +5663,7 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
         
         embed = discord.Embed(
             title=title,
-            description=f"*Tracking started: {today}*",
+            description=f"*Difficulty: {difficulty.capitalize()} • Tracking started: {today}*",
             color=discord.Color.purple()
         )
         
@@ -5666,9 +5684,10 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
             
             embed.add_field(name="Top Players", value=leaderboard_text, inline=False)
         else:
-            embed.description = f"No wins recorded yet at {difficulty} difficulty!"
+            embed.description = f"No wins recorded yet at {difficulty} difficulty!\n\n*Difficulty: {difficulty.capitalize()} • Tracking started: {today}*"
         
-        await interaction.response.edit_message(embed=embed, view=None)
+        # Keep BOTH dropdowns visible (category + difficulty)
+        await interaction.response.edit_message(embed=embed, view=view)
     
     # Show initial category selection
     scope = "Server" if server_leaderboard else "Global"
@@ -5680,6 +5699,7 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
     
     view = LeaderboardCategoryView()
     await ctx.send(embed=embed, view=view)
+
 
 @bot.hybrid_command(name="invite", description=f"Add {BOT_NAME} to your own server!")
 async def invite(ctx):
