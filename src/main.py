@@ -5612,7 +5612,7 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                     discord.SelectOption(label="Easy", emoji="🟢", value="easy"),
                     discord.SelectOption(label="Medium", emoji="🟡", value="medium"),
                     discord.SelectOption(label="Hard", emoji="🔴", value="hard"),
-                    discord.SelectOption(label="Impossible", emoji="💀", value="impossible")
+                    discord.SelectOption(label="Impossible", emoji="💀", value="insane")
                 ],
                 row=1  # SECOND ROW
             )
