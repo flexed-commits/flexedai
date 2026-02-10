@@ -7310,7 +7310,7 @@ For mixed reactions:
 
 GENERATE YOUR RESPONSE NOW:"""
 
-            messages = [{"role": "system", "content": system_prompt}]
+            messages = [{"role": "user", "content": system_prompt}]
             
             print(f"🤖 Generating AI reaction response...")
             
