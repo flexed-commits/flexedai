@@ -720,9 +720,13 @@ class TicTacToe(discord.ui.View):
 
     async def end_game(self, interaction: discord.Interaction, winner: str):
         """Handle game end"""
-        # Disable all buttons
+        # Disable all game buttons
         for child in self.children:
-            child.disabled = True
+            if not isinstance(child, discord.ui.Button) or child.label != '🏳️ Forfeit':
+                child.disabled = True
+            else:
+                # Remove forfeit button
+                self.remove_item(child)
         
         if winner == 'Tie':
             embed = discord.Embed(
@@ -734,6 +738,16 @@ class TicTacToe(discord.ui.View):
                 "UPDATE tictactoe_games SET status = 'draw', ended_at = CURRENT_TIMESTAMP WHERE game_id = ?",
                 (self.game_id,)
             )
+            
+            # Add restart button for draw
+            restart_btn = discord.ui.Button(
+                label='🔄 Restart Game',
+                style=discord.ButtonStyle.primary,
+                custom_id=f'ttt_restart_{self.game_id}'
+            )
+            restart_btn.callback = self.create_restart_callback()
+            self.add_item(restart_btn)
+            
         else:
             winner_id = self.player1 if winner == 'X' else self.player2
             winner_symbol = '❌' if winner == 'X' else '⭕'
@@ -760,8 +774,170 @@ class TicTacToe(discord.ui.View):
                         increment_tictactoe_wins(int(winner_id), guild_id, self.difficulty)
                 except:
                     pass
+            
+            # Add new game button
+            new_game_btn = discord.ui.Button(
+                label='🎮 New Game',
+                style=discord.ButtonStyle.success,
+                custom_id=f'ttt_new_{self.game_id}'
+            )
+            new_game_btn.callback = self.create_new_game_callback()
+            self.add_item(new_game_btn)
         
         await interaction.response.edit_message(embed=embed, view=self)
+    
+    def create_restart_callback(self):
+        """Create callback for restart button (draw games)"""
+        async def restart_callback(interaction: discord.Interaction):
+            # Check if user is in the game
+            if str(interaction.user.id) not in [self.player1, self.player2]:
+                await interaction.response.send_message(
+                    "❌ Only players in this game can restart!",
+                    ephemeral=True
+                )
+                return
+            
+            if self.is_ai:
+                # Restart AI game with same difficulty
+                new_game = TicTacToe(
+                    player1=self.player1,
+                    player2=self.player2,
+                    is_ai=True,
+                    difficulty=self.difficulty,
+                    game_id=None
+                )
+                
+                # Create new game in database
+                conn = sqlite3.connect(DB_FILE)
+                c = conn.cursor()
+                c.execute(
+                    """INSERT INTO tictactoe_games 
+                    (player1_id, player2_id, current_turn, channel_id, is_ai_game, ai_difficulty) 
+                    VALUES (?, ?, ?, ?, 1, ?)""",
+                    (self.player1, self.player2, self.player1, str(interaction.channel.id), self.difficulty)
+                )
+                new_game.game_id = c.lastrowid
+                conn.commit()
+                conn.close()
+                
+                await interaction.response.edit_message(
+                    embed=new_game.get_game_embed(),
+                    view=new_game
+                )
+                
+                # Update message_id
+                msg = await interaction.original_response()
+                db_query(
+                    "UPDATE tictactoe_games SET message_id = ? WHERE game_id = ?",
+                    (str(msg.id), new_game.game_id)
+                )
+            else:
+                # PvP restart - send new invitation
+                invite_embed = discord.Embed(
+                    title="🎮 Tic-Tac-Toe Rematch",
+                    description=f"**{interaction.user.mention}** wants a rematch!\n\n**Player X:** <@{self.player1}>\n**Player O:** <@{self.player2}>",
+                    color=discord.Color.blue()
+                )
+                
+                invite_view = TicTacToeInvite(
+                    challenger_id=self.player1,
+                    opponent_id=self.player2,
+                    channel_id=str(interaction.channel.id)
+                )
+                
+                await interaction.response.edit_message(embed=invite_embed, view=invite_view)
+        
+        return restart_callback
+    
+    def create_new_game_callback(self):
+        """Create callback for new game button (won/lost games)"""
+        async def new_game_callback(interaction: discord.Interaction):
+            # Check if user is in the game
+            if str(interaction.user.id) not in [self.player1, self.player2]:
+                await interaction.response.send_message(
+                    "❌ Only players in this game can start a new game!",
+                    ephemeral=True
+                )
+                return
+            
+            if self.is_ai:
+                # Show difficulty selector for new AI game
+                difficulty_select = discord.ui.Select(
+                    placeholder="Select AI Difficulty",
+                    options=[
+                        discord.SelectOption(label="Easy", value="Easy", emoji="😴"),
+                        discord.SelectOption(label="Middle", value="Middle", emoji="🤔"),
+                        discord.SelectOption(label="Hard", value="Hard", emoji="😤"),
+                        discord.SelectOption(label="Insane", value="Insane", emoji="😈")
+                    ]
+                )
+                
+                async def difficulty_callback(select_interaction: discord.Interaction):
+                    selected_difficulty = difficulty_select.values[0]
+                    
+                    # Create new AI game
+                    new_game = TicTacToe(
+                        player1=self.player1,
+                        player2=self.player2,
+                        is_ai=True,
+                        difficulty=selected_difficulty,
+                        game_id=None
+                    )
+                    
+                    # Create new game in database
+                    conn = sqlite3.connect(DB_FILE)
+                    c = conn.cursor()
+                    c.execute(
+                        """INSERT INTO tictactoe_games 
+                        (player1_id, player2_id, current_turn, channel_id, is_ai_game, ai_difficulty) 
+                        VALUES (?, ?, ?, ?, 1, ?)""",
+                        (self.player1, self.player2, self.player1, str(select_interaction.channel.id), selected_difficulty)
+                    )
+                    new_game.game_id = c.lastrowid
+                    conn.commit()
+                    conn.close()
+                    
+                    await select_interaction.response.edit_message(
+                        embed=new_game.get_game_embed(),
+                        view=new_game
+                    )
+                    
+                    # Update message_id
+                    msg = await select_interaction.original_response()
+                    db_query(
+                        "UPDATE tictactoe_games SET message_id = ? WHERE game_id = ?",
+                        (str(msg.id), new_game.game_id)
+                    )
+                
+                difficulty_select.callback = difficulty_callback
+                
+                select_view = discord.ui.View()
+                select_view.add_item(difficulty_select)
+                
+                select_embed = discord.Embed(
+                    title="🎮 New Tic-Tac-Toe Game",
+                    description="Select AI difficulty to start a new game:",
+                    color=discord.Color.blue()
+                )
+                
+                await interaction.response.edit_message(embed=select_embed, view=select_view)
+            else:
+                # PvP new game - send invitation
+                invite_embed = discord.Embed(
+                    title="🎮 Tic-Tac-Toe Invitation",
+                    description=f"**{interaction.user.mention}** wants to play again!\n\n**Player X:** <@{self.player1}>\n**Player O:** <@{self.player2}>",
+                    color=discord.Color.blue()
+                )
+                
+                invite_view = TicTacToeInvite(
+                    challenger_id=self.player1,
+                    opponent_id=self.player2,
+                    channel_id=str(interaction.channel.id)
+                )
+                
+                await interaction.response.edit_message(embed=invite_embed, view=invite_view)
+        
+        return new_game_callback
 
     async def forfeit(self, interaction: discord.Interaction):
         """Handle forfeit button"""
