@@ -850,8 +850,8 @@ class TicTacToe(discord.ui.View):
         
         return restart_callback
     
-    def create_new_game_callback(self):
-        """Create callback for new game button (won/lost games)"""
+    def create_new_game_callback(self, is_draw: bool):
+        """Create callback for new game button"""
         async def new_game_callback(interaction: discord.Interaction):
             # Check if user is in the game
             if str(interaction.user.id) not in [self.player1, self.player2]:
@@ -862,26 +862,14 @@ class TicTacToe(discord.ui.View):
                 return
             
             if self.is_ai:
-                # Show difficulty selector for new AI game
-                difficulty_select = discord.ui.Select(
-                    placeholder="Select AI Difficulty",
-                    options=[
-                        discord.SelectOption(label="Easy", value="Easy", emoji="😴"),
-                        discord.SelectOption(label="Middle", value="Middle", emoji="🤔"),
-                        discord.SelectOption(label="Hard", value="Hard", emoji="😤"),
-                        discord.SelectOption(label="Insane", value="Insane", emoji="😈")
-                    ]
-                )
-                
-                async def difficulty_callback(select_interaction: discord.Interaction):
-                    selected_difficulty = difficulty_select.values[0]
-                    
-                    # Create new AI game
+                # AI GAME
+                if is_draw:
+                    # DRAW: Start new game with same difficulty immediately
                     new_game = TicTacToe(
                         player1=self.player1,
                         player2=self.player2,
                         is_ai=True,
-                        difficulty=selected_difficulty,
+                        difficulty=self.difficulty,
                         game_id=None
                     )
                     
@@ -892,38 +880,86 @@ class TicTacToe(discord.ui.View):
                         """INSERT INTO tictactoe_games 
                         (player1_id, player2_id, current_turn, channel_id, is_ai_game, ai_difficulty) 
                         VALUES (?, ?, ?, ?, 1, ?)""",
-                        (self.player1, self.player2, self.player1, str(select_interaction.channel.id), selected_difficulty)
+                        (self.player1, self.player2, self.player1, str(interaction.channel.id), self.difficulty)
                     )
                     new_game.game_id = c.lastrowid
                     conn.commit()
                     conn.close()
                     
-                    await select_interaction.response.edit_message(
+                    await interaction.response.edit_message(
                         embed=new_game.get_game_embed(),
                         view=new_game
                     )
                     
                     # Update message_id
-                    msg = await select_interaction.original_response()
+                    msg = await interaction.original_response()
                     db_query(
                         "UPDATE tictactoe_games SET message_id = ? WHERE game_id = ?",
                         (str(msg.id), new_game.game_id)
                     )
-                
-                difficulty_select.callback = difficulty_callback
-                
-                select_view = discord.ui.View()
-                select_view.add_item(difficulty_select)
-                
-                select_embed = discord.Embed(
-                    title="🎮 New Tic-Tac-Toe Game",
-                    description="Select AI difficulty to start a new game:",
-                    color=discord.Color.blue()
-                )
-                
-                await interaction.response.edit_message(embed=select_embed, view=select_view)
+                else:
+                    # WIN/LOSE: Show difficulty selector first
+                    difficulty_select = discord.ui.Select(
+                        placeholder="Select AI Difficulty",
+                        options=[
+                            discord.SelectOption(label="Easy", value="Easy", emoji="😴"),
+                            discord.SelectOption(label="Middle", value="Middle", emoji="🤔"),
+                            discord.SelectOption(label="Hard", value="Hard", emoji="😤"),
+                            discord.SelectOption(label="Insane", value="Insane", emoji="😈")
+                        ]
+                    )
+                    
+                    async def difficulty_callback(select_interaction: discord.Interaction):
+                        selected_difficulty = difficulty_select.values[0]
+                        
+                        # Create new AI game with selected difficulty
+                        new_game = TicTacToe(
+                            player1=self.player1,
+                            player2=self.player2,
+                            is_ai=True,
+                            difficulty=selected_difficulty,
+                            game_id=None
+                        )
+                        
+                        # Create new game in database
+                        conn = sqlite3.connect(DB_FILE)
+                        c = conn.cursor()
+                        c.execute(
+                            """INSERT INTO tictactoe_games 
+                            (player1_id, player2_id, current_turn, channel_id, is_ai_game, ai_difficulty) 
+                            VALUES (?, ?, ?, ?, 1, ?)""",
+                            (self.player1, self.player2, self.player1, str(select_interaction.channel.id), selected_difficulty)
+                        )
+                        new_game.game_id = c.lastrowid
+                        conn.commit()
+                        conn.close()
+                        
+                        await select_interaction.response.edit_message(
+                            embed=new_game.get_game_embed(),
+                            view=new_game
+                        )
+                        
+                        # Update message_id
+                        msg = await select_interaction.original_response()
+                        db_query(
+                            "UPDATE tictactoe_games SET message_id = ? WHERE game_id = ?",
+                            (str(msg.id), new_game.game_id)
+                        )
+                    
+                    difficulty_select.callback = difficulty_callback
+                    
+                    select_view = discord.ui.View()
+                    select_view.add_item(difficulty_select)
+                    
+                    select_embed = discord.Embed(
+                        title="🎮 New Tic-Tac-Toe Game",
+                        description="Select AI difficulty to start a new game:",
+                        color=discord.Color.blue()
+                    )
+                    
+                    await interaction.response.edit_message(embed=select_embed, view=select_view)
             else:
-                # PvP new game - send invitation
+                # PvP GAME: Send invitation for all scenarios (draw/win/lose)
                 invite_embed = discord.Embed(
                     title="🎮 Tic-Tac-Toe Invitation",
                     description=f"**{interaction.user.mention}** wants to play again!\n\n**Player X:** <@{self.player1}>\n**Player O:** <@{self.player2}>",
