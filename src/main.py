@@ -6744,8 +6744,6 @@ async def on_message(message):
         should_respond = True
     elif not message.guild:
         should_respond = True
-    elif message.attachments:
-        should_respond = True
 
     if not should_respond:
         return
@@ -6869,7 +6867,30 @@ IMPORTANT: Only reference past conversations when directly relevant to the curre
 
 
 
-        msgs = [{"role": "system", "content": system}] + list(bot.memory[tid]) + [{"role": "user", "content": user_content}]
+        # Let AI decide if chat history is relevant
+        history_context = ""
+        if len(bot.memory[tid]) > 0:
+            # Format the history for AI to review
+            history_items = []
+            for msg in bot.memory[tid]:
+                role = msg['role']
+                content = msg['content'][:100]  # Truncate for brevity
+                history_items.append(f"{role}: {content}")
+            history_context = "\n".join(history_items)
+            
+            # Add history decision prompt to system message
+            system_with_history = system + f"""
+
+CONVERSATION HISTORY (Last 6 messages):
+{history_context}
+
+INSTRUCTIONS: Review the conversation history above. ONLY reference or use this history if the user's current message is directly related to a previous topic. If the user is asking something new or unrelated, completely ignore the history and respond fresh. Do not mention past topics unless the user explicitly refers to them."""
+            
+            msgs = [{"role": "system", "content": system_with_history}] + [{"role": "user", "content": user_content}]
+        else:
+            # No history - fresh conversation
+            msgs = [{"role": "system", "content": system}] + [{"role": "user", "content": user_content}]
+
 
         try:
             print(f"🤖 Generating AI response for {message.author.name}...")
