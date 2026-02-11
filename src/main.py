@@ -245,6 +245,21 @@ def init_db():
         first_win_date DATE DEFAULT CURRENT_DATE,
         PRIMARY KEY (user_id, guild_id, difficulty)
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS server_banned_words (
+        guild_id TEXT,
+        word TEXT,
+        added_by TEXT,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (guild_id, word)
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS server_censor_bypass (
+        guild_id TEXT,
+        user_id TEXT,
+        added_by TEXT,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (guild_id, user_id)
+    )''')
     conn.commit()
     conn.close()
 
@@ -1658,7 +1673,35 @@ def increment_tictactoe_wins(user_id, guild_id, difficulty):
         ON CONFLICT(user_id, guild_id, difficulty) DO UPDATE SET
         wins = wins + 1
     ''', (str(user_id), str(guild_id), difficulty, today))
-        
+
+def is_server_censor_bypass(guild_id, user_id):
+    """Check if user has server-specific censor bypass"""
+    result = db_query(
+        "SELECT user_id FROM server_censor_bypass WHERE guild_id = ? AND user_id = ?",
+        (str(guild_id), str(user_id)),
+        fetch=True
+    )
+    return bool(result)
+
+def get_server_banned_words(guild_id):
+    """Get banned words for a specific server"""
+    result = db_query(
+        "SELECT word FROM server_banned_words WHERE guild_id = ?",
+        (str(guild_id),),
+        fetch=True
+    )
+    return [r[0] for r in result] if result else []
+
+def has_server_banned_words(guild_id):
+    """Check if server has custom banned words configured"""
+    result = db_query(
+        "SELECT COUNT(*) FROM server_banned_words WHERE guild_id = ?",
+        (str(guild_id),),
+        fetch=True
+    )
+    return result[0][0] > 0 if result else False
+
+
 # --- UTILITY FUNCTIONS ---
 async def log_to_channel(bot, channel_key, embed):
     """Send log embed to specified channel"""
@@ -2674,6 +2717,242 @@ async def bl_rem(ctx, user_id: str, *, reason: str = "No reason provided"):
     embed.add_field(name="DM Notification", value="✅ Sent" if dm_sent else "❌ Failed (DMs disabled)", inline=True)
     
     await ctx.followup.send(embed=embed)
+
+@bot.hybrid_group(name="censor", description="Server Admins: Manage server-specific banned words")
+async def censor_group(ctx):
+    """Server-specific word filter management"""
+    if ctx.invoked_subcommand is None:
+        await ctx.send("Use `/censor add`, `/censor remove`, or `/censor list`")
+
+@censor_group.command(name="add", description="Add a banned word for this server")
+async def censor_add(ctx, word: str):
+    """Add a word to server-specific ban list"""
+    if not ctx.guild:
+        await ctx.send("❌ This command can only be used in servers.")
+        return
+    
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ **Permission Denied**\nOnly server administrators can manage the censor filter.")
+        return
+    
+    word = word.lower().strip()
+    
+    if not word:
+        await ctx.send("❌ Please provide a valid word to ban.")
+        return
+    
+    # Check if word already exists
+    existing = db_query(
+        "SELECT word FROM server_banned_words WHERE guild_id = ? AND word = ?",
+        (str(ctx.guild.id), word),
+        fetch=True
+    )
+    
+    if existing:
+        await ctx.send(f"⚠️ The word `{word}` is already banned in this server.")
+        return
+    
+    # Add word
+    db_query(
+        "INSERT INTO server_banned_words (guild_id, word, added_by) VALUES (?, ?, ?)",
+        (str(ctx.guild.id), word, str(ctx.author.id))
+    )
+    
+    embed = discord.Embed(
+        title="🚫 Word Banned (Server Filter)",
+        description=f"Successfully added `{word}` to server's banned words list.",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="Server", value=ctx.guild.name, inline=True)
+    embed.add_field(name="Added By", value=ctx.author.mention, inline=True)
+    embed.add_field(name="Note", value="Global banned words are now DISABLED for this server. Only your custom list applies.", inline=False)
+    
+    await ctx.send(embed=embed)
+
+@censor_group.command(name="remove", description="Remove a banned word from this server")
+async def censor_remove(ctx, word: str):
+    """Remove a word from server-specific ban list"""
+    if not ctx.guild:
+        await ctx.send("❌ This command can only be used in servers.")
+        return
+    
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ **Permission Denied**\nOnly server administrators can manage the censor filter.")
+        return
+    
+    word = word.lower().strip()
+    
+    # Check if word exists
+    existing = db_query(
+        "SELECT word FROM server_banned_words WHERE guild_id = ? AND word = ?",
+        (str(ctx.guild.id), word),
+        fetch=True
+    )
+    
+    if not existing:
+        await ctx.send(f"⚠️ The word `{word}` is not in this server's banned list.")
+        return
+    
+    # Remove word
+    db_query(
+        "DELETE FROM server_banned_words WHERE guild_id = ? AND word = ?",
+        (str(ctx.guild.id), word)
+    )
+    
+    embed = discord.Embed(
+        title="✅ Word Unbanned (Server Filter)",
+        description=f"Successfully removed `{word}` from server's banned words list.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Server", value=ctx.guild.name, inline=True)
+    embed.add_field(name="Removed By", value=ctx.author.mention, inline=True)
+    
+    await ctx.send(embed=embed)
+
+@censor_group.command(name="list", description="List all banned words for this server")
+async def censor_list(ctx):
+    """List server-specific banned words"""
+    if not ctx.guild:
+        await ctx.send("❌ This command can only be used in servers.")
+        return
+    
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ **Permission Denied**\nOnly server administrators can view the censor filter.")
+        return
+    
+    words = get_server_banned_words(ctx.guild.id)
+    
+    if not words:
+        embed = discord.Embed(
+            title="📋 Server Banned Words",
+            description="No custom banned words configured.\n\n**Note:** Global banned words are currently active for this server.\nUse `/censor add <word>` to create a custom filter (this will disable global filter).",
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    # Split into chunks if too many words
+    word_list = ", ".join([f"`{w}`" for w in sorted(words)])
+    
+    embed = discord.Embed(
+        title="🚫 Server Banned Words",
+        description=word_list,
+        color=discord.Color.red()
+    )
+    embed.add_field(name="Total Words", value=str(len(words)), inline=True)
+    embed.add_field(name="Filter Type", value="Server Custom (Global Disabled)", inline=True)
+    embed.set_footer(text=f"Server: {ctx.guild.name}")
+    
+    await ctx.send(embed=embed)
+
+
+@bot.hybrid_group(name="censor-bypass", description="Server Admins: Manage server-specific censor bypass")
+async def censor_bypass_group(ctx):
+    """Server-specific censor bypass management"""
+    if ctx.invoked_subcommand is None:
+        await ctx.send("Use `/censor-bypass add`, `/censor-bypass remove`, or `/censor-bypass users`")
+
+@censor_bypass_group.command(name="add", description="Add user to server censor bypass")
+async def censor_bypass_add(ctx, user_id: str):
+    """Add user to server-specific censor bypass"""
+    if not ctx.guild:
+        await ctx.send("❌ This command can only be used in servers.")
+        return
+    
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ **Permission Denied**\nOnly server administrators can manage censor bypass.")
+        return
+    
+    # Check if already bypassed
+    if is_server_censor_bypass(ctx.guild.id, user_id):
+        await ctx.send(f"⚠️ User `{user_id}` already has censor bypass in this server.")
+        return
+    
+    # Add bypass
+    db_query(
+        "INSERT INTO server_censor_bypass (guild_id, user_id, added_by) VALUES (?, ?, ?)",
+        (str(ctx.guild.id), user_id, str(ctx.author.id))
+    )
+    
+    embed = discord.Embed(
+        title="✅ Censor Bypass Added (Server)",
+        description=f"User `{user_id}` can now bypass the server's word filter.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Server", value=ctx.guild.name, inline=True)
+    embed.add_field(name="Added By", value=ctx.author.mention, inline=True)
+    
+    await ctx.send(embed=embed)
+
+@censor_bypass_group.command(name="remove", description="Remove user from server censor bypass")
+async def censor_bypass_remove(ctx, user_id: str):
+    """Remove user from server-specific censor bypass"""
+    if not ctx.guild:
+        await ctx.send("❌ This command can only be used in servers.")
+        return
+    
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ **Permission Denied**\nOnly server administrators can manage censor bypass.")
+        return
+    
+    # Check if user has bypass
+    if not is_server_censor_bypass(ctx.guild.id, user_id):
+        await ctx.send(f"⚠️ User `{user_id}` doesn't have censor bypass in this server.")
+        return
+    
+    # Remove bypass
+    db_query(
+        "DELETE FROM server_censor_bypass WHERE guild_id = ? AND user_id = ?",
+        (str(ctx.guild.id), user_id)
+    )
+    
+    embed = discord.Embed(
+        title="🚫 Censor Bypass Removed (Server)",
+        description=f"User `{user_id}` no longer bypasses the server's word filter.",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="Server", value=ctx.guild.name, inline=True)
+    embed.add_field(name="Removed By", value=ctx.author.mention, inline=True)
+    
+    await ctx.send(embed=embed)
+
+@censor_bypass_group.command(name="users", description="List users with server censor bypass")
+async def censor_bypass_users(ctx):
+    """List users with server-specific censor bypass"""
+    if not ctx.guild:
+        await ctx.send("❌ This command can only be used in servers.")
+        return
+    
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ **Permission Denied**\nOnly server administrators can view censor bypass list.")
+        return
+    
+    users = db_query(
+        "SELECT user_id, added_by, added_at FROM server_censor_bypass WHERE guild_id = ?",
+        (str(ctx.guild.id),),
+        fetch=True
+    )
+    
+    if not users:
+        embed = discord.Embed(
+            title="📋 Server Censor Bypass Users",
+            description="No users have censor bypass in this server.",
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    user_list = "\n".join([f"• <@{u[0]}> (`{u[0]}`) - Added by <@{u[1]}>" for u in users])
+    
+    embed = discord.Embed(
+        title="✅ Server Censor Bypass Users",
+        description=user_list,
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Total Users", value=str(len(users)), inline=True)
+    embed.set_footer(text=f"Server: {ctx.guild.name}")
+    
+    await ctx.send(embed=embed)
 
 @bot.hybrid_group(name="blacklist-guild", description="Owner/Admin: Manage guild blacklist.", invoke_without_command=True)
 @owner_or_bot_admin()
@@ -6704,20 +6983,56 @@ async def on_message(message):
     original_message = message  # Store reference before potential deletion
 
     # Word filter check (with bypass)
-    if not is_bypass_user(message.author.id):
-        banned = db_query("SELECT word FROM banned_words", fetch=True)
-        if any(bw[0] in content_low for bw in banned):
-            try:
-                await message.delete()
-                was_deleted = True
-                print(f"🔇 DELETED: Message from {message.author.name} contained banned word")
-                warning = await message.channel.send(
-                    f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.\n\n**Warning:** Repeated violations may result in strikes or blacklisting.",
-                    delete_after=10
-                )
-            except Exception as e:
-                print(f"❌ ERROR deleting message: {e}")
-                pass
+    if message.guild:
+        # Server-specific filter
+        if has_server_banned_words(message.guild.id):
+            # Use only server-specific banned words, ignore global
+            if not is_server_censor_bypass(message.guild.id, message.author.id):
+                server_banned = get_server_banned_words(message.guild.id)
+                if any(bw in content_low for bw in server_banned):
+                    try:
+                        await message.delete()
+                        was_deleted = True
+                        print(f"🔇 DELETED: Message from {message.author.name} contained server-banned word")
+                        warning = await message.channel.send(
+                            f"⚠️ {message.author.mention}, your message contained a banned word (server filter) and has been removed.\n\n**Warning:** Repeated violations may result in action by server moderators.",
+                            delete_after=10
+                        )
+                    except Exception as e:
+                        print(f"❌ ERROR deleting message: {e}")
+                        pass
+        else:
+            # Use global banned words (existing behavior)
+            if not is_bypass_user(message.author.id):
+                banned = db_query("SELECT word FROM banned_words", fetch=True)
+                if any(bw[0] in content_low for bw in banned):
+                    try:
+                        await message.delete()
+                        was_deleted = True
+                        print(f"🔇 DELETED: Message from {message.author.name} contained banned word")
+                        warning = await message.channel.send(
+                            f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.\n\n**Warning:** Repeated violations may result in strikes or blacklisting.",
+                            delete_after=10
+                        )
+                    except Exception as e:
+                        print(f"❌ ERROR deleting message: {e}")
+                        pass
+    else:
+        # DM - use global filter only
+        if not is_bypass_user(message.author.id):
+            banned = db_query("SELECT word FROM banned_words", fetch=True)
+            if any(bw[0] in content_low for bw in banned):
+                try:
+                    await message.delete()
+                    was_deleted = True
+                    print(f"🔇 DELETED: Message from {message.author.name} contained banned word")
+                    warning = await message.channel.send(
+                        f"⚠️ {message.author.mention}, your message contained a banned word and has been removed.\n\n**Warning:** Repeated violations may result in strikes or blacklisting.",
+                        delete_after=10
+                    )
+                except Exception as e:
+                    print(f"❌ ERROR deleting message: {e}")
+                    pass
 
     await bot.process_commands(message)
     ctx = await bot.get_context(message)
