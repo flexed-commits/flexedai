@@ -738,16 +738,6 @@ class TicTacToe(discord.ui.View):
                 "UPDATE tictactoe_games SET status = 'draw', ended_at = CURRENT_TIMESTAMP WHERE game_id = ?",
                 (self.game_id,)
             )
-            
-            # Add restart button for draw
-            restart_btn = discord.ui.Button(
-                label='🔄 Restart Game',
-                style=discord.ButtonStyle.primary,
-                custom_id=f'ttt_restart_{self.game_id}'
-            )
-            restart_btn.callback = self.create_restart_callback()
-            self.add_item(restart_btn)
-            
         else:
             winner_id = self.player1 if winner == 'X' else self.player2
             winner_symbol = '❌' if winner == 'X' else '⭕'
@@ -774,6 +764,17 @@ class TicTacToe(discord.ui.View):
                         increment_tictactoe_wins(int(winner_id), guild_id, self.difficulty)
                 except:
                     pass
+        
+        # Always add "New Game" button for all scenarios
+        new_game_btn = discord.ui.Button(
+            label='🎮 New Game',
+            style=discord.ButtonStyle.success,
+            custom_id=f'ttt_new_{self.game_id}'
+        )
+        new_game_btn.callback = self.create_new_game_callback(winner == 'Tie')
+        self.add_item(new_game_btn)
+        
+        await interaction.response.edit_message(embed=embed, view=self)
             
             # Add new game button
             new_game_btn = discord.ui.Button(
