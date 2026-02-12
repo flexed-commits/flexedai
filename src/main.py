@@ -2048,7 +2048,7 @@ async def log_to_channel(bot, channel_key, embed, **kwargs):
 
 
 def truncate_message(content, max_length=MAX_INPUT_TOKENS):
-    """Truncate message if it's too long, keeping the most recent content"""
+    """Truncate message if its too long, keeping the most recent content"""
     if len(content) <= max_length:
         return content, False
     
