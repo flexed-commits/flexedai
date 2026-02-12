@@ -149,11 +149,10 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS blacklisted_guilds (
         guild_id TEXT PRIMARY KEY,
         guild_name TEXT,
-        blacklisted_by TEXT,
+        blacklisted_by TEXT,  -- Ensure this is here
         reason TEXT,
         blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-
+)''')
     c.execute('''CREATE TABLE IF NOT EXISTS updates_channels (
         guild_id TEXT PRIMARY KEY,
         channel_id TEXT NOT NULL,
@@ -2029,24 +2028,24 @@ def has_server_banned_words(guild_id):
 
 
 # --- UTILITY FUNCTIONS ---
-async def log_to_channel(bot, channel_key, embed):
-    """Send log embed to specified channel"""
+async def log_to_channel(bot, channel_key, embed, **kwargs):
+    """Send log embed and optional components to specified channel"""
     try:
         channel_id = LOG_CHANNELS.get(channel_key)
         if not channel_id:
-            print(f"⚠️ No log channel configured for: {channel_key}")
             return False
         
         channel = bot.get_channel(channel_id)
         if not channel:
-            print(f"❌ Could not find log channel: {channel_id}")
             return False
         
-        await channel.send(embed=embed)
+        # Passing kwargs allows 'view' to be processed
+        await channel.send(embed=embed, **kwargs)
         return True
     except Exception as e:
         print(f"❌ Failed to log to {channel_key}: {e}")
         return False
+
 
 def truncate_message(content, max_length=MAX_INPUT_TOKENS):
     """Truncate message if it's too long, keeping the most recent content"""
