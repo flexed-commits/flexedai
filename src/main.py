@@ -1761,7 +1761,7 @@ class ChessMoveModal(discord.ui.Modal):
 
 # --- Add Button View Classes ---
 
-class ChesGameView(discord.ui.View):
+class ChessGameView(discord.ui.View):
     def __init__(self, game_id: int, board: chess.Board, current_player_id: str, is_vs_ai: bool = False):
         super().__init__(timeout=None)
         self.game_id = game_id
