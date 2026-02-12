@@ -765,17 +765,6 @@ class TicTacToe(discord.ui.View):
                 except:
                     pass
         
-        # Always add "New Game" button for all scenarios
-        new_game_btn = discord.ui.Button(
-            label='🎮 New Game',
-            style=discord.ButtonStyle.success,
-            custom_id=f'ttt_new_{self.game_id}'
-        )
-        new_game_btn.callback = self.create_new_game_callback(winner == 'Tie')
-        self.add_item(new_game_btn)
-        
-        await interaction.response.edit_message(embed=embed, view=self)
-            
 # Always add "New Game" button for all scenarios
         new_game_btn = discord.ui.Button(
             label='🎮 New Game',
@@ -786,7 +775,7 @@ class TicTacToe(discord.ui.View):
         self.add_item(new_game_btn)
         
         await interaction.response.edit_message(embed=embed, view=self)
-    
+        
     def create_restart_callback(self):
         """Create callback for restart button (draw games)"""
         async def restart_callback(interaction: discord.Interaction):
