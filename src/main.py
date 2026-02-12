@@ -1669,8 +1669,8 @@ class ChessMoveModal(discord.ui.Modal):
             
             if self.board.is_check() and not game_over:
                 embed.add_field(name="⚠️ Check!", value="The king is in check!", inline=False)
-
-# Update view
+            
+            # Update view
             if game_over:
                 # Create "New Game" button view
                 new_game_view = discord.ui.View(timeout=None)
@@ -1798,34 +1798,7 @@ class ChessGameView(discord.ui.View):
             await interaction.response.send_message("❌ You are not a player in this game!", ephemeral=True)
             return
         
-
-
-class ChessInviteView(discord.ui.View):
-    def __init__(self, challenger_id: str, opponent_id: str):
-        super().__init__(timeout=300)  # 5 minute timeout
-        self.challenger_id = challenger_id
-        self.opponent_id = opponent_id
-        self.value = None
-    
-    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, emoji="✅")
-    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if str(interaction.user.id) != self.opponent_id:
-            await interaction.response.send_message("❌ This invite is not for you!", ephemeral=True)
-            return
-        
-        # DEFER IMMEDIATELY - THIS IS THE FIX
-        await interaction.response.defer()
-        
-        self.value = True
-        self.stop()
-        
-        # Create the game
-        board = chess.Board()
-        
-        # Store in database
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-    # Determine winner
+        # Determine winner
         winner_id = player2_id if str(interaction.user.id) == player1_id else player1_id
         resigner_id = str(interaction.user.id)
         
@@ -1911,7 +1884,35 @@ class ChessInviteView(discord.ui.View):
         new_game_view.add_item(new_game_btn)
         
         await interaction.message.edit(embed=embed, view=new_game_view, attachments=[file])
-        await interaction.response.send_message("You have resigned from the game.", ephemeral=True)    c.execute('''INSERT INTO chess_games 
+        await interaction.response.send_message("You have resigned from the game.", ephemeral=True)
+
+
+class ChessInviteView(discord.ui.View):
+    def __init__(self, challenger_id: str, opponent_id: str):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.challenger_id = challenger_id
+        self.opponent_id = opponent_id
+        self.value = None
+    
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, emoji="✅")
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.opponent_id:
+            await interaction.response.send_message("❌ This invite is not for you!", ephemeral=True)
+            return
+        
+        # DEFER IMMEDIATELY - THIS IS THE FIX
+        await interaction.response.defer()
+        
+        self.value = True
+        self.stop()
+        
+        # Create the game
+        board = chess.Board()
+        
+        # Store in database
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''INSERT INTO chess_games 
                      (player1_id, player2_id, current_turn, board_fen, channel_id)
                      VALUES (?, ?, ?, ?, ?)''',
                  (self.challenger_id, self.opponent_id, self.challenger_id, board.fen(), str(interaction.channel.id)))
