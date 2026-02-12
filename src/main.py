@@ -1980,7 +1980,7 @@ def increment_ai_chat_count(user_id, guild_id):
     ''', (str(user_id), str(guild_id), today))
 
 def increment_chess_wins(user_id, guild_id):
-    ""Increment chess wins for leaderboard"""
+    """Increment chess wins for leaderboard"""
     today = datetime.date.today()
     db_query('''
         INSERT INTO leaderboard_chess (user_id, guild_id, wins, first_win_date)
