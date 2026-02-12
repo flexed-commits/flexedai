@@ -776,14 +776,14 @@ class TicTacToe(discord.ui.View):
         
         await interaction.response.edit_message(embed=embed, view=self)
             
-            # Add new game button
-            new_game_btn = discord.ui.Button(
-                label='🎮 New Game',
-                style=discord.ButtonStyle.success,
-                custom_id=f'ttt_new_{self.game_id}'
-            )
-            new_game_btn.callback = self.create_new_game_callback()
-            self.add_item(new_game_btn)
+# Always add "New Game" button for all scenarios
+        new_game_btn = discord.ui.Button(
+            label='🎮 New Game',
+            style=discord.ButtonStyle.success,
+            custom_id=f'ttt_new_{self.game_id}'
+        )
+        new_game_btn.callback = self.create_new_game_callback(winner == 'Tie')
+        self.add_item(new_game_btn)
         
         await interaction.response.edit_message(embed=embed, view=self)
     
