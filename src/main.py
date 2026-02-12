@@ -1968,24 +1968,7 @@ class ChessInviteView(discord.ui.View):
         
         # USE FOLLOWUP INSTEAD - THIS IS THE FIX
         await interaction.followup.send("You declined the chess invite.", ephemeral=True)
-    
-    @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger, emoji="❌")
-    async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if str(interaction.user.id) != self.opponent_id:
-            await interaction.response.send_message("❌ This invite is not for you!", ephemeral=True)
-            return
-        
-        self.value = False
-        self.stop()
-        
-        decline_embed = discord.Embed(
-            title="❌ Chess Invite Declined",
-            description=f"<@{self.opponent_id}> declined the chess match.",
-            color=discord.Color.red()
-        )
-        
-        await interaction.message.edit(embed=decline_embed, view=None)
-        await interaction.response.send_message("You declined the chess invite.", ephemeral=True)
+
 
 def increment_ai_chat_count(user_id, guild_id):
     """Increment AI chat message count for leaderboard"""
@@ -1998,7 +1981,7 @@ def increment_ai_chat_count(user_id, guild_id):
     ''', (str(user_id), str(guild_id), today))
 
 def increment_chess_wins(user_id, guild_id):
-    """Increment chess wins for leaderboard"""
+    ""Increment chess wins for leaderboard"""
     today = datetime.date.today()
     db_query('''
         INSERT INTO leaderboard_chess (user_id, guild_id, wins, first_win_date)
