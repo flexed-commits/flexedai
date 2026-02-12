@@ -1669,10 +1669,83 @@ class ChessMoveModal(discord.ui.Modal):
             
             if self.board.is_check() and not game_over:
                 embed.add_field(name="⚠️ Check!", value="The king is in check!", inline=False)
-            
-            # Update view
+
+# Update view
             if game_over:
-                await self.message.edit(embed=embed, view=None, attachments=[file])
+                # Create "New Game" button view
+                new_game_view = discord.ui.View(timeout=None)
+                
+                if self.is_vs_ai:
+                    # AI Game: Start new game vs AI button
+                    new_game_btn = discord.ui.Button(
+                        label='♟️ New Game vs AI',
+                        style=discord.ButtonStyle.success,
+                        custom_id=f'chess_new_ai_{self.game_id}_{self.player_id}'
+                    )
+                    
+                    async def new_ai_game_callback(btn_interaction: discord.Interaction):
+                        if str(btn_interaction.user.id) != self.player_id:
+                            await btn_interaction.response.send_message(
+                                "❌ Only the original player can start a new game!",
+                                ephemeral=True
+                            )
+                            return
+                        
+                        # Start new AI chess game
+                        await btn_interaction.response.defer()
+                        ctx = await bot.get_context(btn_interaction.message)
+                        await bot.get_command('chess').callback(ctx, opponent=None)
+                        await btn_interaction.followup.send("🎮 New chess game started!", ephemeral=True)
+                    
+                    new_game_btn.callback = new_ai_game_callback
+                else:
+                    # PvP Game: Send invitation button
+                    conn = sqlite3.connect(DB_FILE)
+                    c = conn.cursor()
+                    c.execute("SELECT player1_id, player2_id FROM chess_games WHERE game_id = ?", (self.game_id,))
+                    p1, p2 = c.fetchone()
+                    conn.close()
+                    
+                    opponent_id = p2 if p1 == self.player_id else p1
+                    
+                    new_game_btn = discord.ui.Button(
+                        label='♟️ New Game (Send Invitation)',
+                        style=discord.ButtonStyle.success,
+                        custom_id=f'chess_new_pvp_{self.game_id}_{self.player_id}_{opponent_id}'
+                    )
+                    
+                    async def new_pvp_game_callback(btn_interaction: discord.Interaction):
+                        if str(btn_interaction.user.id) not in [p1, p2]:
+                            await btn_interaction.response.send_message(
+                                "❌ Only players from the original game can start a new game!",
+                                ephemeral=True
+                            )
+                            return
+                        
+                        # Determine opponent
+                        if str(btn_interaction.user.id) == p1:
+                            opp_id = p2
+                        else:
+                            opp_id = p1
+                        
+                        # Send invitation
+                        invite_embed = discord.Embed(
+                            title="♟️ Chess Rematch!",
+                            description=f"{btn_interaction.user.mention} challenges <@{opp_id}> to a rematch!",
+                            color=discord.Color.blue()
+                        )
+                        
+                        invite_view = ChessInviteView(
+                            challenger_id=str(btn_interaction.user.id),
+                            opponent_id=opp_id
+                        )
+                        
+                        await btn_interaction.response.send_message(embed=invite_embed, view=invite_view)
+                    
+                    new_game_btn.callback = new_pvp_game_callback
+                
+                new_game_view.add_item(new_game_btn)
+                await self.message.edit(embed=embed, view=new_game_view, attachments=[file])
             else:
                 view = ChessGameView(self.game_id, self.board, current_turn, self.is_vs_ai)
                 await self.message.edit(embed=embed, view=view, attachments=[file])
@@ -1688,7 +1761,7 @@ class ChessMoveModal(discord.ui.Modal):
 
 # --- Add Button View Classes ---
 
-class ChessGameView(discord.ui.View):
+class ChesGameView(discord.ui.View):
     def __init__(self, game_id: int, board: chess.Board, current_player_id: str, is_vs_ai: bool = False):
         super().__init__(timeout=None)
         self.game_id = game_id
@@ -1725,26 +1798,7 @@ class ChessGameView(discord.ui.View):
             await interaction.response.send_message("❌ You are not a player in this game!", ephemeral=True)
             return
         
-        # Determine winner
-        winner_id = player2_id if str(interaction.user.id) == player1_id else player1_id
-        
-        # End game
-        end_game(self.game_id, winner_id if not self.is_vs_ai else "stockfish")
-        
-        # Update embed (no last move for resignation)
-        board_image = await board_to_image(self.board)
-        file = discord.File(board_image, filename="chess_board.png")
-        
-        embed = discord.Embed(
-            title="♟️ Chess Game - Game Over",
-            description=f"<@{interaction.user.id}> resigned!\n\n🏆 Winner: {'Stockfish' if self.is_vs_ai else f'<@{winner_id}>'}",
-            color=discord.Color.red()
-        )
-        
-        embed.set_image(url="attachment://chess_board.png")
-        
-        await interaction.message.edit(embed=embed, view=None, attachments=[file])
-        await interaction.response.send_message("You have resigned from the game.", ephemeral=True)
+
 
 class ChessInviteView(discord.ui.View):
     def __init__(self, challenger_id: str, opponent_id: str):
@@ -1771,7 +1825,93 @@ class ChessInviteView(discord.ui.View):
         # Store in database
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
-        c.execute('''INSERT INTO chess_games 
+    # Determine winner
+        winner_id = player2_id if str(interaction.user.id) == player1_id else player1_id
+        resigner_id = str(interaction.user.id)
+        
+        # End game
+        end_game(self.game_id, winner_id if not self.is_vs_ai else "stockfish")
+        
+        # Update embed (no last move for resignation)
+        board_image = await board_to_image(self.board)
+        file = discord.File(board_image, filename="chess_board.png")
+        
+        embed = discord.Embed(
+            title="♟️ Chess Game - Game Over",
+            description=f"<@{interaction.user.id}> resigned!\n\n🏆 Winner: {'Stockfish' if self.is_vs_ai else f'<@{winner_id}>'}",
+            color=discord.Color.red()
+        )
+        
+        embed.set_image(url="attachment://chess_board.png")
+        
+        # Create "New Game" button view
+        new_game_view = discord.ui.View(timeout=None)
+        
+        if self.is_vs_ai:
+            # AI Game: Start new game vs AI button
+            new_game_btn = discord.ui.Button(
+                label='♟️ New Game vs AI',
+                style=discord.ButtonStyle.success,
+                custom_id=f'chess_resign_new_ai_{self.game_id}_{resigner_id}'
+            )
+            
+            async def new_ai_game_callback(btn_interaction: discord.Interaction):
+                if str(btn_interaction.user.id) not in [player1_id, player2_id]:
+                    await btn_interaction.response.send_message(
+                        "❌ Only players from the original game can start a new game!",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Start new AI chess game
+                await btn_interaction.response.defer()
+                ctx = await bot.get_context(btn_interaction.message)
+                await bot.get_command('chess').callback(ctx, opponent=None)
+                await btn_interaction.followup.send("🎮 New chess game started!", ephemeral=True)
+            
+            new_game_btn.callback = new_ai_game_callback
+        else:
+            # PvP Game: Send invitation button
+            new_game_btn = discord.ui.Button(
+                label='♟️ New Game (Send Invitation)',
+                style=discord.ButtonStyle.success,
+                custom_id=f'chess_resign_new_pvp_{self.game_id}_{player1_id}_{player2_id}'
+            )
+            
+            async def new_pvp_game_callback(btn_interaction: discord.Interaction):
+                if str(btn_interaction.user.id) not in [player1_id, player2_id]:
+                    await btn_interaction.response.send_message(
+                        "❌ Only players from the original game can start a new game!",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Determine opponent
+                if str(btn_interaction.user.id) == player1_id:
+                    opp_id = player2_id
+                else:
+                    opp_id = player1_id
+                
+                # Send invitation
+                invite_embed = discord.Embed(
+                    title="♟️ Chess Rematch!",
+                    description=f"{btn_interaction.user.mention} challenges <@{opp_id}> to a rematch!",
+                    color=discord.Color.blue()
+                )
+                
+                invite_view = ChessInviteView(
+                    challenger_id=str(btn_interaction.user.id),
+                    opponent_id=opp_id
+                )
+                
+                await btn_interaction.response.send_message(embed=invite_embed, view=invite_view)
+            
+            new_game_btn.callback = new_pvp_game_callback
+        
+        new_game_view.add_item(new_game_btn)
+        
+        await interaction.message.edit(embed=embed, view=new_game_view, attachments=[file])
+        await interaction.response.send_message("You have resigned from the game.", ephemeral=True)    c.execute('''INSERT INTO chess_games 
                      (player1_id, player2_id, current_turn, board_fen, channel_id)
                      VALUES (?, ?, ?, ?, ?)''',
                  (self.challenger_id, self.opponent_id, self.challenger_id, board.fen(), str(interaction.channel.id)))
