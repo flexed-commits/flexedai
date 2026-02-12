@@ -2211,7 +2211,7 @@ async def on_guild_join(guild):
             # Try to notify owner
             try:
                 await guild.owner.send(
-                    f""" 🚫 **{BOT_NAME} Bot - Blacklisted Server**
+                    f"""\U0001F6AB **{BOT_NAME} Bot - Blacklisted Server**
 
 Hello {guild.owner.name},
 
