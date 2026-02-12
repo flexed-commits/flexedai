@@ -6130,7 +6130,7 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                 count = row[1]
                 
                 try:
-                    user = await bot.fetch_user(int(user_id))
+                    user = bot.get_user(int(user_id)) or await bot.fetch_user(int(user_id))
                     name = user.name
                 except:
                     name = f"User {user_id}"
@@ -6184,7 +6184,7 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                 wins = row[1]
                 
                 try:
-                    user = await bot.fetch_user(int(user_id))
+                    user = bot.get_user(int(user_id)) or await bot.fetch_user(int(user_id))
                     name = user.name
                 except:
                     name = f"User {user_id}"
@@ -6278,7 +6278,7 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                 wins = row[1]
                 
                 try:
-                    user = await bot.fetch_user(int(user_id))
+                    user = bot.get_user(int(user_id)) or await bot.fetch_user(int(user_id))
                     name = user.name
                 except:
                     name = f"User {user_id}"
