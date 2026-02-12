@@ -765,7 +765,7 @@ class TicTacToe(discord.ui.View):
                 except:
                     pass
         
-# Always add "New Game" button for all scenarios
+        # Always add "New Game" button for all scenarios
         new_game_btn = discord.ui.Button(
             label='🎮 New Game',
             style=discord.ButtonStyle.success,
