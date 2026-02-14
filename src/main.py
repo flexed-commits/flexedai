@@ -8627,4 +8627,117 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
         await ctx.send(f"❌ **Error editing message:**\n```\n{e}\n```")
         import traceback
         traceback.print_exc()
+
+# Add this command anywhere in your main.py file (before bot.run())
+# It should be at the same indentation level as your other @bot.command() functions
+
+@bot.command(name='delete')
+async def delete_message(ctx, message_id: str):
+    """
+    Delete a message sent by the bot using its message ID.
+    Usage: /delete <message_id>
+    Example: /delete 1234567890123456
+    """
+    if ctx.author.id != OWNER_ID:
+        await ctx.send("❌ **Permission Denied** — Only the bot owner can use this command.")
+        return
+
+    try:
+        # Validate message ID format
+        try:
+            message_id = int(message_id)
+        except ValueError:
+            await ctx.send("❌ **Invalid message ID** — Please provide a valid numeric message ID.")
+            return
+
+        # Try to find the message across all channels the bot has access to
+        target_message = None
+        target_channel = None
+        
+        # First, try the current channel
+        try:
+            target_message = await ctx.channel.fetch_message(message_id)
+            target_channel = ctx.channel
+        except (discord.NotFound, discord.Forbidden):
+            pass
+
+        # If not found in current channel, search across all guild channels
+        if not target_message and ctx.guild:
+            for channel in ctx.guild.text_channels:
+                try:
+                    target_message = await channel.fetch_message(message_id)
+                    target_channel = channel
+                    break
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    continue
+
+        # If still not found, try direct message channels
+        if not target_message:
+            for channel in bot.private_channels:
+                try:
+                    target_message = await channel.fetch_message(message_id)
+                    target_channel = channel
+                    break
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    continue
+
+        if not target_message:
+            await ctx.send(f"❌ **Message not found** — Could not find message with ID `{message_id}`.")
+            return
+
+        # Verify the message was sent by the bot
+        if target_message.author.id != bot.user.id:
+            await ctx.send(f"❌ **Cannot delete** — That message was not sent by me.\n**Author:** {target_message.author.mention} ({target_message.author.name})")
+            return
+
+        # Store info for confirmation before deleting
+        message_content = target_message.content[:100] if target_message.content else "[No content]"
+        if len(target_message.content) > 100:
+            message_content += "..."
+        
+        channel_info = target_channel.mention if hasattr(target_channel, 'mention') else target_channel.name
+        guild_info = target_message.guild.name if target_message.guild else "DM"
+
+        # Delete the message
+        await target_message.delete()
+
+        # Send confirmation
+        confirmation_embed = discord.Embed(
+            title="🗑️ Message Deleted",
+            description=f"**Message ID:** `{message_id}`\n**Channel:** {channel_info}\n**Server:** {guild_info}",
+            color=discord.Color.red()
+        )
+        
+        if message_content != "[No content]":
+            confirmation_embed.add_field(
+                name="Content Preview",
+                value=f"```{message_content}```",
+                inline=False
+            )
+        
+        if target_message.embeds:
+            confirmation_embed.add_field(
+                name="Had Embeds",
+                value=f"✅ Yes ({len(target_message.embeds)} embed(s))",
+                inline=True
+            )
+
+        confirmation_embed.set_footer(text=f"Deleted by {ctx.author.name}")
+        confirmation_embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+        
+        await ctx.send(embed=confirmation_embed)
+
+        # Log the deletion
+        db_query("INSERT INTO admin_logs (log) VALUES (?)",
+                 (f"Owner {ctx.author.name} deleted bot message {message_id} from #{target_channel.name if hasattr(target_channel, 'name') else 'DM'} ({guild_info})",))
+
+    except discord.Forbidden:
+        await ctx.send("❌ **Missing permissions** — Cannot delete this message.")
+    except discord.HTTPException as e:
+        await ctx.send(f"❌ **HTTP Error** — Failed to delete message: {e}")
+    except Exception as e:
+        await ctx.send(f"❌ **Error deleting message:**\n```\n{e}\n```")
+        import traceback
+        traceback.print_exc()
+        
 bot.run(DISCORD_TOKEN)
