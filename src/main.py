@@ -4998,11 +4998,31 @@ async def handler_command(
     """Manage contact form handlers - OWNER ONLY"""
     from topgg import add_contact_handler, remove_contact_handler, get_all_contact_handlers
     
-    # Check if user is bot owner
-    app_info = await bot.application_info()
-    if interaction.user.id != app_info.owner.id:
+    # Multiple owner checks - try different methods
+    is_owner = False
+    
+    # Method 1: Check against bot application owner
+    try:
+        app_info = await bot.application_info()
+        if app_info.team:
+            # If bot is owned by a team
+            is_owner = interaction.user.id in [m.id for m in app_info.team.members]
+        else:
+            # If bot is owned by individual
+            is_owner = interaction.user.id == app_info.owner.id
+    except:
+        pass
+    
+    # Method 2: Check if user is you (hardcode your ID as fallback)
+    # REPLACE THIS WITH YOUR ACTUAL DISCORD USER ID
+    OWNER_ID = None  # Put your Discord user ID here: OWNER_ID = 123456789012345678
+    if OWNER_ID and interaction.user.id == OWNER_ID:
+        is_owner = True
+    
+    if not is_owner:
         await interaction.response.send_message(
-            "❌ Only the bot owner can manage contact form handlers.",
+            f"❌ Only the bot owner can manage contact form handlers.\n"
+            f"Debug: Your ID is `{interaction.user.id}`",
             ephemeral=True
         )
         return
@@ -5061,11 +5081,31 @@ async def setup_contact(interaction: discord.Interaction):
     """Setup which channel receives contact forms - OWNER ONLY"""
     from topgg import set_contact_channel
     
-    # Check if user is bot owner
-    app_info = await bot.application_info()
-    if interaction.user.id != app_info.owner.id:
+    # Multiple owner checks - try different methods
+    is_owner = False
+    
+    # Method 1: Check against bot application owner
+    try:
+        app_info = await bot.application_info()
+        if app_info.team:
+            # If bot is owned by a team
+            is_owner = interaction.user.id in [m.id for m in app_info.team.members]
+        else:
+            # If bot is owned by individual
+            is_owner = interaction.user.id == app_info.owner.id
+    except:
+        pass
+    
+    # Method 2: Check if user is you (hardcode your ID as fallback)
+    # REPLACE THIS WITH YOUR ACTUAL DISCORD USER ID
+    OWNER_ID = None  # Put your Discord user ID here: OWNER_ID = 123456789012345678
+    if OWNER_ID and interaction.user.id == OWNER_ID:
+        is_owner = True
+    
+    if not is_owner:
         await interaction.response.send_message(
-            "❌ Only the bot owner can setup contact forms.",
+            f"❌ Only the bot owner can setup contact forms.\n"
+            f"Debug: Your ID is `{interaction.user.id}`",
             ephemeral=True
         )
         return
@@ -5092,6 +5132,9 @@ async def setup_contact(interaction: discord.Interaction):
     embed.set_footer(text="Only handlers can click the buttons on contact forms")
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+
 
 
 # Bot Admin Management Commands (Owner Only)
