@@ -12,6 +12,7 @@ from topgg import init_vote_db, start_webhook_server, vote_reminder_loop, role_e
 import hashlib
 import chess
 import aiohttp
+from discord import app_commands
 from io import BytesIO
 from dotenv import load_dotenv
 load_dotenv()
