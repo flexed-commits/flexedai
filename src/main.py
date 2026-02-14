@@ -264,6 +264,7 @@ def init_db():
     conn.close()
 
 init_vote_db()
+init_contact_db()
 
 def migrate_json_to_db():
     if not os.path.exists(JSON_FILE):
@@ -4977,7 +4978,122 @@ async def report_remove(ctx, report_id: int):
     embed.add_field(name="Removed By", value=ctx.author.mention, inline=True)
     
     await ctx.send(embed=embed)
+
+
+@bot.tree.command(name="handler", description="Manage contact form handlers (Owner only)")
+@app_commands.describe(
+    action="Action to perform",
+    user="User to add/remove as handler"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="add", value="add"),
+    app_commands.Choice(name="remove", value="remove"),
+    app_commands.Choice(name="list", value="list")
+])
+async def handler_command(
+    interaction: discord.Interaction,
+    action: app_commands.Choice[str],
+    user: discord.Member = None
+):
+    """Manage contact form handlers - OWNER ONLY"""
+    from topgg import add_contact_handler, remove_contact_handler, get_all_contact_handlers
     
+    # Check if user is bot owner
+    app_info = await bot.application_info()
+    if interaction.user.id != app_info.owner.id:
+        await interaction.response.send_message(
+            "❌ Only the bot owner can manage contact form handlers.",
+            ephemeral=True
+        )
+        return
+
+    if action.value == "add":
+        if not user:
+            await interaction.response.send_message(
+                "❌ Please specify a user to add as a handler.",
+                ephemeral=True
+            )
+            return
+        
+        add_contact_handler(user.id, str(user))
+        await interaction.response.send_message(
+            f"✅ Added {user.mention} as a contact form handler.\n"
+            f"They can now click the buttons on contact form submissions.",
+            ephemeral=True
+        )
+
+    elif action.value == "remove":
+        if not user:
+            await interaction.response.send_message(
+                "❌ Please specify a user to remove.",
+                ephemeral=True
+            )
+            return
+        
+        remove_contact_handler(user.id)
+        await interaction.response.send_message(
+            f"✅ Removed {user.mention} from contact form handlers.",
+            ephemeral=True
+        )
+
+    elif action.value == "list":
+        handlers = get_all_contact_handlers()
+        if not handlers:
+            await interaction.response.send_message(
+                "📋 No contact form handlers configured yet.\n"
+                "Use `/handler add @user` to add handlers.",
+                ephemeral=True
+            )
+            return
+        
+        handler_list = "\n".join([f"• <@{h[0]}> (added {h[2].split('T')[0]})" for h in handlers])
+        embed = discord.Embed(
+            title="📋 Contact Form Handlers",
+            description=handler_list,
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text="Only these users can click buttons on contact forms")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="setup-contact", description="Setup contact form channel (Owner only)")
+async def setup_contact(interaction: discord.Interaction):
+    """Setup which channel receives contact forms - OWNER ONLY"""
+    from topgg import set_contact_channel
+    
+    # Check if user is bot owner
+    app_info = await bot.application_info()
+    if interaction.user.id != app_info.owner.id:
+        await interaction.response.send_message(
+            "❌ Only the bot owner can setup contact forms.",
+            ephemeral=True
+        )
+        return
+
+    # Save this channel as the contact form channel
+    set_contact_channel(interaction.channel.id)
+    
+    embed = discord.Embed(
+        title="✅ Contact Form Setup Complete",
+        description=f"Contact forms will now be sent to {interaction.channel.mention} with action buttons!",
+        color=discord.Color.green()
+    )
+    
+    embed.add_field(
+        name="📝 Next Steps",
+        value=(
+            "1. Add handlers with `/handler add @user`\n"
+            "2. Configure Netlify with your ngrok URL:\n"
+            "`BOT_HTTP_ENDPOINT=https://your-ngrok-url.ngrok-free.app/contact`"
+        ),
+        inline=False
+    )
+    
+    embed.set_footer(text="Only handlers can click the buttons on contact forms")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 # Bot Admin Management Commands (Owner Only)
 @bot.command(name="add-admin", description="Owner: Add a bot admin.")
 @commands.is_owner()
