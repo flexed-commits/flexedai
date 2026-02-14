@@ -7636,7 +7636,7 @@ CRITICAL RULES:
    - Don't always bring up previous topic if not needed.
    - Don't create big paragraphs, try to respond shortly.
    - IMPORTANT: Only reference past conversations when directly relevant to the current query. Do not bring up unrelated past topics. Stay focused on what the user is currently asking about.
-   
+   - Understand the message's context, if they are mistaken just for showing sarcasm; reply correspondingly.
 2. KEEP IT SHORT (target 50-150 characters for normal messages)
    - Only go longer if the question genuinely needs it
    - Use abbreviations when natural
@@ -8278,7 +8278,7 @@ GENERATE YOUR RESPONSE NOW:"""
 @commands.is_owner()
 async def edit_message(ctx, message_id: str, *, new_content: str):
     """
-    Edit a message sent by the bot.
+    Edit a message sent by the bot from ANY channel.
     Supports plain text, JSON embeds, and buttons.
 
     ─────────────────────────────────────────
@@ -8325,14 +8325,31 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
     ─────────────────────────────────────────
     """
     try:
-        # Fetch message
+        # Fetch message from ANY channel the bot can access
+        target_message = None
         try:
-            target_message = await ctx.channel.fetch_message(int(message_id))
-        except discord.NotFound:
-            await ctx.send("❌ **Message not found in this channel.**")
-            return
+            msg_id = int(message_id)
         except ValueError:
             await ctx.send("❌ **Invalid message ID** - Must be a numeric ID.")
+            return
+
+        # Search through all text channels in all guilds
+        for guild in bot.guilds:
+            for channel in guild.text_channels:
+                try:
+                    target_message = await channel.fetch_message(msg_id)
+                    break  # Found it!
+                except discord.NotFound:
+                    continue  # Not in this channel, keep looking
+                except discord.Forbidden:
+                    continue  # No permission to read this channel
+                except Exception:
+                    continue  # Other errors, skip
+            if target_message:
+                break  # Found it, stop searching
+
+        if not target_message:
+            await ctx.send(f"❌ **Message not found** - Could not find message ID `{message_id}` in any accessible channel.")
             return
 
         # Check if message is from the bot
@@ -8364,9 +8381,9 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
         # ───────────────────────────────────────────
         if not is_json:
             await target_message.edit(content=new_content, embed=None, view=None)
-            await ctx.send(f"✅ **Message edited** (plain text)\nMessage ID: `{message_id}`")
+            await ctx.send(f"✅ **Message edited** (plain text)\nMessage ID: `{message_id}`\nChannel: {target_message.channel.mention}")
             db_query("INSERT INTO admin_logs (log) VALUES (?)",
-                     (f"Owner {ctx.author.name} edited message {message_id} — plain text in #{ctx.channel.name}",))
+                     (f"Owner {ctx.author.name} edited message {message_id} — plain text in #{target_message.channel.name} ({target_message.guild.name})",))
             return
 
         # ───────────────────────────────────────────
@@ -8387,9 +8404,9 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
             else:
                 # Unknown JSON structure, just dump it as text
                 await target_message.edit(content=cleaned, embed=None, view=None)
-                await ctx.send(f"✅ **Message edited** (JSON as text, no recognised structure)\nMessage ID: `{message_id}`")
+                await ctx.send(f"✅ **Message edited** (JSON as text, no recognised structure)\nMessage ID: `{message_id}`\nChannel: {target_message.channel.mention}")
                 db_query("INSERT INTO admin_logs (log) VALUES (?)",
-                         (f"Owner {ctx.author.name} edited message {message_id} — raw JSON text in #{ctx.channel.name}",))
+                         (f"Owner {ctx.author.name} edited message {message_id} — raw JSON text in #{target_message.channel.name} ({target_message.guild.name})",))
                 return
 
         # ───────────────────────────────────────────
@@ -8537,9 +8554,9 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
         if keep_existing_content:
             # Edit only the view, preserve everything else
             await target_message.edit(view=view)
-            await ctx.send(f"✅ **Buttons updated** (existing content kept)\nMessage ID: `{message_id}`\nButtons added: `{len(view.children) if view else 0}`")
+            await ctx.send(f"✅ **Buttons updated** (existing content kept)\nMessage ID: `{message_id}`\nChannel: {target_message.channel.mention}\nButtons added: `{len(view.children) if view else 0}`")
             db_query("INSERT INTO admin_logs (log) VALUES (?)",
-                     (f"Owner {ctx.author.name} edited message {message_id} — buttons only in #{ctx.channel.name}",))
+                     (f"Owner {ctx.author.name} edited message {message_id} — buttons only in #{target_message.channel.name} ({target_message.guild.name})",))
             return
 
         # ───────────────────────────────────────────
@@ -8595,14 +8612,14 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
 
         result_embed = discord.Embed(
             title="✅ Message Edited",
-            description=f"**Message ID:** `{message_id}`\n\n{summary}",
+            description=f"**Message ID:** `{message_id}`\n**Channel:** {target_message.channel.mention}\n**Server:** {target_message.guild.name}\n\n{summary}",
             color=discord.Color.green()
         )
         result_embed.set_footer(text=f"Edited by {ctx.author.name}")
         await ctx.send(embed=result_embed)
 
         db_query("INSERT INTO admin_logs (log) VALUES (?)",
-                 (f"Owner {ctx.author.name} edited message {message_id} in #{ctx.channel.name} — {summary}",))
+                 (f"Owner {ctx.author.name} edited message {message_id} in #{target_message.channel.name} ({target_message.guild.name}) — {summary}",))
 
     except discord.Forbidden:
         await ctx.send("❌ **Missing permissions** — Cannot edit this message.")
@@ -8610,5 +8627,4 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
         await ctx.send(f"❌ **Error editing message:**\n```\n{e}\n```")
         import traceback
         traceback.print_exc()
-        
 bot.run(DISCORD_TOKEN)
