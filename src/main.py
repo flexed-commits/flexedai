@@ -6274,8 +6274,8 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                 ORDER BY total DESC 
                 LIMIT 10
             '''
-            results = db_query(query, (today,), fetch=True)
-            title = "🌍 Global AI Chat Leaderboard"
+            results = db_query(query, (str(interaction.guild.id), today), fetch=True)
+            title = f"🏆 {interaction.guild.name} - AI Chat Leaderboard"
         
         embed = discord.Embed(
             title=title,
@@ -8631,7 +8631,7 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
 # Add this command anywhere in your main.py file (before bot.run())
 # It should be at the same indentation level as your other @bot.command() functions
 
-@bot.command(name='delete')
+@bot.hybrid_command(name='delete', description='Delete a message sent by the bot using its message ID')
 async def delete_message(ctx, message_id: str):
     """
     Delete a message sent by the bot using its message ID.
