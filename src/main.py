@@ -6259,7 +6259,7 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
             query = '''
                 SELECT user_id, message_count 
                 FROM leaderboard_ai_chat 
-                WHERE guild_id = ? AND DATE(first_message_date) >= DATE(?)
+                WHERE guild_id = ? AND first_message_date >= ?
                 ORDER BY message_count DESC 
                 LIMIT 10
             '''
@@ -6317,7 +6317,7 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                 ORDER BY wins DESC 
                 LIMIT 10
             '''
-            results = db_query(query, (str(ctx.guild.id), today), fetch=True)
+            results = db_query(query, (str(interaction.guild.id), today), fetch=True)
             title = f"🏆 {ctx.guild.name} - Chess Leaderboard"
         else:
             query = '''
@@ -6411,7 +6411,7 @@ async def leaderboard(ctx, server_leaderboard: bool = True):
                 ORDER BY wins DESC 
                 LIMIT 10
             '''
-            results = db_query(query, (str(ctx.guild.id), difficulty, today), fetch=True)
+            results = db_query(query, (str(interaction.guild.id), difficulty, today), fetch=True)
             title = f"🏆 {ctx.guild.name} - Tic-Tac-Toe ({difficulty.capitalize()})"
         else:
             query = '''
@@ -8631,10 +8631,13 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
 # Add this command anywhere in your main.py file (before bot.run())
 # It should be at the same indentation level as your other @bot.command() functions
 
+# ENHANCED DELETE COMMAND - Searches ALL Servers
+# Replace lines 8634-8741 with this:
+
 @bot.hybrid_command(name='delete', description='Delete a message sent by the bot using its message ID')
 async def delete_message(ctx, message_id: str):
     """
-    Delete a message sent by the bot using its message ID.
+    Delete a message sent by the bot using its message ID from ANY server.
     Usage: /delete <message_id>
     Example: /delete 1234567890123456
     """
@@ -8645,66 +8648,130 @@ async def delete_message(ctx, message_id: str):
     try:
         # Validate message ID format
         try:
-            message_id = int(message_id)
+            message_id_int = int(message_id)
         except ValueError:
             await ctx.send("❌ **Invalid message ID** — Please provide a valid numeric message ID.")
             return
 
-        # Try to find the message across all channels the bot has access to
+        # Send searching message
+        search_msg = await ctx.send(f"🔍 **Searching for message** `{message_id}`...\n*This may take a moment if searching across multiple servers.*")
+        
         target_message = None
         target_channel = None
+        search_stats = {"guilds_searched": 0, "channels_searched": 0}
         
-        # First, try the current channel
+        # Step 1: Try current channel first (fastest)
         try:
-            target_message = await ctx.channel.fetch_message(message_id)
+            target_message = await ctx.channel.fetch_message(message_id_int)
             target_channel = ctx.channel
-        except (discord.NotFound, discord.Forbidden):
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             pass
 
-        # If not found in current channel, search across all guild channels
+        # Step 2: If not found, search current guild (if in a guild)
         if not target_message and ctx.guild:
+            search_stats["guilds_searched"] = 1
             for channel in ctx.guild.text_channels:
+                search_stats["channels_searched"] += 1
                 try:
-                    target_message = await channel.fetch_message(message_id)
+                    target_message = await channel.fetch_message(message_id_int)
                     target_channel = channel
                     break
                 except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                     continue
 
-        # If still not found, try direct message channels
+        # Step 3: Search ALL other guilds the bot is in
+        if not target_message:
+            for guild in bot.guilds:
+                # Skip current guild as we already searched it
+                if ctx.guild and guild.id == ctx.guild.id:
+                    continue
+                
+                search_stats["guilds_searched"] += 1
+                
+                # Search text channels
+                for channel in guild.text_channels:
+                    search_stats["channels_searched"] += 1
+                    try:
+                        target_message = await channel.fetch_message(message_id_int)
+                        target_channel = channel
+                        break
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                        continue
+                
+                # If found, stop searching
+                if target_message:
+                    break
+                
+                # Search threads
+                for thread in guild.threads:
+                    search_stats["channels_searched"] += 1
+                    try:
+                        target_message = await thread.fetch_message(message_id_int)
+                        target_channel = thread
+                        break
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                        continue
+                
+                if target_message:
+                    break
+
+        # Step 4: Search DM channels
         if not target_message:
             for channel in bot.private_channels:
+                search_stats["channels_searched"] += 1
                 try:
-                    target_message = await channel.fetch_message(message_id)
+                    target_message = await channel.fetch_message(message_id_int)
                     target_channel = channel
                     break
                 except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                     continue
 
+        # Delete the searching message
+        try:
+            await search_msg.delete()
+        except:
+            pass
+
+        # Check if message was found
         if not target_message:
-            await ctx.send(f"❌ **Message not found** — Could not find message with ID `{message_id}`.")
+            not_found_embed = discord.Embed(
+                title="❌ Message Not Found",
+                description=f"Could not find message with ID `{message_id}`",
+                color=discord.Color.red()
+            )
+            not_found_embed.add_field(
+                name="Search Statistics",
+                value=f"**Servers searched:** {search_stats['guilds_searched']}\n**Channels searched:** {search_stats['channels_searched']}",
+                inline=False
+            )
+            not_found_embed.set_footer(text="Make sure the message ID is correct and the bot has access to that channel")
+            await ctx.send(embed=not_found_embed)
             return
 
         # Verify the message was sent by the bot
         if target_message.author.id != bot.user.id:
-            await ctx.send(f"❌ **Cannot delete** — That message was not sent by me.\n**Author:** {target_message.author.mention} ({target_message.author.name})")
+            await ctx.send(
+                f"❌ **Cannot delete** — That message was not sent by me.\n"
+                f"**Author:** {target_message.author.mention} ({target_message.author.name})"
+            )
             return
 
         # Store info for confirmation before deleting
         message_content = target_message.content[:100] if target_message.content else "[No content]"
-        if len(target_message.content) > 100:
+        if target_message.content and len(target_message.content) > 100:
             message_content += "..."
         
-        channel_info = target_channel.mention if hasattr(target_channel, 'mention') else target_channel.name
+        channel_info = target_channel.mention if hasattr(target_channel, 'mention') else str(target_channel)
         guild_info = target_message.guild.name if target_message.guild else "DM"
+        channel_type = "Thread" if isinstance(target_channel, discord.Thread) else "Channel"
 
         # Delete the message
         await target_message.delete()
 
         # Send confirmation
         confirmation_embed = discord.Embed(
-            title="🗑️ Message Deleted",
-            description=f"**Message ID:** `{message_id}`\n**Channel:** {channel_info}\n**Server:** {guild_info}",
+            title="🗑️ Message Deleted Successfully",
+            description=f"**Message ID:** `{message_id}`\n**{channel_type}:** {channel_info}\n**Server:** {guild_info}",
             color=discord.Color.red()
         )
         
@@ -8721,6 +8788,12 @@ async def delete_message(ctx, message_id: str):
                 value=f"✅ Yes ({len(target_message.embeds)} embed(s))",
                 inline=True
             )
+        
+        confirmation_embed.add_field(
+            name="Search Stats",
+            value=f"Searched {search_stats['channels_searched']} channels across {search_stats['guilds_searched']} servers",
+            inline=False
+        )
 
         confirmation_embed.set_footer(text=f"Deleted by {ctx.author.name}")
         confirmation_embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
@@ -8728,8 +8801,11 @@ async def delete_message(ctx, message_id: str):
         await ctx.send(embed=confirmation_embed)
 
         # Log the deletion
-        db_query("INSERT INTO admin_logs (log) VALUES (?)",
-                 (f"Owner {ctx.author.name} deleted bot message {message_id} from #{target_channel.name if hasattr(target_channel, 'name') else 'DM'} ({guild_info})",))
+        channel_name = target_channel.name if hasattr(target_channel, 'name') else 'DM'
+        db_query(
+            "INSERT INTO admin_logs (log) VALUES (?)",
+            (f"Owner {ctx.author.name} deleted bot message {message_id} from #{channel_name} ({guild_info})",)
+        )
 
     except discord.Forbidden:
         await ctx.send("❌ **Missing permissions** — Cannot delete this message.")
@@ -8739,5 +8815,6 @@ async def delete_message(ctx, message_id: str):
         await ctx.send(f"❌ **Error deleting message:**\n```\n{e}\n```")
         import traceback
         traceback.print_exc()
+
         
 bot.run(DISCORD_TOKEN)
