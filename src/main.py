@@ -8577,11 +8577,23 @@ async def edit_message(ctx, message_id: str, *, new_content: str):
 # Replace lines 8634-8741 with this:
 
 @bot.hybrid_command(name='delete', description='Delete a message sent by the bot using its message ID')
-async def delete_message(ctx, message_id: str):
+async def delete_message(
+    ctx, 
+    message_id: str,
+    server_id: str = None,
+    channel_id: str = None,
+    user_id: str = None
+):
     """
-    Delete a message sent by the bot using its message ID from ANY server.
-    Usage: /delete <message_id>
-    Example: /delete 1234567890123456
+    Delete a message sent by the bot using its message ID with optional filters.
+    Usage: /delete <message_id> [server_id] [channel_id] [user_id]
+    
+    Examples:
+    /delete 1234567890123456
+    /delete 1234567890123456 server_id:987654321
+    /delete 1234567890123456 channel_id:111222333
+    /delete 1234567890123456 user_id:444555666  (for DMs)
+    /delete 1234567890123456 server_id:987654321 channel_id:111222333
     """
     if ctx.author.id != OWNER_ID:
         await ctx.send("❌ **Permission Denied** — Only the bot owner can use this command.")
@@ -8595,43 +8607,125 @@ async def delete_message(ctx, message_id: str):
             await ctx.send("❌ **Invalid message ID** — Please provide a valid numeric message ID.")
             return
 
+        # Validate optional IDs
+        server_id_int = None
+        channel_id_int = None
+        user_id_int = None
+        
+        if server_id:
+            try:
+                server_id_int = int(server_id)
+            except ValueError:
+                await ctx.send("❌ **Invalid server ID** — Please provide a valid numeric server ID.")
+                return
+        
+        if channel_id:
+            try:
+                channel_id_int = int(channel_id)
+            except ValueError:
+                await ctx.send("❌ **Invalid channel ID** — Please provide a valid numeric channel ID.")
+                return
+        
+        if user_id:
+            try:
+                user_id_int = int(user_id)
+            except ValueError:
+                await ctx.send("❌ **Invalid user ID** — Please provide a valid numeric user ID.")
+                return
+
+        # Build filter description
+        filters = []
+        if server_id_int:
+            filters.append(f"Server: `{server_id}`")
+        if channel_id_int:
+            filters.append(f"Channel: `{channel_id}`")
+        if user_id_int:
+            filters.append(f"User: `{user_id}` (DM)")
+        
+        filter_text = " | ".join(filters) if filters else "No filters (searching everywhere)"
+
         # Send searching message
-        search_msg = await ctx.send(f"🔍 **Searching for message** `{message_id}`...\n*This may take a moment if searching across multiple servers.*")
+        search_msg = await ctx.send(
+            f"🔍 **Searching for message** `{message_id}`\n"
+            f"**Filters:** {filter_text}\n"
+            f"*This may take a moment...*"
+        )
         
         target_message = None
         target_channel = None
         search_stats = {"guilds_searched": 0, "channels_searched": 0}
-        
-        # Step 1: Try current channel first (fastest)
-        try:
-            target_message = await ctx.channel.fetch_message(message_id_int)
-            target_channel = ctx.channel
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            pass
 
-        # Step 2: If not found, search current guild (if in a guild)
-        if not target_message and ctx.guild:
-            search_stats["guilds_searched"] = 1
-            for channel in ctx.guild.text_channels:
-                search_stats["channels_searched"] += 1
-                try:
-                    target_message = await channel.fetch_message(message_id_int)
-                    target_channel = channel
-                    break
-                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                    continue
+        # PRIORITY 1: If channel_id is provided, search that specific channel first
+        if channel_id_int:
+            try:
+                channel = bot.get_channel(channel_id_int)
+                if channel:
+                    search_stats["channels_searched"] += 1
+                    try:
+                        target_message = await channel.fetch_message(message_id_int)
+                        target_channel = channel
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                        pass
+            except Exception:
+                pass
 
-        # Step 3: Search ALL other guilds the bot is in
-        if not target_message:
-            for guild in bot.guilds:
-                # Skip current guild as we already searched it
-                if ctx.guild and guild.id == ctx.guild.id:
-                    continue
+        # PRIORITY 2: If user_id is provided (DM search)
+        if not target_message and user_id_int:
+            try:
+                user = await bot.fetch_user(user_id_int)
+                if user:
+                    dm_channel = user.dm_channel or await user.create_dm()
+                    search_stats["channels_searched"] += 1
+                    try:
+                        target_message = await dm_channel.fetch_message(message_id_int)
+                        target_channel = dm_channel
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                        pass
+            except Exception:
+                pass
+
+        # PRIORITY 3: If server_id is provided, search that specific server
+        if not target_message and server_id_int:
+            guild = bot.get_guild(server_id_int)
+            if guild:
+                search_stats["guilds_searched"] = 1
                 
-                search_stats["guilds_searched"] += 1
-                
-                # Search text channels
-                for channel in guild.text_channels:
+                # If channel_id was also provided but not found, skip this
+                if not channel_id_int:
+                    # Search text channels
+                    for channel in guild.text_channels:
+                        search_stats["channels_searched"] += 1
+                        try:
+                            target_message = await channel.fetch_message(message_id_int)
+                            target_channel = channel
+                            break
+                        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                            continue
+                    
+                    # Search threads if not found
+                    if not target_message:
+                        for thread in guild.threads:
+                            search_stats["channels_searched"] += 1
+                            try:
+                                target_message = await thread.fetch_message(message_id_int)
+                                target_channel = thread
+                                break
+                            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                                continue
+
+        # PRIORITY 4: No filters - search everywhere (original behavior)
+        if not target_message and not server_id_int and not channel_id_int and not user_id_int:
+            # Try current channel first (fastest)
+            try:
+                target_message = await ctx.channel.fetch_message(message_id_int)
+                target_channel = ctx.channel
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+
+            # Search current guild (if in a guild)
+            if not target_message and ctx.guild:
+                search_stats["guilds_searched"] = 1
+                for channel in ctx.guild.text_channels:
                     search_stats["channels_searched"] += 1
                     try:
                         target_message = await channel.fetch_message(message_id_int)
@@ -8639,34 +8733,51 @@ async def delete_message(ctx, message_id: str):
                         break
                     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                         continue
-                
-                # If found, stop searching
-                if target_message:
-                    break
-                
-                # Search threads
-                for thread in guild.threads:
+
+            # Search ALL other guilds
+            if not target_message:
+                for guild in bot.guilds:
+                    if ctx.guild and guild.id == ctx.guild.id:
+                        continue
+                    
+                    search_stats["guilds_searched"] += 1
+                    
+                    # Search text channels
+                    for channel in guild.text_channels:
+                        search_stats["channels_searched"] += 1
+                        try:
+                            target_message = await channel.fetch_message(message_id_int)
+                            target_channel = channel
+                            break
+                        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                            continue
+                    
+                    if target_message:
+                        break
+                    
+                    # Search threads
+                    for thread in guild.threads:
+                        search_stats["channels_searched"] += 1
+                        try:
+                            target_message = await thread.fetch_message(message_id_int)
+                            target_channel = thread
+                            break
+                        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                            continue
+                    
+                    if target_message:
+                        break
+
+            # Search DM channels
+            if not target_message:
+                for channel in bot.private_channels:
                     search_stats["channels_searched"] += 1
                     try:
-                        target_message = await thread.fetch_message(message_id_int)
-                        target_channel = thread
+                        target_message = await channel.fetch_message(message_id_int)
+                        target_channel = channel
                         break
                     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                         continue
-                
-                if target_message:
-                    break
-
-        # Step 4: Search DM channels
-        if not target_message:
-            for channel in bot.private_channels:
-                search_stats["channels_searched"] += 1
-                try:
-                    target_message = await channel.fetch_message(message_id_int)
-                    target_channel = channel
-                    break
-                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                    continue
 
         # Delete the searching message
         try:
@@ -8682,11 +8793,16 @@ async def delete_message(ctx, message_id: str):
                 color=discord.Color.red()
             )
             not_found_embed.add_field(
+                name="Filters Applied",
+                value=filter_text,
+                inline=False
+            )
+            not_found_embed.add_field(
                 name="Search Statistics",
                 value=f"**Servers searched:** {search_stats['guilds_searched']}\n**Channels searched:** {search_stats['channels_searched']}",
                 inline=False
             )
-            not_found_embed.set_footer(text="Make sure the message ID is correct and the bot has access to that channel")
+            not_found_embed.set_footer(text="Make sure the message ID and filters are correct and the bot has access to that channel")
             await ctx.send(embed=not_found_embed)
             return
 
@@ -8731,6 +8847,13 @@ async def delete_message(ctx, message_id: str):
                 inline=True
             )
         
+        if filters:
+            confirmation_embed.add_field(
+                name="Filters Used",
+                value=filter_text,
+                inline=False
+            )
+        
         confirmation_embed.add_field(
             name="Search Stats",
             value=f"Searched {search_stats['channels_searched']} channels across {search_stats['guilds_searched']} servers",
@@ -8746,7 +8869,7 @@ async def delete_message(ctx, message_id: str):
         channel_name = target_channel.name if hasattr(target_channel, 'name') else 'DM'
         db_query(
             "INSERT INTO admin_logs (log) VALUES (?)",
-            (f"Owner {ctx.author.name} deleted bot message {message_id} from #{channel_name} ({guild_info})",)
+            (f"Owner {ctx.author.name} deleted bot message {message_id} from #{channel_name} ({guild_info}) | Filters: {filter_text}",)
         )
 
     except discord.Forbidden:
