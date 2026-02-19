@@ -1,3 +1,5 @@
 discord.py
 groq
-asyncio
+python-dotenv
+chess
+aiohttp
