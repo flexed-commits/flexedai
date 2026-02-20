@@ -1,0 +1,25 @@
+name: Deploy to HidenCloud
+
+on:
+  push:
+    branches:
+      - main  # Runs every time you push to the 'main' branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Sync files via SFTP
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        with:
+          server: sftp://wally.hidencloud.com  # Replace with your SFTP Host
+          port: 2022                   # Replace with your SFTP Port
+          username: flexed-127014.5e68e07d      # Replace with your SFTP Username
+          password: ${{ secrets.SFTP_PASSWORD }}
+          local_path: './*'            # Sync everything in your repo
+          remote_path: '/'             # Where to put it on the server
+          delete_remote_files: false   # Set to true if you want to delete files on server that aren't in Git
+          
